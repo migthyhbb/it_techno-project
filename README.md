@@ -1,4 +1,4 @@
 # it_techno-project
 
 
-TESTING NUNGGU SEMUANYA MASUK YAAAAA
+project akan dimulai sebentar lagiii tunggu progress kami 
