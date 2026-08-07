@@ -1,8 +1,46 @@
 import { NextResponse } from 'next/server';
-import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/server'; // Sesuaikan path jika berbeda
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 export async function PATCH(request: Request) {
   try {
+    // 1. CEK IDENTITAS (SATPAM)
+    // 1. CEK IDENTITAS (SATPAM)
+    const cookieStore = await cookies(); // <-- Wajib tambah 'await' di sini untuk Next.js 15
+
+    const supabaseUser = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { 
+            return cookieStore.getAll() 
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                // Format penulisan .set yang benar (dipisah koma, bukan di dalam kurung kurawal)
+                cookieStore.set(name, value, options)
+              })
+            } catch (error) {
+              // Kalau Next.js protes "readonly", biarkan saja (diabaikan).
+              // Karena Middleware kita yang sebenarnya bertugas merestart/mengupdate cookie-nya.
+            }
+          }
+        }
+      }
+    );
+      
+
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+    
+    // Cek apakah user ada dan punya role admin di app_metadata (Bukan user_metadata yang bisa dipalsukan)
+    if (authError || !user || user.app_metadata?.role !== 'admin') {
+        return NextResponse.json({ error: 'Akses ditolak! Anda bukan admin.' }, { status: 403 });
+    }
+
+    // 2. PARSING BODY
     let body;
     try {
       body = await request.json();
@@ -10,10 +48,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
     }
 
-    // Frontend harus mengirimkan 3 data ini:
-    // id_target = UUID milik agen atau perusahaan
-    // tipe = 'agen' atau 'perusahaan'
-    // status_baru = 'approved' atau 'rejected'
     const { id_target, tipe, status_baru } = body;
 
     if (!id_target || !tipe || !status_baru) {
@@ -23,12 +57,11 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Pastikan status yang dikirim hanya dua kemungkinan ini
     if (!['approved', 'rejected'].includes(status_baru)) {
       return NextResponse.json({ error: 'Status tidak valid!' }, { status: 400 });
     }
 
-    // Gunakan Kunci Sakti Admin
+    // 3. GUNAKAN KUNCI SAKTI SETELAH LOLOS PENGECEKAN
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -43,21 +76,20 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Tipe mitra tidak dikenal!' }, { status: 400 });
     }
 
-    // Eksekusi perubahan data di database
     const { error } = await supabaseAdmin
       .from(tableName)
       .update({ status_verifikasi: status_baru })
       .eq('id', id_target);
 
     if (error) throw error;
+    
+    return NextResponse.json({ message: 'Status berhasil diubah' }, { status: 200 });
 
-    return NextResponse.json({
-      message: `Berhasil mengubah status ${tipe} menjadi ${status_baru}!`,
-    }, { status: 200 });
-
-  } catch (err: any) {
+  } catch (err: unknown) { // Perbaikan tipe 'any' ke 'unknown' sesuai saran CodeRabbit
+    const message = err instanceof Error ? err.message : 'Unknown server error';
+    console.error("Error di verifikasi:", err); // Log di server
     return NextResponse.json(
-      { error: 'Terjadi kesalahan server: ' + err.message },
+      { error: 'Terjadi kesalahan server saat verifikasi.' }, // Jangan bocorkan err.message ke publik
       { status: 500 }
     );
   }

@@ -80,9 +80,12 @@ export async function POST(request: Request) {
       { status: 201 }
     );
 
-  } catch (err: any) {
+  } catch (err: unknown) { 
+    const message = err instanceof Error ? err.message : 'Unknown server error';
+    console.error("System Error:", message); // Supaya tetap terekam di terminal server
+    
     return NextResponse.json(
-      { error: 'Terjadi kesalahan server: ' + err.message },
+      { error: 'Terjadi kesalahan sistem, silakan coba lagi nanti.' }, // Pesan yang aman untuk user
       { status: 500 }
     );
   }
