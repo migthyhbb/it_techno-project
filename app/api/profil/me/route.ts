@@ -18,14 +18,15 @@ export async function GET() {
     let profileData = null;
 
     // 3. Tarik data dari tabel yang sesuai menggunakan .single() karena data pasti unik
-    if (role === 'agen') {
+   if (role === 'agen') {
       const { data, error } = await supabase
         .from('agen')
         .select('*')
         .eq('auth_id', user.id)
-        .single();
-      
+        .maybeSingle(); // Pakai maybeSingle!
+
       if (error) throw error;
+      if (!data) return NextResponse.json({ error: 'Profil belum tersedia' }, { status: 404 });
       profileData = data;
 
     } else if (role === 'perusahaan') {
@@ -33,15 +34,15 @@ export async function GET() {
         .from('perusahaan_industri')
         .select('*')
         .eq('auth_id', user.id)
-        .single();
-        
+        .maybeSingle();
+
       if (error) throw error;
+      if (!data) return NextResponse.json({ error: 'Profil belum tersedia' }, { status: 404 });
       profileData = data;
 
     } else {
       return NextResponse.json({ error: 'Role pengguna tidak valid' }, { status: 400 });
     }
-
     // 4. Kirim datanya ke Frontend
     return NextResponse.json({
       message: 'Berhasil mengambil profil',

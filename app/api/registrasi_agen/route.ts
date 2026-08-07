@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server'; 
-import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     // Validasi sederhana
     if (!email || !password || !namaAgen || !nikNib || !alamatLengkap || !noTelepon) {
       return NextResponse.json(
-        { error: 'kamu harus mengsisi datamu' },
+        { error: 'kamu harus mengsisi datamu secara lengkap' },
         { status: 400 }
       );
     }
@@ -26,55 +26,52 @@ export async function POST(request: Request) {
     const supabase = await createClient();
 
     // 3. Daftarkan User ke Supabase Auth (Otomatis masuk tabel rahasia)
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+   const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          role: 'agen',
-        },
-      },
-    });
+    }); // Hapus blok options: { data: { role: ... } } dari sini!
 
-    if (authError) {
-      return NextResponse.json({ error: authError.message }, { status: 400 });
-    }
+    if (authError) throw authError;
 
     const userId = authData.user?.id;
+    if (!userId) throw new Error('Gagal mendapatkan ID User');
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Gagal mendapatkan ID pengguna.' }, { status: 500 });
+    // Gunakan fungsi admin yang baru
+    const supabaseAdmin = createAdminClient();
+
+    // MASUKKAN ROLE KE APP_METADATA (Sangat Aman)
+    const { error: roleError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      app_metadata: { role: 'agen' } // Ganti 'agen' jadi 'perusahaan' untuk file registrasi_perusahaan
+    });
+
+    if (roleError) {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      return NextResponse.json({ error: 'Registrasi dibatalkan saat mengatur hak akses.' }, { status: 500 });
     }
 
-    // 4. Gunakan Admin Client untuk bypass RLS
-    const supabaseAdmin = createAdminClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    // 5. Simpan data ke tabel 'agen' (NAMA TABEL SUDAH DISESUAIKAN)
+    // Lanjut masukkan data ke tabel profil (agen / perusahaan_industri)
     const { error: profileError } = await supabaseAdmin
-      .from('agen')
+      .from('agen') // Sesuaikan nama tabelnya di masing-masing file
       .insert([
-        {
-          auth_id: userId,
-          nama_agen: namaAgen,             // Disesuaikan dengan kolom tabelmu
-          nik_nib: nikNib,
-          alamat_lengkap: alamatLengkap,   // Disesuaikan dengan kolom tabelmu
-          no_telepon: noTelepon,           // Ditambahkan sesuai tabelmu
-          status_verifikasi: 'pending',
-        },
+        // ... (biarkan isian insert data kamu seperti aslinya di sini) ...
       ]);
 
-    // 6. ROLLBACK JIKA GAGAL
+    // PERBAIKAN ROLLBACK
     if (profileError) {
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      console.error('Profile insert failed:', profileError.message);
+      const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(userId);
       
+      if (rollbackError) {
+        console.error('Rollback failed, orphan auth user:', userId, rollbackError.message);
+      }
+
       return NextResponse.json(
-        { error: 'Gagal membuat profil agen, registrasi dibatalkan: ' + profileError.message }, 
+        // Jangan bocorkan profileError.message ke client
+        { error: 'Gagal membuat profil, registrasi dibatalkan.' }, 
         { status: 500 }
       );
     }
+
 
     return NextResponse.json(
       { message: 'Registrasi agen berhasil!', userId },

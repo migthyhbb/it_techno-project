@@ -1,47 +1,45 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js';
-import { cookies } from 'next/headers'
 
-export function createAdminClient(url: string, key: string) {
+export async function createClient() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch (error) {
+            // Diabaikan untuk server component
+          }
+        },
+      },
+    }
+  );
+}
+
+// Fungsi Admin yang sudah diperbaiki sesuai standar CodeRabbit
+export function createAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !key) {
+    throw new Error('Supabase admin environment variables are missing!');
+  }
+  
   return createSupabaseAdmin(url, key, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
   });
-}
-
-export async function createClient() {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    throw new Error('Supabase environment variables are missing!');
-  }
-
-  const cookieStore = await cookies();
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value, ...options })
-          } catch (error) {
-           
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            // 3. Menggunakan .delete() lebih direkomendasikan oleh Next.js
-            cookieStore.delete({ name, ...options }) 
-          } catch (error) {
-           
-          }
-        },
-      },
-    }
-  )
 }

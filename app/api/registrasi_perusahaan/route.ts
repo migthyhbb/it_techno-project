@@ -14,10 +14,10 @@ export async function POST(request: Request) {
 
     const { email, password, namaPt, npwp, alamatKantor, noTelepon} = body;
 
-    // Validasi field utama
     if (!email || !password || !namaPt || !npwp || !alamatKantor || !noTelepon) {
       return NextResponse.json(
-        { error: 'Email, password, nama PT, dan NPWP wajib diisi!' },
+        // Pesan error diperbarui agar mencakup semua 6 field
+        { error: 'Email, password, nama PT, NPWP, alamat kantor, dan no telepon wajib diisi!' },
         { status: 400 }
       );
     }

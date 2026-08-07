@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       );
     }
     // 4. Baca identitas jabatan dari token
-    const role = data.user?.user_metadata?.role;
+    const role = data.user?.app_metadata?.role;
 
     // 5. Kembalikan data ke Frontend agar Frontend yang melakukan Redirect
     return NextResponse.json(

@@ -62,10 +62,7 @@ export async function PATCH(request: Request) {
     }
 
     // 3. GUNAKAN KUNCI SAKTI SETELAH LOLOS PENGECEKAN
-    const supabaseAdmin = createAdminClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseAdmin = createAdminClient();
 
     let tableName = '';
     if (tipe === 'agen') {
