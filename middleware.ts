@@ -58,14 +58,29 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Aturan C: Agen dilarang keras masuk ke dashboard perusahaan/admin!
-  if ((url.startsWith('/dashboard/perusahaan') || url.startsWith('/dashboard/admin')) && role === 'agen') {
-    return redirectSambilBawaCookie('/dashboard/agen');
-  }
+  // Aturan C & D: Setiap area dashboard hanya boleh diakses oleh role yang cocok (Sistem Default Deny).
+  const areaByRole: Record<string, string> = {
+    agen: '/dashboard/agen',
+    perusahaan: '/dashboard/perusahaan',
+    admin: '/dashboard/admin',
+  };
 
-  // Aturan D: Perusahaan dilarang keras masuk ke dashboard agen/admin!
-  if ((url.startsWith('/dashboard/agen') || url.startsWith('/dashboard/admin')) && role === 'perusahaan') {
-    return redirectSambilBawaCookie('/dashboard/perusahaan');
+  if (url.startsWith('/dashboard')) {
+    const allowedArea = role ? areaByRole[role] : undefined;
+
+    // Role tidak dikenal atau kosong: tolak akses ke seluruh area dashboard!
+    if (!allowedArea) {
+      return redirectSambilBawaCookie('/login');
+    }
+
+    // Role dikenal tapi nyasar masuk area milik role lain.
+    const inOtherArea = Object.values(areaByRole).some(
+      (area) => area !== allowedArea && url.startsWith(area)
+    );
+
+    if (inOtherArea) {
+      return redirectSambilBawaCookie(allowedArea);
+    }
   }
 
   return supabaseResponse;
@@ -73,6 +88,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Regex diperbaiki agar tidak memblokir rute seperti /apidocs
+    '/((?!_next/static|_next/image|favicon.ico|api(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

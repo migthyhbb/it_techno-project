@@ -30,19 +30,28 @@ export async function POST(request: Request) {
     });
 
     // 3. Tangani Error (Termasuk Rate Limit yang kamu buat tadi)
-    if (error) {
+   if (error) {
       if (error.status === 429) {
         return NextResponse.json(
           { error: 'Terlalu banyak percobaan. Silakan coba lagi nanti.' }, 
           { status: 429 }
         );
       }
+      
+      // Tambahan baru: Cek kalau server Supabase yang bermasalah (status 500 ke atas)
+      if (error.status && error.status >= 500) {
+        console.error('Supabase auth error:', error.message);
+        return NextResponse.json(
+          { error: 'Terjadi kesalahan sistem, silakan coba lagi nanti.' },
+          { status: 503 }
+        );
+      }
+
       return NextResponse.json(
         { error: 'Email atau password salah!' }, 
         { status: 401 }
       );
     }
-
     // 4. Baca identitas jabatan dari token
     const role = data.user?.user_metadata?.role;
 

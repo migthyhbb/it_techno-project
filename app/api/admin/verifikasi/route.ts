@@ -76,14 +76,20 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Tipe mitra tidak dikenal!' }, { status: 400 });
     }
 
-    const { error } = await supabaseAdmin
+    const { data,error } = await supabaseAdmin
       .from(tableName)
       .update({ status_verifikasi: status_baru })
-      .eq('id', id_target);
-
+      .eq('id', id_target)
+      .select('id');
     if (error) throw error;
-    
+
+    // Tambahkan blok ini: Cek apakah mitranya beneran ada?
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: 'Mitra tidak ditemukan' }, { status: 404 });
+    }
+
     return NextResponse.json({ message: 'Status berhasil diubah' }, { status: 200 });
+    
 
   } catch (err: unknown) { // Perbaikan tipe 'any' ke 'unknown' sesuai saran CodeRabbit
     const message = err instanceof Error ? err.message : 'Unknown server error';
