@@ -41,18 +41,29 @@ export async function PATCH(request: Request) {
     }
 
     // 2. PARSING BODY
-    let body;
+   let body: unknown;
     try {
       body = await request.json();
     } catch (err) {
       return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
     }
 
-    const { id_target, tipe, status_baru } = body;
+    // Pastikan body benar-benar object JSON, bukan null atau array
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
+    }
 
-    if (!id_target || !tipe || !status_baru) {
+    const { id_target, tipe, status_baru } = body as Record<string, unknown>;
+
+    // Pastikan semuanya bertipe text/string dan tidak kosong
+    if (
+      typeof id_target !== 'string' ||
+      typeof tipe !== 'string' ||
+      typeof status_baru !== 'string' ||
+      !id_target || !tipe || !status_baru
+    ) {
       return NextResponse.json(
-        { error: 'id_target, tipe, dan status_baru wajib dikirim!' },
+        { error: 'id_target, tipe, dan status_baru wajib dikirim dalam format text/string!' },
         { status: 400 }
       );
     }

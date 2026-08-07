@@ -50,10 +50,18 @@ export async function POST(request: Request) {
     }
 
     // Lanjut masukkan data ke tabel profil (agen / perusahaan_industri)
+    // Lanjut masukkan data ke tabel profil
     const { error: profileError } = await supabaseAdmin
-      .from('agen') // Sesuaikan nama tabelnya di masing-masing file
+      .from('agen')
       .insert([
-        // ... (biarkan isian insert data kamu seperti aslinya di sini) ...
+        {
+          auth_id: userId,
+          nama_agen: namaAgen,
+          nik_nib: nikNib,
+          alamat_lengkap: alamatLengkap,
+          no_telepon: noTelepon,
+          status_verifikasi: 'pending',
+        }
       ]);
 
     // PERBAIKAN ROLLBACK

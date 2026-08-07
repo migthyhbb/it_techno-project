@@ -14,7 +14,7 @@ export async function GET() {
     }
 
     // 2. Cek identitas jabatannya dari metadata JWT
-    const role = user.user_metadata?.role;
+    const role = user.app_metadata?.role;
     let profileData = null;
 
     // 3. Tarik data dari tabel yang sesuai menggunakan .single() karena data pasti unik
