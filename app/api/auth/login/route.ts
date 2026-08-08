@@ -32,14 +32,14 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
 
-    // 2. Proses Login ke Supabase
+    // 2. Proses Login ke Supabase Auth
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    // 3. Tangani Error (Termasuk Rate Limit yang kamu buat tadi)
-   if (error) {
+    // 3. Tangani Error Auth (Termasuk Rate Limit)
+    if (error) {
       if (error.status === 429) {
         return NextResponse.json(
           { error: 'Terlalu banyak percobaan. Silakan coba lagi nanti.' }, 
@@ -47,7 +47,6 @@ export async function POST(request: Request) {
         );
       }
       
-      // Tambahan baru: Cek kalau server Supabase yang bermasalah (status 500 ke atas)
       if (error.status && error.status >= 500) {
         console.error('Supabase auth error:', error.message);
         return NextResponse.json(
@@ -61,30 +60,55 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
-    // 4. Baca identitas jabatan dari token
-    const role = data.user?.app_metadata?.role;
 
-    // 5. Kembalikan data ke Frontend agar Frontend yang melakukan Redirect
+    // 4. Baca identitas jabatan dari token
+    const user = data.user;
+    const role = user?.app_metadata?.role;
+
+    // --- 5. TAMBAHAN BARU: PENGECEKAN STATUS VERIFIKASI ADMIN ---
+    if (role === 'agen' || role === 'perusahaan') {
+      const tableName = role === 'agen' ? 'agen' : 'perusahaan_industri';
+      
+      // Cek status di tabel profil
+      const { data: profileData, error: profileError } = await supabase
+        .from(tableName)
+        .select('status_verifikasi')
+        .eq('auth_id', user.id)
+        .single();
+
+      if (profileError || !profileData) {
+        await supabase.auth.signOut(); // Kick user
+        return NextResponse.json({ error: 'Data profil tidak ditemukan.' }, { status: 404 });
+      }
+
+      // Pastikan status_verifikasi adalah 'approved' (sesuaikan dengan isi database-mu)
+      if (profileData.status_verifikasi !== 'approved') {
+        await supabase.auth.signOut(); // Kick user karena belum di-acc
+        return NextResponse.json(
+          { error: 'Akun Anda belum disetujui oleh Admin. Harap tunggu proses verifikasi.' }, 
+          { status: 403 }
+        );
+      }
+    }
+    // --- AKHIR PENGECEKAN STATUS ---
+
+    // 6. Kembalikan data ke Frontend jika lulus semua pengecekan
     return NextResponse.json(
       { 
         message: 'Login berhasil!', 
         role: role, 
-        userId: data.user?.id 
+        userId: user.id 
       },
       { status: 200 }
     );
     
-
-    
-  }  catch (err: unknown) { 
+  } catch (err: unknown) { 
     const message = err instanceof Error ? err.message : 'Unknown server error';
-    console.error("System Error:", message); // Supaya tetap terekam di terminal server
+    console.error("System Error:", message);
     
     return NextResponse.json(
-      { error: 'Terjadi kesalahan sistem, silakan coba lagi nanti.' }, // Pesan yang aman untuk user
+      { error: 'Terjadi kesalahan sistem, silakan coba lagi nanti.' },
       { status: 500 }
     );
   }
-
-  
 }

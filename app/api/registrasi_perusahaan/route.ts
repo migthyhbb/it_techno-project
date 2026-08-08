@@ -16,24 +16,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
     }
 
-    const { email, password, nama_perusahaan, npwp, alamat_pabrik, noTelepon } = body as Record<string, unknown>;
+    const { email, password, nama_perusahaan, npwp, alamat_lengkap, noTelepon } = body as Record<string, unknown>;
 
     if (
       typeof email !== 'string' ||
       typeof password !== 'string' ||
       typeof nama_perusahaan !== 'string' ||
       typeof npwp !== 'string' ||
-      typeof alamat_pabrik !== 'string' ||
+      typeof alamat_lengkap
+       !== 'string' ||
       typeof noTelepon !== 'string' ||
       !email.trim() ||
       !password.trim() ||
       !nama_perusahaan.trim() ||
       !npwp.trim() ||
-      !alamat_pabrik.trim() ||
+      !alamat_lengkap.trim() ||
       !noTelepon.trim()
     ) {
       return NextResponse.json(
-        { error: 'Email, password, nama PT, NPWP, alamat pabrik, dan no telepon wajib diisi!' },
+        { error: 'Email, password, nama perusahaan, NPWP, alamat lengkap, dan no telepon wajib diisi!' },
         { status: 400 }
       );
     }
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
           auth_id: userId,
           nama_perusahaan: nama_perusahaan,
           npwp: npwp,
-          alamat_lengkap: alamat_pabrik,
+          alamat_lengkap: alamat_lengkap,
           no_telepon: noTelepon,
           status_verifikasi: 'pending',
         }
