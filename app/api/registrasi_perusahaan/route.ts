@@ -59,6 +59,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Gagal mendapatkan ID pengguna.' }, { status: 500 });
     }
 
+    // PENGAMAN DARI CODERABBIT: Cek apakah email sudah terdaftar (identities kosong)
+    if (!authData.user?.identities || authData.user.identities.length === 0) {
+      return NextResponse.json(
+        { error: 'Email sudah terdaftar. Silakan gunakan email lain atau login.' },
+        { status: 400 }
+      );
+    }
+
     const supabaseAdmin = createAdminClient();
 
     // Set role pakai admin client

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server'; 
-import { createAdminClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server'; 
+
 
 export async function POST(request: Request) {
   try {
@@ -55,7 +55,16 @@ export async function POST(request: Request) {
     }
 
     const userId = authData.user?.id;
-    if (!userId) throw new Error('Gagal mendapatkan ID User');
+    if (!userId) {
+      return NextResponse.json({ error: 'Gagal mendapatkan ID pengguna.' }, { status: 500 });
+    }
+    // PENGAMAN DARI CODERABBIT: Cek apakah email sudah terdaftar (identities kosong)
+    if (!authData.user?.identities || authData.user.identities.length === 0) {
+      return NextResponse.json(
+        { error: 'Email sudah terdaftar. Silakan gunakan email lain atau login.' },
+        { status: 400 }
+      );
+    }
 
     // Gunakan fungsi admin yang baru
     const supabaseAdmin = createAdminClient();
