@@ -1,23 +1,39 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server'; 
-import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/server'; 
 
 export async function POST(request: Request) {
   try {
     // 1. Parsing body dengan aman
-    let body;
+    let body: unknown;
     try {
       body = await request.json();
     } catch (err) {
       return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
     }
 
-    const { email, password, namaPt, npwp, alamatKantor, noTelepon} = body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
+    }
 
-    if (!email || !password || !namaPt || !npwp || !alamatKantor || !noTelepon) {
+    const { email, password, nama_perusahaan, npwp, alamat_pabrik, noTelepon } = body as Record<string, unknown>;
+
+    if (
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      typeof nama_perusahaan !== 'string' ||
+      typeof npwp !== 'string' ||
+      typeof alamat_pabrik !== 'string' ||
+      typeof noTelepon !== 'string' ||
+      !email.trim() ||
+      !password.trim() ||
+      !nama_perusahaan.trim() ||
+      !npwp.trim() ||
+      !alamat_pabrik.trim() ||
+      !noTelepon.trim()
+    ) {
       return NextResponse.json(
-        // Pesan error diperbarui agar mencakup semua 6 field
-        { error: 'Email, password, nama PT, NPWP, alamat kantor, dan no telepon wajib diisi!' },
+        { error: 'Email, password, nama PT, NPWP, alamat pabrik, dan no telepon wajib diisi!' },
         { status: 400 }
       );
     }
@@ -25,54 +41,57 @@ export async function POST(request: Request) {
     const supabase = await createClient();
 
     // 2. Daftarkan User ke Supabase Auth dengan Metadata Role 'perusahaan'
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+   const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          role: 'perusahaan', // Diberi label peran perusahaan langsung di token JWT
-        },
-      },
     });
 
     if (authError) {
-      return NextResponse.json({ error: authError.message }, { status: 400 });
+      console.error('Signup failed:', authError.message);
+      return NextResponse.json(
+        { error: 'Registrasi gagal. Periksa kembali email dan password Anda.' },
+        { status: 400 }
+      );
     }
 
     const userId = authData.user?.id;
-
     if (!userId) {
       return NextResponse.json({ error: 'Gagal mendapatkan ID pengguna.' }, { status: 500 });
     }
 
-    // 3. Inisialisasi Admin Client untuk bypass RLS
-    const supabaseAdmin = createAdminClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseAdmin = createAdminClient();
+
+    // Set role pakai admin client
+    const { error: roleError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      app_metadata: { role: 'perusahaan' },
+    });
+
+    if (roleError) {
+      console.error('Role assignment failed:', roleError.message);
+      const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (rollbackError) console.error('Rollback failed:', rollbackError.message);
+      return NextResponse.json({ error: 'Registrasi dibatalkan saat mengatur hak akses.' }, { status: 500 });
+    }
 
     const { error: profileError } = await supabaseAdmin
       .from('perusahaan_industri')
       .insert([
         {
           auth_id: userId,
-          nama_perusahaan: namaPt,
+          nama_perusahaan: nama_perusahaan,
           npwp: npwp,
-          alamat_lengkap: alamatKantor,
-          no_telepon : noTelepon,
-          status_verifikasi: 'pending', // Menunggu persetujuan Admin
-        },
+          alamat_lengkap: alamat_pabrik,
+          no_telepon: noTelepon,
+          status_verifikasi: 'pending',
+        }
       ]);
 
-    // 5. ROLLBACK JIKA GAGAL INSERT PROFIL
     if (profileError) {
-      // Hapus kembali user dari Supabase Auth agar email tidak tersangkut
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-
-      return NextResponse.json(
-        { error: 'Gagal membuat profil perusahaan, registrasi dibatalkan: ' + profileError.message },
-        { status: 500 }
-      );
+      console.error('Profile insert failed:', profileError.message);
+      const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (rollbackError) console.error('Rollback failed:', rollbackError.message);
+      
+      return NextResponse.json({ error: 'Gagal membuat profil perusahaan, registrasi dibatalkan.' }, { status: 500 });
     }
 
     return NextResponse.json(

@@ -73,12 +73,10 @@ export async function middleware(request: NextRequest) {
       return redirectSambilBawaCookie('/login');
     }
 
-    // Role dikenal tapi nyasar masuk area milik role lain.
-    const inOtherArea = Object.values(areaByRole).some(
-      (area) => area !== allowedArea && url.startsWith(area)
-    );
+    const isAllowedPath =
+      url === allowedArea || url.startsWith(`${allowedArea}/`);
 
-    if (inOtherArea) {
+    if (!isAllowedPath) {
       return redirectSambilBawaCookie(allowedArea);
     }
   }

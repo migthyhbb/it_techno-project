@@ -36,7 +36,11 @@ export async function PATCH(request: Request) {
     const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
     
     // Cek apakah user ada dan punya role admin di app_metadata (Bukan user_metadata yang bisa dipalsukan)
-    if (authError || !user || user.app_metadata?.role !== 'admin') {
+    if (authError || !user) {
+        return NextResponse.json({ error: 'Tidak ada akses (Unauthorized)' }, { status: 401 });
+    }
+
+    if (user.app_metadata?.role !== 'admin') {
         return NextResponse.json({ error: 'Akses ditolak! Anda bukan admin.' }, { status: 403 });
     }
 

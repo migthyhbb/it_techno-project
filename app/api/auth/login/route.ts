@@ -4,17 +4,26 @@ import { createClient } from '@/lib/supabase/server';
 export async function POST(request: Request) {
   try {
     // 1. Parsing body dengan aman
-    let body;
+    let body: unknown;
     try {
       body = await request.json();
     } catch (err) {
       return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
     }
 
-    const { email, password } = body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
+    }
+
+    const { email, password } = body as Record<string, unknown>;
 
     // Validasi input
-    if (!email || !password) {
+    if (
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !email.trim() ||
+      !password.trim()
+    ) {
       return NextResponse.json(
         { error: 'Email dan password wajib diisi!' },
         { status: 400 }

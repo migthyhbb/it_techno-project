@@ -50,10 +50,10 @@ export async function GET() {
       data: profileData
     }, { status: 200 });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
+    console.error('Failed to retrieve profile', err);
     return NextResponse.json(
-      { error: 'Terjadi kesalahan server: ' + err.message },
+      { error: 'Terjadi kesalahan server' },
       { status: 500 }
     );
-  }
-}
+  }}

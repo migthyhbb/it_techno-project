@@ -5,18 +5,33 @@ import { createAdminClient } from '@/lib/supabase/server';
 export async function POST(request: Request) {
   try {
     // 1. Parsing body dengan aman
-    let body;
+    let body: unknown;
     try {
       body = await request.json();
     } catch (err) {
       return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
     }
 
-    // 2. Sesuaikan variabel dengan input dari Frontend
-    const { email, password, namaAgen, nikNib, alamatLengkap, noTelepon } = body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
+    }
 
-    // Validasi sederhana
-    if (!email || !password || !namaAgen || !nikNib || !alamatLengkap || !noTelepon) {
+    const { email, password, namaAgen, nikNib, alamatLengkap, noTelepon } = body as Record<string, unknown>;
+
+    if (
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      typeof namaAgen !== 'string' ||
+      typeof nikNib !== 'string' ||
+      typeof alamatLengkap !== 'string' ||
+      typeof noTelepon !== 'string' ||
+      !email.trim() ||
+      !password.trim() ||
+      !namaAgen.trim() ||
+      !nikNib.trim() ||
+      !alamatLengkap.trim() ||
+      !noTelepon.trim()
+    ) {
       return NextResponse.json(
         { error: 'kamu harus mengsisi datamu secara lengkap' },
         { status: 400 }
@@ -31,7 +46,13 @@ export async function POST(request: Request) {
       password,
     }); // Hapus blok options: { data: { role: ... } } dari sini!
 
-    if (authError) throw authError;
+    if (authError) {
+      console.error('Signup failed:', authError.message);
+      return NextResponse.json(
+        { error: 'Registrasi gagal. Periksa kembali email dan password Anda.' },
+        { status: 400 }
+      );
+    }
 
     const userId = authData.user?.id;
     if (!userId) throw new Error('Gagal mendapatkan ID User');
@@ -45,7 +66,10 @@ export async function POST(request: Request) {
     });
 
     if (roleError) {
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (rollbackError) {
+        console.error('Rollback failed, orphan auth user:', userId, rollbackError.message);
+      }
       return NextResponse.json({ error: 'Registrasi dibatalkan saat mengatur hak akses.' }, { status: 500 });
     }
 
