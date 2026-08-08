@@ -40,13 +40,88 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
 
+    let createdUser = false;
+
     // 3. Daftarkan User ke Supabase Auth (Otomatis masuk tabel rahasia)
-   const { data: authData, error: authError } = await supabase.auth.signUp({
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
     }); // Hapus blok options: { data: { role: ... } } dari sini!
 
+    const duplicateSignup = authError && typeof authError === 'object' && 'code' in authError
+      ? ['user_already_exists', 'email_exists'].includes((authError as { code?: string }).code ?? '')
+      : false;
+
+    const supabaseAdmin = createAdminClient();
+
+    const handleDuplicateExisting = async () => {
+      const { data: existingUser, error: existingUserError } = await supabaseAdmin
+        .from('auth.users')
+        .select('id, app_metadata')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (existingUserError) {
+        console.error('Duplicate lookup failed:', existingUserError.message);
+        return NextResponse.json(
+          { error: 'Terjadi kesalahan saat memproses registrasi duplikat.' },
+          { status: 500 }
+        );
+      }
+
+      if (!existingUser || existingUser.app_metadata?.role !== 'agen') {
+        return NextResponse.json(
+          { error: 'Email sudah terdaftar pada akun lain.' },
+          { status: 400 }
+        );
+      }
+
+      const userId = existingUser.id;
+      const { data: existingAgent, error: existingAgentError } = await supabaseAdmin
+        .from('agen')
+        .select('auth_id')
+        .eq('auth_id', userId)
+        .maybeSingle();
+
+      if (existingAgentError) {
+        console.error('Agent lookup failed:', existingAgentError.message);
+        return NextResponse.json(
+          { error: 'Terjadi kesalahan saat memverifikasi profil agen.' },
+          { status: 500 }
+        );
+      }
+
+      if (existingAgent) {
+        return NextResponse.json({ message: 'Registrasi agen berhasil!' }, { status: 201 });
+      }
+
+      const { error: profileError } = await supabaseAdmin.from('agen').insert([
+        {
+          auth_id: userId,
+          nama_agen: namaAgen,
+          nik_nib: nikNib,
+          alamat_lengkap: alamatLengkap,
+          no_telepon: noTelepon,
+          status_verifikasi: 'pending',
+        }
+      ]);
+
+      if (profileError) {
+        console.error('Profile insert failed for duplicate signup:', profileError.message);
+        return NextResponse.json(
+          { error: 'Gagal membuat profil agen untuk akun duplikat.' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ message: 'Registrasi agen berhasil!' }, { status: 201 });
+    };
+
     if (authError) {
+      if (duplicateSignup) {
+        return await handleDuplicateExisting();
+      }
+
       console.error('Signup failed:', authError.message);
       return NextResponse.json(
         { error: 'Registrasi gagal. Periksa kembali email dan password Anda.' },
@@ -58,16 +133,12 @@ export async function POST(request: Request) {
     if (!userId) {
       return NextResponse.json({ error: 'Gagal mendapatkan ID pengguna.' }, { status: 500 });
     }
-    // PENGAMAN DARI CODERABBIT: Cek apakah email sudah terdaftar (identities kosong)
+
     if (!authData.user?.identities || authData.user.identities.length === 0) {
-      return NextResponse.json(
-        { error: 'Email sudah terdaftar. Silakan gunakan email lain atau login.' },
-        { status: 400 }
-      );
+      return await handleDuplicateExisting();
     }
 
-    // Gunakan fungsi admin yang baru
-    const supabaseAdmin = createAdminClient();
+    createdUser = true;
 
     // MASUKKAN ROLE KE APP_METADATA (Sangat Aman)
     const { error: roleError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
@@ -75,9 +146,11 @@ export async function POST(request: Request) {
     });
 
     if (roleError) {
-      const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(userId);
-      if (rollbackError) {
-        console.error('Rollback failed, orphan auth user:', userId, rollbackError.message);
+      if (createdUser) {
+        const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (rollbackError) {
+          console.error('Rollback failed, orphan auth user:', userId, rollbackError.message);
+        }
       }
       return NextResponse.json({ error: 'Registrasi dibatalkan saat mengatur hak akses.' }, { status: 500 });
     }
@@ -100,22 +173,23 @@ export async function POST(request: Request) {
     // PERBAIKAN ROLLBACK
     if (profileError) {
       console.error('Profile insert failed:', profileError.message);
-      const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(userId);
-      
-      if (rollbackError) {
-        console.error('Rollback failed, orphan auth user:', userId, rollbackError.message);
+      if (createdUser) {
+        const { error: rollbackError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (rollbackError) {
+          console.error('Rollback failed, orphan auth user:', userId, rollbackError.message);
+        }
       }
 
       return NextResponse.json(
         // Jangan bocorkan profileError.message ke client
-        { error: 'Gagal membuat profil, registrasi dibatalkan.' }, 
+        { error: 'Gagal membuat profil, registrasi dibatalkan.' },
         { status: 500 }
       );
     }
 
 
     return NextResponse.json(
-      { message: 'Registrasi agen berhasil!', userId },
+      { message: 'Registrasi agen berhasil!' },
       { status: 201 }
     );
     
