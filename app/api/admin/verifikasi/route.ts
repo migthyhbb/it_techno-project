@@ -91,8 +91,8 @@ export async function PATCH(request: Request) {
     const { data,error } = await supabaseAdmin
       .from(tableName)
       .update({ status_verifikasi: status_baru })
-      .eq('id', id_target)
-      .select('id');
+      .eq('auth.id', id_target)
+      .select('auth.id'); // <-- Pastikan kita hanya mengambil kolom yang relevan
     if (error) throw error;
 
     // Tambahkan blok ini: Cek apakah mitranya beneran ada?

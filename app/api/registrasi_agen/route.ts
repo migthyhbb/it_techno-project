@@ -4,6 +4,17 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
+    function cekKekuatanPassword(password: string): string[] {
+  return [
+    { valid: password.length >= 8, msg: "minimal 8 karakter" },
+    { valid: /[A-Z]/.test(password), msg: "minimal 1 huruf besar (A-Z)" },
+    { valid: /[a-z]/.test(password), msg: "minimal 1 huruf kecil (a-z)" },
+    { valid: /[0-9]/.test(password), msg: "minimal 1 angka (0-9)" },
+    { valid: /[^A-Za-z0-9]/.test(password), msg: "minimal 1 simbol khusus (contoh: @, !, #, $, dll)" }
+  ]
+  .filter(rule => !rule.valid)
+  .map(rule => rule.msg);
+}
     // 1. Parsing body dengan aman
     let body: unknown;
     try {
@@ -38,6 +49,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const daftarKelemahan = cekKekuatanPassword(password);
+
+if (daftarKelemahan.length > 0) {
+  // Menggabungkan pesan error agar user tahu apa yang kurang
+  return NextResponse.json({ 
+    error: `Password terlalu lemah! Harus memiliki: ${daftarKelemahan.join(', ')}.` 
+  }, { status: 400 });
+}
     const supabase = await createClient();
 
     let createdUser = false;
