@@ -50,15 +50,6 @@ export function Hero() {
 
       <div className="max-w-7xl mx-auto w-full grid md:grid-cols-2 gap-16 items-center relative z-10">
         <div>
-          <Reveal>
-            <div className="inline-flex items-center gap-2 border border-forest/20 rounded-full px-4 py-1.5 mb-7">
-              <span className="w-1.5 h-1.5 rounded-full bg-green" />
-              <span className="font-mono text-[11px] tracking-widest uppercase text-forest/80">
-                Limbah Energi Terjangkau Rakyat
-              </span>
-            </div>
-          </Reveal>
-
           <Reveal delay={0.08}>
             <h1 className="font-display font-semibold text-[2.6rem] leading-[1.08] md:text-[3.4rem] text-forest mb-6">
               Dari limbah pabrik,
