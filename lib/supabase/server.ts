@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js';
 
+
 export async function createClient() {
   const cookieStore = await cookies();
 
