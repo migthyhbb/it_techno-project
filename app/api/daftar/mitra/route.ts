@@ -15,6 +15,18 @@ export async function POST(request: Request) {
 
   try {
     const supabase = getSupabaseAdminClient();
+<<<<<<< HEAD
+=======
+    if (!supabase) {
+      return NextResponse.json(
+        {
+          error:
+            "Server belum dikonfigurasi untuk pendaftaran. Pastikan NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY sudah diisi di .env.local, lalu restart server.",
+        },
+        { status: 500 }
+      );
+    }
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 
     // 1) Buat akun. email_confirm: true supaya akun langsung aktif dan bisa
     //    langsung masuk tanpa menunggu klik link konfirmasi di email.
@@ -24,6 +36,10 @@ export async function POST(request: Request) {
       email_confirm: true,
     });
     if (createError) {
+<<<<<<< HEAD
+=======
+      console.error("Gagal membuat akun mitra:", createError);
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
       return NextResponse.json(
         { error: translateAuthError(createError.message) },
         { status: 400 }
@@ -41,6 +57,10 @@ export async function POST(request: Request) {
       telepon,
     });
     if (profileError) {
+<<<<<<< HEAD
+=======
+      console.error("Gagal menyimpan profil mitra:", profileError);
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
       // Akun sudah kebuat tapi profil gagal disimpan — hapus lagi akunnya
       // supaya tidak nyangkut jadi akun "kosong" dan email-nya bisa dipakai
       // untuk coba daftar ulang.
@@ -52,7 +72,12 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ ok: true });
+<<<<<<< HEAD
   } catch {
+=======
+  } catch (err) {
+    console.error("Kesalahan tak terduga saat daftar mitra:", err);
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
     return NextResponse.json(
       { error: "Terjadi kesalahan di server, coba lagi." },
       { status: 500 }

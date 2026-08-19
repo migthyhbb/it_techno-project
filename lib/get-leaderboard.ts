@@ -1,4 +1,7 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 import { getUpstashClient, getIoRedisClient } from "./redis";
 import { getSupabaseClient } from "./supabase";
 import { leaderboardEntries as dummyLeaderboardEntries, type LeaderboardEntry } from "./leaderboard-data";
@@ -92,6 +95,7 @@ export async function getLeaderboardEntries(): Promise<LeaderboardEntry[]> {
   }
 
   const apiUrl = process.env.LEADERBOARD_API_URL;
+<<<<<<< HEAD
 =======
 import { leaderboardEntries as dummyLeaderboardEntries, type LeaderboardEntry } from "./leaderboard-data";
 
@@ -99,11 +103,16 @@ export async function getLeaderboardEntries(): Promise<LeaderboardEntry[]> {
   const apiUrl = process.env.LEADERBOARD_API_URL; // Pastikan di .env isinya: http://localhost:3000/api/namaroutekamu
   
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
   if (apiUrl) {
     try {
       const res = await fetch(apiUrl, { next: { revalidate: 3600 } });
       if (!res.ok) throw new Error(`Status ${res.status}`);
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
       const data: LeaderboardEntry[] = await res.json();
       if (Array.isArray(data) && data.length > 0) return data;
     } catch (err) {
@@ -114,6 +123,7 @@ export async function getLeaderboardEntries(): Promise<LeaderboardEntry[]> {
 
   return dummyLeaderboardEntries;
 }
+<<<<<<< HEAD
 =======
       
       const response = await res.json();
@@ -139,3 +149,5 @@ export async function getLeaderboardEntries(): Promise<LeaderboardEntry[]> {
   return dummyLeaderboardEntries;
 }
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4

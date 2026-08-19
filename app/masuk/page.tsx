@@ -3,9 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { useRouter } from "next/navigation";
 =======
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+import { useRouter } from "next/navigation";
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 import { motion, AnimatePresence } from "motion/react";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/auth/form-field";
@@ -13,10 +17,15 @@ import { SubmitButton } from "@/components/auth/submit-button";
 import { BackButton } from "@/components/auth/back-button";
 import { ProgressSteps } from "@/components/auth/progress-steps";
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { translateAuthError } from "@/lib/auth-errors";
 =======
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { translateAuthError } from "@/lib/auth-errors";
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 
 const stepLabels = ["Email", "Kata Sandi"];
 
@@ -28,18 +37,26 @@ const variants = {
 
 export default function MasukPage() {
 <<<<<<< HEAD
+<<<<<<< HEAD
   const router = useRouter();
 =======
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+  const router = useRouter();
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
 <<<<<<< HEAD
+<<<<<<< HEAD
   const [error, setError] = useState<string | null>(null);
 =======
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+  const [error, setError] = useState<string | null>(null);
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 
   function goNext() {
     setDirection(1);
@@ -48,6 +65,9 @@ export default function MasukPage() {
   function goBack() {
     setDirection(-1);
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
     setError(null);
     setStep((s) => Math.max(s - 1, 0));
   }
@@ -56,6 +76,7 @@ export default function MasukPage() {
     e.preventDefault();
     setError(null);
 
+<<<<<<< HEAD
 =======
     setStep((s) => Math.max(s - 1, 0));
   }
@@ -63,11 +84,16 @@ export default function MasukPage() {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
     if (step < stepLabels.length - 1) {
       goNext();
       return;
     }
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 
     setStatus("loading");
     try {
@@ -85,11 +111,14 @@ export default function MasukPage() {
       setStatus("idle");
       setError(translateAuthError(err instanceof Error ? err.message : null));
     }
+<<<<<<< HEAD
 =======
     setStatus("loading");
     // TODO: sambungkan ke provider auth sesungguhnya (mis. NextAuth, Supabase Auth).
     setTimeout(() => setStatus("submitted"), 600);
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
   }
 
   return (
@@ -109,11 +138,16 @@ export default function MasukPage() {
       {status === "submitted" ? (
         <div className="text-center py-4">
 <<<<<<< HEAD
+<<<<<<< HEAD
           <p className="text-forest font-medium mb-1">Berhasil masuk.</p>
           <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
 =======
           <p className="text-forest font-medium mb-1">Permintaan masuk terkirim.</p>
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+          <p className="text-forest font-medium mb-1">Berhasil masuk.</p>
+          <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
         </div>
       ) : (
         <>
@@ -174,14 +208,20 @@ export default function MasukPage() {
             </AnimatePresence>
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
             {error && (
               <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">
                 {error}
               </p>
             )}
 
+<<<<<<< HEAD
 =======
 >>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
             <div className="flex gap-3">
               {step > 0 && <BackButton onClick={goBack} />}
               <SubmitButton type="submit" disabled={status === "loading"}>
