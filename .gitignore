@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+<<<<<<< HEAD
+<<<<<<< HEAD
+.env*.local
+=======
+.env.local
+>>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
+=======
+.env*.local
+>>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts

@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #f6f2e6;
+  color: #221d16;
+}
+
+::selection {
+  background: #c99a3d;
+  color: #17301f;
+}
+
+/* Leaflet popup restyle to match the brand */
+.leaflet-popup-content-wrapper {
+  border-radius: 10px;
+  font-family: var(--font-body), sans-serif;
+  box-shadow: 0 10px 25px rgba(23, 48, 31, 0.2);
+}
+
+.leaflet-popup-tip {
+  box-shadow: 0 10px 25px rgba(23, 48, 31, 0.15);
+}
+
+.marker-pin {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
