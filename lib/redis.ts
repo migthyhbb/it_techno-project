@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { Redis as UpstashRedis } from "@upstash/redis";
 import IORedis from "ioredis";
 
@@ -37,3 +38,8 @@ export function getIoRedisClient(): IORedis | null {
   }
   return ioredisClient;
 }
+=======
+import { Redis } from '@upstash/redis';
+
+export const redis = Redis.fromEnv();
+>>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d

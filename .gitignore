@@ -1,7 +1,11 @@
 node_modules
 .next
 out
+<<<<<<< HEAD
 .env*.local
+=======
+.env.local
+>>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
 .DS_Store
 *.tsbuildinfo
 next-env.d.ts

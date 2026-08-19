@@ -50,7 +50,10 @@ export function Hero() {
 
       <div className="max-w-7xl mx-auto w-full grid md:grid-cols-2 gap-16 items-center relative z-10">
         <div>
+<<<<<<< HEAD
 
+=======
+>>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
           <Reveal delay={0.08}>
             <h1 className="font-display font-semibold text-[2.6rem] leading-[1.08] md:text-[3.4rem] text-forest mb-6">
               Dari limbah pabrik,
