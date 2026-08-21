@@ -2,32 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-<<<<<<< HEAD
-<<<<<<< HEAD
 import { useRouter } from "next/navigation";
-=======
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
-import { useRouter } from "next/navigation";
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 import { motion, AnimatePresence } from "motion/react";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/auth/form-field";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { BackButton } from "@/components/auth/back-button";
 import { ProgressSteps } from "@/components/auth/progress-steps";
-<<<<<<< HEAD
-<<<<<<< HEAD
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { translateAuthError } from "@/lib/auth-errors";
 import { TermsCheckbox } from "@/components/auth/terms-checkbox";
-=======
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { translateAuthError } from "@/lib/auth-errors";
-import { TermsCheckbox } from "@/components/auth/terms-checkbox";
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 
 const stepLabels = ["Email", "Kata Sandi", "Detail Profil"];
 
@@ -41,41 +25,26 @@ type FormState = {
   email: string;
   password: string;
   nama_mitra: string;
-  nik_nib: string;
+  nik: string;
   alamat: string;
   telepon: string;
 };
 
 export default function DaftarMitraPage() {
-<<<<<<< HEAD
-<<<<<<< HEAD
   const router = useRouter();
-=======
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
-  const router = useRouter();
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [form, setForm] = useState<FormState>({
     email: "",
     password: "",
     nama_mitra: "",
-    nik_nib: "",
+    nik: "",
     alamat: "",
     telepon: "",
   });
   const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
-<<<<<<< HEAD
-<<<<<<< HEAD
   const [error, setError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
-=======
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
-  const [error, setError] = useState<string | null>(null);
-  const [agreed, setAgreed] = useState(false);
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 
   function update<K extends keyof FormState>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -85,12 +54,9 @@ export default function DaftarMitraPage() {
     setDirection(1);
     setStep((s) => Math.min(s + 1, stepLabels.length - 1));
   }
+  
   function goBack() {
     setDirection(-1);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
     setError(null);
     setStep((s) => Math.max(s - 1, 0));
   }
@@ -99,24 +65,10 @@ export default function DaftarMitraPage() {
     e.preventDefault();
     setError(null);
 
-<<<<<<< HEAD
-=======
-    setStep((s) => Math.max(s - 1, 0));
-  }
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
     if (step < stepLabels.length - 1) {
       goNext();
       return;
     }
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 
     if (!agreed) {
       setError("Kamu harus menyetujui Syarat & Ketentuan dan Kebijakan Privasi dulu.");
@@ -125,14 +77,23 @@ export default function DaftarMitraPage() {
 
     setStatus("loading");
     try {
-      // 1) Buat akun + simpan profil sekaligus di server (satu langkah,
-      //    tidak bergantung sesi browser yang belum tentu ada).
-      const res = await fetch("/api/daftar/mitra", {
+      // 1) Buat akun + simpan profil sekaligus di server
+      // Disesuaikan dengan URL dan Format Body Back-End abang
+      const res = await fetch("/api/registrasi_agen", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+          namaAgen: form.nama_mitra,
+          nik: form.nik,
+          alamatLengkap: form.alamat,
+          noTelepon: form.telepon
+        }),
       });
+      
       const result = await res.json();
+      
       if (!res.ok) {
         setStatus("idle");
         setError(result.error ?? "Terjadi kesalahan, coba lagi.");
@@ -145,6 +106,7 @@ export default function DaftarMitraPage() {
         email: form.email,
         password: form.password,
       });
+      
       if (signInError) throw signInError;
 
       setStatus("submitted");
@@ -154,14 +116,6 @@ export default function DaftarMitraPage() {
       setStatus("idle");
       setError(translateAuthError(err instanceof Error ? err.message : null));
     }
-<<<<<<< HEAD
-=======
-    setStatus("loading");
-    // TODO: kirim ke API pendaftaran mitra sesungguhnya, mis. POST /api/mitra.
-    setTimeout(() => setStatus("submitted"), 600);
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
   }
 
   return (
@@ -188,17 +142,8 @@ export default function DaftarMitraPage() {
     >
       {status === "submitted" ? (
         <div className="text-center py-4">
-<<<<<<< HEAD
-<<<<<<< HEAD
           <p className="text-forest font-medium mb-1">Pendaftaran mitra berhasil.</p>
           <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
-=======
-          <p className="text-forest font-medium mb-1">Pendaftaran mitra terkirim.</p>
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
-          <p className="text-forest font-medium mb-1">Pendaftaran mitra berhasil.</p>
-          <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
         </div>
       ) : (
         <>
@@ -242,14 +187,7 @@ export default function DaftarMitraPage() {
                       value={form.password}
                       onChange={(e) => update("password", e.target.value)}
                       placeholder="••••••••"
-<<<<<<< HEAD
-<<<<<<< HEAD
                       minLength={6}
-=======
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
-                      minLength={6}
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
                       required
                       autoFocus
                     />
@@ -270,8 +208,8 @@ export default function DaftarMitraPage() {
                     <FormField
                       label="NIK / NIB"
                       type="text"
-                      value={form.nik_nib}
-                      onChange={(e) => update("nik_nib", e.target.value)}
+                      value={form.nik}
+                      onChange={(e) => update("nik", e.target.value)}
                       placeholder="Nomor NIK atau NIB"
                       required
                     />
@@ -291,36 +229,18 @@ export default function DaftarMitraPage() {
                       placeholder="08xxxxxxxxxx"
                       required
                     />
-<<<<<<< HEAD
-<<<<<<< HEAD
-
                     <TermsCheckbox checked={agreed} onChange={setAgreed} />
-=======
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
-
-                    <TermsCheckbox checked={agreed} onChange={setAgreed} />
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
                   </>
                 )}
               </motion.div>
             </AnimatePresence>
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
             {error && (
               <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">
                 {error}
               </p>
             )}
 
-<<<<<<< HEAD
-=======
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
             <div className="flex gap-3">
               {step > 0 && <BackButton onClick={goBack} />}
               <SubmitButton type="submit" disabled={status === "loading"}>

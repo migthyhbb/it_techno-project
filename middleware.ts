@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
 
   // Aturan A: Mau masuk dashboard tapi belum login? Tendang ke halaman login!
   if (url.startsWith('/dashboard') && !user) {
-    return redirectSambilBawaCookie('/login');
+    return redirectSambilBawaCookie('/masuk');
   }
 
   // Aturan B: Orang sudah login, tapi buka halaman '/login' lagi? Kembalikan ke dashboard.

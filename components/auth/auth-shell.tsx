@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 import Image from "next/image";
 import Link from "next/link";
-=======
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
 import { ReactNode } from "react";
 
 export function AuthShell({
@@ -32,9 +29,6 @@ export function AuthShell({
       />
 
       <div className={`relative w-full ${wide ? "max-w-2xl" : "max-w-md"}`}>
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
         <Link href="/" className="flex items-center justify-center gap-3 mb-8">
           <Image src="/images/logo.png" alt="LENTERA" width={48} height={48} className="h-12 w-auto" />
           <span className="font-display font-semibold text-xl tracking-tight text-forest">
@@ -42,9 +36,6 @@ export function AuthShell({
           </span>
         </Link>
 
->>>>>>> 24315347cc5da3ab0a88e97b73a9aa50c7f5099d
-=======
->>>>>>> 23577b581cc61de8da2b7c68da516d87b8dadee4
         <div className="bg-paper rounded-3xl border border-forest/10 shadow-[0_30px_60px_-20px_rgba(23,48,31,0.25)] p-8 md:p-10">
           {eyebrow && (
             <p className="font-mono text-xs tracking-widest uppercase text-green mb-3 text-center">

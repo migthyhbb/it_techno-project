@@ -4,6 +4,15 @@ import { createAdminClient } from '@/lib/supabase/server';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // Maksimal 5MB
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+
+interface AIAnalysisResult {
+  npwp_ditemukan: string;
+  nama_ditemukan: string;
+  is_dokumen_jelas: boolean;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = createAdminClient();
@@ -14,118 +23,77 @@ export async function POST(request: Request) {
     const inputNama = formData.get('nama_perusahaan') as string;
     const fileDokumen = formData.get('dokumen_npwp') as File;
 
+    // 1. VALIDASI INPUT AWAL
     if (!id_perusahaan || !inputNpwp || !inputNama || !fileDokumen) {
-      return NextResponse.json(
-        { error: "Data tidak lengkap. Wajib mengirim id_perusahaan, npwp, nama_perusahaan, dan dokumen_npwp." }, 
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Data tidak lengkap." }, { status: 400 });
+    }
+    if (!ALLOWED_MIME_TYPES.includes(fileDokumen.type)) {
+      return NextResponse.json({ error: "Format file wajib JPG, PNG, atau PDF." }, { status: 400 });
+    }
+    if (fileDokumen.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: "Ukuran dokumen maksimal 5MB." }, { status: 400 });
     }
 
-    // 1. Siapkan Buffer Gambar
-    const bytes = await fileDokumen.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const buffer = Buffer.from(await fileDokumen.arrayBuffer());
 
-    // ==========================================
-    // 2. UPLOAD GAMBAR KE SUPABASE STORAGE
-    // ==========================================
-    // Buat nama file unik (ID Perusahaan + Timestamp) agar tidak bentrok
-    const fileExt = fileDokumen.name.split('.').pop();
-    const fileName = `${id_perusahaan}_${Date.now()}.${fileExt}`;
+    // 2. EKSEKUSI PARALEL (Upload & AI Analisis berjalan bersamaan)
+    const [publicDocumentUrl, extractedData] = await Promise.all([
+      uploadToSupabase(supabase, buffer, fileDokumen, id_perusahaan),
+      analyzeWithGemini(buffer, fileDokumen.type)
+    ]);
 
-    const { error: uploadError } = await supabase.storage
-      .from('npwp_bucket')
-      .upload(fileName, buffer, {
-        contentType: fileDokumen.type,
-        upsert: false // Jangan timpa file yang sudah ada
-      });
-
-    if (uploadError) {
-      console.error("Gagal Upload Storage:", uploadError);
-      return NextResponse.json({ error: "Gagal mengunggah foto dokumen ke server." }, { status: 500 });
-    }
-
-    // Dapatkan Public URL dari gambar yang baru diupload
-    const { data: urlData } = supabase.storage
-      .from('npwp_bucket')
-      .getPublicUrl(fileName);
-      
-    const publicDocumentUrl = urlData.publicUrl;
-
-    // ==========================================
-    // 3. ANALISIS AI GEMINI
-    // ==========================================
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `
-      Kamu asisten KYC. Baca dokumen legal (NPWP/Izin Usaha) ini.
-      Ekstrak 'Nomor NPWP' (angka saja) dan 'Nama Perusahaan'.
-      Jawab dengan JSON murni tanpa markdown:
-      {
-        "npwp_ditemukan": "123456789012345",
-        "nama_ditemukan": "PT MAJU JAYA",
-        "is_dokumen_jelas": true
-      }
-    `;
-
-    const imageParts = [{ inlineData: { data: buffer.toString("base64"), mimeType: fileDokumen.type } }];
-    const result = await model.generateContent([prompt, ...imageParts]);
-    
-    let responseText = result.response.text().trim();
-    if (responseText.startsWith('```json')) {
-      responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    }
-    const extractedData = JSON.parse(responseText);
-
-    // ==========================================
-    // 4. KEPUTUSAN & UPDATE DATABASE
-    // ==========================================
-    // Skenario A: Buram
+    // 3. LOGIKA PENCOCOKAN DATA
     if (!extractedData.is_dokumen_jelas) {
       await updateDataKYC(supabase, id_perusahaan, 'need_review', publicDocumentUrl);
-      return NextResponse.json({ 
-        message: "Dokumen buram. Diteruskan ke Admin.", status: "need_review" 
-      }, { status: 202 });
+      return NextResponse.json({ message: "Dokumen buram. Diteruskan ke Admin.", status: "need_review" }, { status: 202 });
     }
 
-    // Pembersihan & Pencocokan
     const cleanInputNpwp = inputNpwp.replace(/\D/g, '');
     const cleanExtractedNpwp = (extractedData.npwp_ditemukan || '').replace(/\D/g, '');
     const inputNamaLower = inputNama.toLowerCase().replace(/pt\.?|cv\.?|ud\.?/g, '').trim();
     const extractedNamaLower = (extractedData.nama_ditemukan || '').toLowerCase();
     
-    const isNpwpMatch = cleanInputNpwp === cleanExtractedNpwp && cleanInputNpwp.length > 0;
-    const isNamaMatch = extractedNamaLower.includes(inputNamaLower);
+    const isMatch = (cleanInputNpwp === cleanExtractedNpwp && cleanInputNpwp.length > 0) && 
+                    extractedNamaLower.includes(inputNamaLower);
 
-    // Skenario B: Lulus
-    if (isNpwpMatch && isNamaMatch) {
-      await updateDataKYC(supabase, id_perusahaan, 'verified', publicDocumentUrl);
-      return NextResponse.json({ 
-        message: "Verifikasi Berhasil!", status: "verified", data: extractedData
-      }, { status: 200 });
-    } 
+    // 4. HASIL AKHIR
+    const finalStatus = isMatch ? 'verified' : 'need_review';
+    const finalMessage = isMatch ? "Verifikasi Berhasil!" : "Data berbeda dengan dokumen. Menunggu verifikasi Admin.";
+    const statusCode = isMatch ? 200 : 202;
+
+    await updateDataKYC(supabase, id_perusahaan, finalStatus, publicDocumentUrl);
     
-    // Skenario C: Typo / Beda Data
-    else {
-      await updateDataKYC(supabase, id_perusahaan, 'need_review', publicDocumentUrl);
-      return NextResponse.json({ 
-        message: "Data beda dengan dokumen. Menunggu verifikasi Admin.", status: "need_review",
-      }, { status: 202 });
-    }
+    return NextResponse.json({ message: finalMessage, status: finalStatus, data: extractedData }, { status: statusCode });
 
   } catch (error: any) {
-    console.error("KYC AI API Error:", error);
-    return NextResponse.json({ error: "Terjadi kesalahan internal server." }, { status: 500 });
+    console.error("KYC Process Error:", error.message);
+    return NextResponse.json({ error: "Terjadi kesalahan internal server saat memproses KYC." }, { status: 500 });
   }
 }
 
-// Helper Function: Sekarang menyimpan status DAN URL Gambar
-async function updateDataKYC(supabaseAdmin: any, id: string, status: string, fotoUrl: string) {
-  const { error } = await supabaseAdmin
-    .from('perusahaan')
-    .update({ 
-      status_verifikasi: status,
-      url_dokumen_npwp: fotoUrl // Menyimpan link gambar untuk dilihat Admin!
-    })
-    .eq('id', id);
+// --- HELPER FUNCTIONS ---
+async function uploadToSupabase(supabaseAdmin: any, buffer: Buffer, file: File, id: string): Promise<string> {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${id}_${Date.now()}.${fileExt}`;
+  const { error } = await supabaseAdmin.storage.from('npwp_bucket').upload(fileName, buffer, { contentType: file.type, upsert: false });
+  if (error) throw new Error("Gagal upload gambar ke Storage");
   
-  if (error) throw new Error("Database update failed");
+  const { data } = supabaseAdmin.storage.from('npwp_bucket').getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
+async function analyzeWithGemini(buffer: Buffer, mimeType: string): Promise<AIAnalysisResult> {
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-flash",
+    generationConfig: { responseMimeType: "application/json" } // Kunci kestabilan AI
+  });
+
+  const prompt = `Ekstrak data dari dokumen legal ini. Format HANYA JSON: {"npwp_ditemukan": "angka tanpa titik", "nama_ditemukan": "nama perusahaan", "is_dokumen_jelas": boolean}`;
+  const result = await model.generateContent([prompt, { inlineData: { data: buffer.toString("base64"), mimeType } }]);
+  return JSON.parse(result.response.text()) as AIAnalysisResult;
+}
+
+async function updateDataKYC(supabaseAdmin: any, id: string, status: string, fotoUrl: string) {
+  const { error } = await supabaseAdmin.from('perusahaan').update({ status_verifikasi: status, url_dokumen_npwp: fotoUrl }).eq('id', id);
+  if (error) throw new Error("Gagal update status KYC di database");
 }
