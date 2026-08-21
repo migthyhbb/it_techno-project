@@ -1,130 +1,10 @@
 # Semua Kode Buatan LENTERA
 
-File gabungan source aplikasi. `.env`, konfigurasi, `.next`, `node_modules`, dan dependency tidak disertakan.
-
-## FILE: app/globals.css
-
-```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-html {
-  scroll-behavior: smooth;
-}
-
-body {
-  background-color: #f6f2e6;
-  color: #221d16;
-}
-
-::selection {
-  background: #c99a3d;
-  color: #17301f;
-}
-
-/* Leaflet popup restyle to match the brand */
-.leaflet-popup-content-wrapper {
-  border-radius: 10px;
-  font-family: var(--font-body), sans-serif;
-  box-shadow: 0 10px 25px rgba(23, 48, 31, 0.2);
-}
-
-.leaflet-popup-tip {
-  box-shadow: 0 10px 25px rgba(23, 48, 31, 0.15);
-}
-
-.marker-pin {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 3px solid #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-}
-```
-
-## FILE: app/layout.tsx
-
-```tsx
-import type { Metadata } from "next";
-import { Space_Grotesk, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
-import "./globals.css";
-
-const display = Space_Grotesk({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  variable: "--font-display",
-});
-
-const body = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-body",
-});
-
-const mono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["500"],
-  variable: "--font-mono",
-});
-
-export const metadata: Metadata = {
-  title: "LENTERA â€” Limbah Energi Terjangkau Rakyat",
-  description:
-    "LENTERA mengolah limbah industri dan pabrik menjadi energi terjangkau, disalurkan melalui jaringan mitra dan agen di seluruh Indonesia.",
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="id">
-      <body
-        className={`${display.variable} ${body.variable} ${mono.variable} font-body bg-cream text-ink antialiased`}
-      >
-        {children}
-      </body>
-    </html>
-  );
-}
-```
-
-## FILE: app/page.tsx
-
-```tsx
-import { Navbar } from "@/components/navbar";
-import { Hero } from "@/components/hero";
-import { HowItWorks } from "@/components/how-it-works";
-import { Partners } from "@/components/partners";
-import { Network } from "@/components/network";
-import { Leaderboard } from "@/components/leaderboard";
-import { PartnersMarquee } from "@/components/partners-marquee";
-import { CtaFooter } from "@/components/cta-footer";
-import { getLeaderboardEntries } from "@/lib/get-leaderboard";
-
-export default async function Home() {
-  const leaderboardEntries = await getLeaderboardEntries();
-
-  return (
-    <main>
-      <Navbar />
-      <Hero />
-      <HowItWorks />
-      <Partners />
-      <Network />
-      <Leaderboard entries={leaderboardEntries} />
-      <PartnersMarquee />
-      <CtaFooter />
-    </main>
-  );
-}
-```
+Dokumen ini dibuat dari source aktual repository. File `.env`, dependency, build output, dan dokumen ini sendiri tidak disertakan.
 
 ## FILE: app/api/admin/calon-mitra/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server'; // Sesuaikan path jika beda
 
@@ -166,7 +46,7 @@ export async function GET() {
 
 ## FILE: app/api/admin/verifikasi/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server'; // Sesuaikan path jika berbeda
 import { createServerClient } from '@supabase/ssr';
@@ -285,7 +165,7 @@ export async function PATCH(request: Request) {
 
 ## FILE: app/api/ai/ai-guide/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -327,7 +207,7 @@ const model = genAI.getGenerativeModel({
 
 ## FILE: app/api/ai/pricing/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -416,7 +296,7 @@ export async function GET(request: Request) {
 
 ## FILE: app/api/auth/kyc/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -552,7 +432,7 @@ async function updateDataKYC(supabaseAdmin: any, id: string, status: string, fot
 
 ## FILE: app/api/auth/login/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
@@ -672,7 +552,7 @@ export async function POST(request: Request) {
 
 ## FILE: app/api/auth/logout/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
@@ -697,9 +577,165 @@ export async function POST() {
 }
 ```
 
+## FILE: app/api/daftar/industri/route.ts
+
+```ts
+import { NextResponse } from "next/server";
+import { getSupabaseAdminClient } from "@/lib/supabase-admin";
+import { translateAuthError } from "@/lib/auth-errors";
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const { email, password, nama_perusahaan, npwp, alamat, telepon } = body;
+
+  if (!email || !password || !nama_perusahaan || !npwp || !alamat || !telepon) {
+    return NextResponse.json(
+      { error: "Semua kolom wajib diisi." },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient();
+    if (!supabase) {
+      return NextResponse.json(
+        {
+          error:
+            "Server belum dikonfigurasi untuk pendaftaran. Pastikan NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY sudah diisi di .env.local, lalu restart server.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // 1) Buat akun. email_confirm: true supaya akun langsung aktif dan bisa
+    //    langsung masuk tanpa menunggu klik link konfirmasi di email.
+    const { data: userData, error: createError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (createError) {
+      console.error("Gagal membuat akun industri:", createError);
+      return NextResponse.json(
+        { error: translateAuthError(createError.message) },
+        { status: 400 }
+      );
+    }
+
+    // 2) Simpan detail profil, ditautkan ke user_id yang baru dibuat.
+    //    Pakai service role jadi tidak kena RLS â€” tidak bergantung sesi
+    //    login yang belum tentu ada di titik ini.
+    const { error: profileError } = await supabase.from("industri_profiles").insert({
+      user_id: userData.user.id,
+      nama_perusahaan,
+      npwp,
+      alamat,
+      telepon,
+    });
+    if (profileError) {
+      console.error("Gagal menyimpan profil industri:", profileError);
+      // Akun sudah kebuat tapi profil gagal disimpan â€” hapus lagi akunnya
+      // supaya tidak nyangkut jadi akun "kosong" dan email-nya bisa dipakai
+      // untuk coba daftar ulang.
+      await supabase.auth.admin.deleteUser(userData.user.id);
+      return NextResponse.json(
+        { error: "Gagal menyimpan data profil, coba lagi." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Kesalahan tak terduga saat daftar industri:", err);
+    return NextResponse.json(
+      { error: "Terjadi kesalahan di server, coba lagi." },
+      { status: 500 }
+    );
+  }
+}
+```
+
+## FILE: app/api/daftar/mitra/route.ts
+
+```ts
+import { NextResponse } from "next/server";
+import { getSupabaseAdminClient } from "@/lib/supabase-admin";
+import { translateAuthError } from "@/lib/auth-errors";
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const { email, password, nama_mitra, nik_nib, alamat, telepon } = body;
+
+  if (!email || !password || !nama_mitra || !nik_nib || !alamat || !telepon) {
+    return NextResponse.json(
+      { error: "Semua kolom wajib diisi." },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient();
+    if (!supabase) {
+      return NextResponse.json(
+        {
+          error:
+            "Server belum dikonfigurasi untuk pendaftaran. Pastikan NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY sudah diisi di .env.local, lalu restart server.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // 1) Buat akun. email_confirm: true supaya akun langsung aktif dan bisa
+    //    langsung masuk tanpa menunggu klik link konfirmasi di email.
+    const { data: userData, error: createError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (createError) {
+      console.error("Gagal membuat akun mitra:", createError);
+      return NextResponse.json(
+        { error: translateAuthError(createError.message) },
+        { status: 400 }
+      );
+    }
+
+    // 2) Simpan detail profil, ditautkan ke user_id yang baru dibuat.
+    //    Pakai service role jadi tidak kena RLS â€” tidak bergantung sesi
+    //    login yang belum tentu ada di titik ini.
+    const { error: profileError } = await supabase.from("mitra_profiles").insert({
+      user_id: userData.user.id,
+      nama_mitra,
+      nik_nib,
+      alamat,
+      telepon,
+    });
+    if (profileError) {
+      console.error("Gagal menyimpan profil mitra:", profileError);
+      // Akun sudah kebuat tapi profil gagal disimpan â€” hapus lagi akunnya
+      // supaya tidak nyangkut jadi akun "kosong" dan email-nya bisa dipakai
+      // untuk coba daftar ulang.
+      await supabase.auth.admin.deleteUser(userData.user.id);
+      return NextResponse.json(
+        { error: "Gagal menyimpan data profil, coba lagi." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Kesalahan tak terduga saat daftar mitra:", err);
+    return NextResponse.json(
+      { error: "Terjadi kesalahan di server, coba lagi." },
+      { status: 500 }
+    );
+  }
+}
+```
+
 ## FILE: app/api/leaderboard/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -791,7 +827,7 @@ export async function GET() {
 
 ## FILE: app/api/legal/e-contract/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
@@ -852,7 +888,7 @@ export async function PATCH() {
 
 ## FILE: app/api/limbah/setoran-limbah/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server'; 
 import { Redis } from '@upstash/redis';
@@ -1011,7 +1047,7 @@ export async function POST(request: Request) {
 
 ## FILE: app/api/limbah/worker/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { verifySignatureAppRouter } from "@upstash/qstash/nextjs";
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -1089,7 +1125,7 @@ export const POST = verifySignatureAppRouter(handler);
 
 ## FILE: app/api/profil/me/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
@@ -1239,7 +1275,7 @@ export async function PATCH(request: Request) {
 
 ## FILE: app/api/registrasi_agen/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server'; 
 
@@ -1468,7 +1504,7 @@ if (daftarKelemahan.length > 0) {
 
 ## FILE: app/api/registrasi_perusahaan/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server'; 
 import { createAdminClient } from '@/lib/supabase/server'; 
@@ -1612,7 +1648,7 @@ if (daftarKelemahan.length > 0) {
 
 ## FILE: app/api/transaksi/order/route.ts
 
-```typescript
+```ts
 import { NextResponse } from 'next/server';
 import { createAdminClient} from '@/lib/supabase/server'; 
 
@@ -1692,8 +1728,518 @@ export async function POST(request: Request) {
 
 ## FILE: app/api/transaksi/riwayat/route.ts
 
-```typescript
+```ts
+export async function GET() {
+	return Response.json({ orders: [] });
+}
+```
 
+## FILE: app/daftar/industri/page.tsx
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { FormField } from "@/components/auth/form-field";
+import { SubmitButton } from "@/components/auth/submit-button";
+import { BackButton } from "@/components/auth/back-button";
+import { ProgressSteps } from "@/components/auth/progress-steps";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { translateAuthError } from "@/lib/auth-errors";
+import { TermsCheckbox } from "@/components/auth/terms-checkbox";
+
+const stepLabels = ["Email", "Kata Sandi", "Detail Profil"];
+
+const variants = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
+  center: { opacity: 1, x: 0 },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
+};
+
+type FormState = {
+  email: string;
+  password: string;
+  nama_perusahaan: string;
+  npwp: string;
+  alamat: string;
+  telepon: string;
+};
+
+export default function DaftarIndustriPage() {
+  const router = useRouter();
+  const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const [form, setForm] = useState<FormState>({
+    email: "",
+    password: "",
+    nama_perusahaan: "",
+    npwp: "",
+    alamat: "",
+    telepon: "",
+  });
+  const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
+
+  function update<K extends keyof FormState>(key: K, value: string) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function goNext() {
+    setDirection(1);
+    setStep((s) => Math.min(s + 1, stepLabels.length - 1));
+  }
+  function goBack() {
+    setDirection(-1);
+    setError(null);
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    if (step < stepLabels.length - 1) {
+      goNext();
+      return;
+    }
+
+    if (!agreed) {
+      setError("Kamu harus menyetujui Syarat & Ketentuan dan Kebijakan Privasi dulu.");
+      return;
+    }
+
+    setStatus("loading");
+    try {
+      // 1) Buat akun + simpan profil sekaligus di server (satu langkah,
+      //    tidak bergantung sesi browser yang belum tentu ada).
+      const res = await fetch("/api/daftar/industri", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setStatus("idle");
+        setError(result.error ?? "Terjadi kesalahan, coba lagi.");
+        return;
+      }
+
+      // 2) Login beneran di browser supaya dapat sesi asli.
+      const supabase = createSupabaseBrowserClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: form.email,
+        password: form.password,
+      });
+      if (signInError) throw signInError;
+
+      setStatus("submitted");
+      // Belum ada dashboard khusus industri, jadi kembali ke beranda.
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      setStatus("idle");
+      setError(translateAuthError(err instanceof Error ? err.message : null));
+    }
+  }
+
+  return (
+    <AuthShell
+      eyebrow="Pendaftaran industri"
+      title="Daftar sebagai Industri"
+      subtitle="Untuk pabrik dan industri sumber limbah."
+      footer={
+        <p className="text-sm text-ink/60 space-y-1.5">
+          <span className="block">
+            Sudah punya akun?{" "}
+            <Link href="/masuk" className="text-green font-medium hover:underline">
+              Masuk
+            </Link>
+          </span>
+          <span className="block">
+            Mau daftar sebagai mitra?{" "}
+            <Link href="/daftar/mitra" className="text-green font-medium hover:underline">
+              Klik di sini
+            </Link>
+          </span>
+        </p>
+      }
+    >
+      {status === "submitted" ? (
+        <div className="text-center py-4">
+          <p className="text-forest font-medium mb-1">Pendaftaran industri berhasil.</p>
+          <p className="text-ink/55 text-sm">Mengalihkan ke beranda...</p>
+        </div>
+      ) : (
+        <>
+          <ProgressSteps steps={stepLabels} current={step} />
+          <form onSubmit={handleSubmit}>
+            <AnimatePresence mode="wait" custom={direction} initial={false}>
+              <motion.div
+                key={step}
+                custom={direction}
+                variants={variants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {step === 0 && (
+                  <FormField
+                    label="Email"
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => update("email", e.target.value)}
+                    placeholder="nama@perusahaan.com"
+                    required
+                    autoFocus
+                  />
+                )}
+
+                {step === 1 && (
+                  <>
+                    <p className="text-sm text-ink/55 mb-4">
+                      Untuk{" "}
+                      <span className="text-forest font-medium">{form.email}</span>{" "}
+                      Â·{" "}
+                      <button type="button" onClick={goBack} className="text-green hover:underline">
+                        ganti
+                      </button>
+                    </p>
+                    <FormField
+                      label="Kata sandi"
+                      type="password"
+                      value={form.password}
+                      onChange={(e) => update("password", e.target.value)}
+                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                      minLength={6}
+                      required
+                      autoFocus
+                    />
+                  </>
+                )}
+
+                {step === 2 && (
+                  <>
+                    <FormField
+                      label="Nama perusahaan"
+                      type="text"
+                      value={form.nama_perusahaan}
+                      onChange={(e) => update("nama_perusahaan", e.target.value)}
+                      placeholder="PT / CV ..."
+                      required
+                      autoFocus
+                    />
+                    <FormField
+                      label="NPWP"
+                      type="text"
+                      value={form.npwp}
+                      onChange={(e) => update("npwp", e.target.value)}
+                      placeholder="XX.XXX.XXX.X-XXX.XXX"
+                      required
+                    />
+                    <FormField
+                      label="Alamat lengkap"
+                      type="text"
+                      value={form.alamat}
+                      onChange={(e) => update("alamat", e.target.value)}
+                      placeholder="Jalan, kota, provinsi"
+                      required
+                    />
+                    <FormField
+                      label="Nomor telepon"
+                      type="tel"
+                      value={form.telepon}
+                      onChange={(e) => update("telepon", e.target.value)}
+                      placeholder="08xxxxxxxxxx"
+                      required
+                    />
+                    <TermsCheckbox checked={agreed} onChange={setAgreed} />
+                  </>
+                )}
+              </motion.div>
+            </AnimatePresence>
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">
+                {error}
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              {step > 0 && <BackButton onClick={goBack} />}
+              <SubmitButton type="submit" disabled={status === "loading"}>
+                {step < stepLabels.length - 1
+                  ? "Lanjut"
+                  : status === "loading"
+                  ? "Memproses..."
+                  : "Daftar sebagai Industri"}
+              </SubmitButton>
+            </div>
+          </form>
+        </>
+      )}
+    </AuthShell>
+  );
+}
+```
+
+## FILE: app/daftar/mitra/page.tsx
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { FormField } from "@/components/auth/form-field";
+import { SubmitButton } from "@/components/auth/submit-button";
+import { BackButton } from "@/components/auth/back-button";
+import { ProgressSteps } from "@/components/auth/progress-steps";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { translateAuthError } from "@/lib/auth-errors";
+import { TermsCheckbox } from "@/components/auth/terms-checkbox";
+
+const stepLabels = ["Email", "Kata Sandi", "Detail Profil"];
+
+const variants = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
+  center: { opacity: 1, x: 0 },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
+};
+
+type FormState = {
+  email: string;
+  password: string;
+  nama_mitra: string;
+  nik_nib: string;
+  alamat: string;
+  telepon: string;
+};
+
+export default function DaftarMitraPage() {
+  const router = useRouter();
+  const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const [form, setForm] = useState<FormState>({
+    email: "",
+    password: "",
+    nama_mitra: "",
+    nik_nib: "",
+    alamat: "",
+    telepon: "",
+  });
+  const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
+
+  function update<K extends keyof FormState>(key: K, value: string) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function goNext() {
+    setDirection(1);
+    setStep((s) => Math.min(s + 1, stepLabels.length - 1));
+  }
+  function goBack() {
+    setDirection(-1);
+    setError(null);
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    if (step < stepLabels.length - 1) {
+      goNext();
+      return;
+    }
+
+    if (!agreed) {
+      setError("Kamu harus menyetujui Syarat & Ketentuan dan Kebijakan Privasi dulu.");
+      return;
+    }
+
+    setStatus("loading");
+    try {
+      // 1) Buat akun + simpan profil sekaligus di server (satu langkah,
+      //    tidak bergantung sesi browser yang belum tentu ada).
+      const res = await fetch("/api/daftar/mitra", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setStatus("idle");
+        setError(result.error ?? "Terjadi kesalahan, coba lagi.");
+        return;
+      }
+
+      // 2) Login beneran di browser supaya dapat sesi asli, baru redirect.
+      const supabase = createSupabaseBrowserClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: form.email,
+        password: form.password,
+      });
+      if (signInError) throw signInError;
+
+      setStatus("submitted");
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      setStatus("idle");
+      setError(translateAuthError(err instanceof Error ? err.message : null));
+    }
+  }
+
+  return (
+    <AuthShell
+      eyebrow="Pendaftaran mitra"
+      title="Daftar sebagai Mitra"
+      subtitle="Untuk agen dan distributor energi LENTERA."
+      footer={
+        <p className="text-sm text-ink/60 space-y-1.5">
+          <span className="block">
+            Sudah punya akun?{" "}
+            <Link href="/masuk" className="text-green font-medium hover:underline">
+              Masuk
+            </Link>
+          </span>
+          <span className="block">
+            Mau daftar sebagai industri?{" "}
+            <Link href="/daftar/industri" className="text-green font-medium hover:underline">
+              Klik di sini
+            </Link>
+          </span>
+        </p>
+      }
+    >
+      {status === "submitted" ? (
+        <div className="text-center py-4">
+          <p className="text-forest font-medium mb-1">Pendaftaran mitra berhasil.</p>
+          <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
+        </div>
+      ) : (
+        <>
+          <ProgressSteps steps={stepLabels} current={step} />
+          <form onSubmit={handleSubmit}>
+            <AnimatePresence mode="wait" custom={direction} initial={false}>
+              <motion.div
+                key={step}
+                custom={direction}
+                variants={variants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {step === 0 && (
+                  <FormField
+                    label="Email"
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => update("email", e.target.value)}
+                    placeholder="nama@email.com"
+                    required
+                    autoFocus
+                  />
+                )}
+
+                {step === 1 && (
+                  <>
+                    <p className="text-sm text-ink/55 mb-4">
+                      Untuk{" "}
+                      <span className="text-forest font-medium">{form.email}</span>{" "}
+                      Â·{" "}
+                      <button type="button" onClick={goBack} className="text-green hover:underline">
+                        ganti
+                      </button>
+                    </p>
+                    <FormField
+                      label="Kata sandi"
+                      type="password"
+                      value={form.password}
+                      onChange={(e) => update("password", e.target.value)}
+                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                      minLength={6}
+                      required
+                      autoFocus
+                    />
+                  </>
+                )}
+
+                {step === 2 && (
+                  <>
+                    <FormField
+                      label="Nama mitra"
+                      type="text"
+                      value={form.nama_mitra}
+                      onChange={(e) => update("nama_mitra", e.target.value)}
+                      placeholder="Nama perorangan / usaha"
+                      required
+                      autoFocus
+                    />
+                    <FormField
+                      label="NIK / NIB"
+                      type="text"
+                      value={form.nik_nib}
+                      onChange={(e) => update("nik_nib", e.target.value)}
+                      placeholder="Nomor NIK atau NIB"
+                      required
+                    />
+                    <FormField
+                      label="Alamat lengkap"
+                      type="text"
+                      value={form.alamat}
+                      onChange={(e) => update("alamat", e.target.value)}
+                      placeholder="Jalan, kota, provinsi"
+                      required
+                    />
+                    <FormField
+                      label="Nomor telepon"
+                      type="tel"
+                      value={form.telepon}
+                      onChange={(e) => update("telepon", e.target.value)}
+                      placeholder="08xxxxxxxxxx"
+                      required
+                    />
+
+                    <TermsCheckbox checked={agreed} onChange={setAgreed} />
+                  </>
+                )}
+              </motion.div>
+            </AnimatePresence>
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">
+                {error}
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              {step > 0 && <BackButton onClick={goBack} />}
+              <SubmitButton type="submit" disabled={status === "loading"}>
+                {step < stepLabels.length - 1
+                  ? "Lanjut"
+                  : status === "loading"
+                  ? "Memproses..."
+                  : "Daftar sebagai Mitra"}
+              </SubmitButton>
+            </div>
+          </form>
+        </>
+      )}
+    </AuthShell>
+  );
+}
 ```
 
 ## FILE: app/daftar/page.tsx
@@ -1783,402 +2329,305 @@ export default function DaftarPage() {
 }
 ```
 
-## FILE: app/daftar/industri/page.tsx
+## FILE: app/dashboard/layout.tsx
 
 ```tsx
-"use client";
+import { DashboardSidebar } from "@/components/dashboard/sidebar";
 
-import { useState } from "react";
-import Link from "next/link";
-import { motion, AnimatePresence } from "motion/react";
-import { AuthShell } from "@/components/auth/auth-shell";
-import { FormField } from "@/components/auth/form-field";
-import { SubmitButton } from "@/components/auth/submit-button";
-import { BackButton } from "@/components/auth/back-button";
-import { ProgressSteps } from "@/components/auth/progress-steps";
-
-const stepLabels = ["Email", "Kata Sandi", "Detail Profil"];
-
-const variants = {
-  enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
-  center: { opacity: 1, x: 0 },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
-};
-
-type FormState = {
-  email: string;
-  password: string;
-  nama_perusahaan: string;
-  npwp: string;
-  alamat: string;
-  telepon: string;
-};
-
-export default function DaftarIndustriPage() {
-  const [step, setStep] = useState(0);
-  const [direction, setDirection] = useState(1);
-  const [form, setForm] = useState<FormState>({
-    email: "",
-    password: "",
-    nama_perusahaan: "",
-    npwp: "",
-    alamat: "",
-    telepon: "",
-  });
-  const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
-
-  function update<K extends keyof FormState>(key: K, value: string) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  function goNext() {
-    setDirection(1);
-    setStep((s) => Math.min(s + 1, stepLabels.length - 1));
-  }
-  function goBack() {
-    setDirection(-1);
-    setStep((s) => Math.max(s - 1, 0));
-  }
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (step < stepLabels.length - 1) {
-      goNext();
-      return;
-    }
-    setStatus("loading");
-    // TODO: kirim ke API pendaftaran industri sesungguhnya, mis. POST /api/industri.
-    setTimeout(() => setStatus("submitted"), 600);
-  }
-
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <AuthShell
-      eyebrow="Pendaftaran industri"
-      title="Daftar sebagai Industri"
-      subtitle="Untuk pabrik dan industri sumber limbah."
-      footer={
-        <p className="text-sm text-ink/60 space-y-1.5">
-          <span className="block">
-            Sudah punya akun?{" "}
-            <Link href="/masuk" className="text-green font-medium hover:underline">
-              Masuk
-            </Link>
-          </span>
-          <span className="block">
-            Mau daftar sebagai mitra?{" "}
-            <Link href="/daftar/mitra" className="text-green font-medium hover:underline">
-              Klik di sini
-            </Link>
-          </span>
-        </p>
-      }
-    >
-      {status === "submitted" ? (
-        <div className="text-center py-4">
-          <p className="text-forest font-medium mb-1">Pendaftaran industri terkirim.</p>
-        </div>
-      ) : (
-        <>
-          <ProgressSteps steps={stepLabels} current={step} />
-          <form onSubmit={handleSubmit}>
-            <AnimatePresence mode="wait" custom={direction} initial={false}>
-              <motion.div
-                key={step}
-                custom={direction}
-                variants={variants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {step === 0 && (
-                  <FormField
-                    label="Email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
-                    placeholder="nama@perusahaan.com"
-                    required
-                    autoFocus
-                  />
-                )}
-
-                {step === 1 && (
-                  <>
-                    <p className="text-sm text-ink/55 mb-4">
-                      Untuk{" "}
-                      <span className="text-forest font-medium">{form.email}</span>{" "}
-                      Â·{" "}
-                      <button type="button" onClick={goBack} className="text-green hover:underline">
-                        ganti
-                      </button>
-                    </p>
-                    <FormField
-                      label="Kata sandi"
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => update("password", e.target.value)}
-                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                      required
-                      autoFocus
-                    />
-                  </>
-                )}
-
-                {step === 2 && (
-                  <>
-                    <FormField
-                      label="Nama perusahaan"
-                      type="text"
-                      value={form.nama_perusahaan}
-                      onChange={(e) => update("nama_perusahaan", e.target.value)}
-                      placeholder="PT / CV ..."
-                      required
-                      autoFocus
-                    />
-                    <FormField
-                      label="NPWP"
-                      type="text"
-                      value={form.npwp}
-                      onChange={(e) => update("npwp", e.target.value)}
-                      placeholder="XX.XXX.XXX.X-XXX.XXX"
-                      required
-                    />
-                    <FormField
-                      label="Alamat lengkap"
-                      type="text"
-                      value={form.alamat}
-                      onChange={(e) => update("alamat", e.target.value)}
-                      placeholder="Jalan, kota, provinsi"
-                      required
-                    />
-                    <FormField
-                      label="Nomor telepon"
-                      type="tel"
-                      value={form.telepon}
-                      onChange={(e) => update("telepon", e.target.value)}
-                      placeholder="08xxxxxxxxxx"
-                      required
-                    />
-                  </>
-                )}
-              </motion.div>
-            </AnimatePresence>
-
-            <div className="flex gap-3">
-              {step > 0 && <BackButton onClick={goBack} />}
-              <SubmitButton type="submit" disabled={status === "loading"}>
-                {step < stepLabels.length - 1
-                  ? "Lanjut"
-                  : status === "loading"
-                  ? "Memproses..."
-                  : "Daftar sebagai Industri"}
-              </SubmitButton>
-            </div>
-          </form>
-        </>
-      )}
-    </AuthShell>
+    <div className="flex min-h-screen bg-cream">
+      <DashboardSidebar />
+      <main className="flex-1 min-w-0">{children}</main>
+    </div>
   );
 }
 ```
 
-## FILE: app/daftar/mitra/page.tsx
+## FILE: app/dashboard/page.tsx
 
 ```tsx
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { motion, AnimatePresence } from "motion/react";
-import { AuthShell } from "@/components/auth/auth-shell";
-import { FormField } from "@/components/auth/form-field";
-import { SubmitButton } from "@/components/auth/submit-button";
-import { BackButton } from "@/components/auth/back-button";
-import { ProgressSteps } from "@/components/auth/progress-steps";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { ProductCard } from "@/components/dashboard/product-card";
+import { mitraProducts } from "@/lib/mitra-products";
 
-const stepLabels = ["Email", "Kata Sandi", "Detail Profil"];
-
-const variants = {
-  enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
-  center: { opacity: 1, x: 0 },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
-};
-
-type FormState = {
-  email: string;
-  password: string;
+interface MitraProfile {
   nama_mitra: string;
   nik_nib: string;
   alamat: string;
   telepon: string;
-};
+  created_at: string;
+}
 
-export default function DaftarMitraPage() {
-  const [step, setStep] = useState(0);
-  const [direction, setDirection] = useState(1);
-  const [form, setForm] = useState<FormState>({
-    email: "",
-    password: "",
-    nama_mitra: "",
-    nik_nib: "",
-    alamat: "",
-    telepon: "",
-  });
-  const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
+function InfoRow({
+  label,
+  value,
+  className = "",
+}: {
+  label: string;
+  value?: string | null;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <p className="text-xs text-ink/45 mb-1">{label}</p>
+      <p className="text-forest font-medium">{value || "-"}</p>
+    </div>
+  );
+}
 
-  function update<K extends keyof FormState>(key: K, value: string) {
-    setForm((f) => ({ ...f, [key]: value }));
+export default function DashboardPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState<string | null>(null);
+  const [profile, setProfile] = useState<MitraProfile | null>(null);
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) {
+        router.replace("/masuk");
+        return;
+      }
+      setEmail(data.user.email ?? null);
+
+      const { data: profileData } = await supabase
+        .from("mitra_profiles")
+        .select("nama_mitra, nik_nib, alamat, telepon, created_at")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+
+      setProfile(profileData);
+      setLoading(false);
+    });
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-ink/40 text-sm">Memuat...</p>
+      </div>
+    );
   }
 
-  function goNext() {
-    setDirection(1);
-    setStep((s) => Math.min(s + 1, stepLabels.length - 1));
-  }
-  function goBack() {
-    setDirection(-1);
-    setStep((s) => Math.max(s - 1, 0));
-  }
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (step < stepLabels.length - 1) {
-      goNext();
-      return;
-    }
-    setStatus("loading");
-    // TODO: kirim ke API pendaftaran mitra sesungguhnya, mis. POST /api/mitra.
-    setTimeout(() => setStatus("submitted"), 600);
-  }
+  const lowStockCount = mitraProducts.filter((p) => p.stock < 25).length;
+  const joinedLabel = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "-";
 
   return (
-    <AuthShell
-      eyebrow="Pendaftaran mitra"
-      title="Daftar sebagai Mitra"
-      subtitle="Untuk agen dan distributor energi LENTERA."
-      footer={
-        <p className="text-sm text-ink/60 space-y-1.5">
-          <span className="block">
-            Sudah punya akun?{" "}
-            <Link href="/masuk" className="text-green font-medium hover:underline">
-              Masuk
-            </Link>
-          </span>
-          <span className="block">
-            Mau daftar sebagai industri?{" "}
-            <Link href="/daftar/industri" className="text-green font-medium hover:underline">
-              Klik di sini
-            </Link>
-          </span>
+    <div className="px-6 md:px-12 py-10 md:py-12 max-w-5xl">
+      {/* Ringkasan */}
+      <section id="ringkasan" className="scroll-mt-8 mb-16">
+        <p className="font-mono text-xs tracking-widest uppercase text-green mb-3">
+          Ringkasan
         </p>
-      }
-    >
-      {status === "submitted" ? (
-        <div className="text-center py-4">
-          <p className="text-forest font-medium mb-1">Pendaftaran mitra terkirim.</p>
+        <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest mb-2">
+          Selamat datang, {profile?.nama_mitra ?? "Mitra"}
+        </h1>
+        <p className="text-ink/60 mb-8">
+          Pantau stok dan kelola profil kemitraan kamu di sini.
+        </p>
+
+        <div className="grid sm:grid-cols-3 gap-4">
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5">
+            <p className="text-xs text-ink/45 mb-1.5">Status akun</p>
+            <p className="font-display font-semibold text-forest text-lg">Aktif</p>
+          </div>
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5">
+            <p className="text-xs text-ink/45 mb-1.5">Perlu di-restock</p>
+            <p className="font-display font-semibold text-forest text-lg">
+              {lowStockCount} item
+            </p>
+          </div>
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5">
+            <p className="text-xs text-ink/45 mb-1.5">Bergabung sejak</p>
+            <p className="font-display font-semibold text-forest text-lg">
+              {joinedLabel}
+            </p>
+          </div>
         </div>
-      ) : (
-        <>
-          <ProgressSteps steps={stepLabels} current={step} />
-          <form onSubmit={handleSubmit}>
-            <AnimatePresence mode="wait" custom={direction} initial={false}>
-              <motion.div
-                key={step}
-                custom={direction}
-                variants={variants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {step === 0 && (
-                  <FormField
-                    label="Email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
-                    placeholder="nama@email.com"
-                    required
-                    autoFocus
-                  />
-                )}
+      </section>
 
-                {step === 1 && (
-                  <>
-                    <p className="text-sm text-ink/55 mb-4">
-                      Untuk{" "}
-                      <span className="text-forest font-medium">{form.email}</span>{" "}
-                      Â·{" "}
-                      <button type="button" onClick={goBack} className="text-green hover:underline">
-                        ganti
-                      </button>
-                    </p>
-                    <FormField
-                      label="Kata sandi"
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => update("password", e.target.value)}
-                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                      required
-                      autoFocus
-                    />
-                  </>
-                )}
+      {/* Pesan Stok */}
+      <section id="pesan-stok" className="scroll-mt-8 mb-16">
+        <p className="font-mono text-xs tracking-widest uppercase text-gold mb-3">
+          Pesan stok
+        </p>
+        <h2 className="font-display font-semibold text-2xl text-forest mb-2">
+          Pesan ulang bahan energi
+        </h2>
+        <p className="text-ink/60 mb-8 max-w-lg">
+          Pantau stok yang ada di titikmu dan ajukan permintaan stok ulang
+          langsung ke LENTERA.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-5">
+          {mitraProducts.map((p) => (
+            <ProductCard key={p.id} product={p} />
+          ))}
+        </div>
+      </section>
 
-                {step === 2 && (
-                  <>
-                    <FormField
-                      label="Nama mitra"
-                      type="text"
-                      value={form.nama_mitra}
-                      onChange={(e) => update("nama_mitra", e.target.value)}
-                      placeholder="Nama perorangan / usaha"
-                      required
-                      autoFocus
-                    />
-                    <FormField
-                      label="NIK / NIB"
-                      type="text"
-                      value={form.nik_nib}
-                      onChange={(e) => update("nik_nib", e.target.value)}
-                      placeholder="Nomor NIK atau NIB"
-                      required
-                    />
-                    <FormField
-                      label="Alamat lengkap"
-                      type="text"
-                      value={form.alamat}
-                      onChange={(e) => update("alamat", e.target.value)}
-                      placeholder="Jalan, kota, provinsi"
-                      required
-                    />
-                    <FormField
-                      label="Nomor telepon"
-                      type="tel"
-                      value={form.telepon}
-                      onChange={(e) => update("telepon", e.target.value)}
-                      placeholder="08xxxxxxxxxx"
-                      required
-                    />
-                  </>
-                )}
-              </motion.div>
-            </AnimatePresence>
+      {/* Profil Mitra */}
+      <section id="profil-mitra" className="scroll-mt-8">
+        <p className="font-mono text-xs tracking-widest uppercase text-clay mb-3">
+          Profil mitra
+        </p>
+        <h2 className="font-display font-semibold text-2xl text-forest mb-6">
+          Informasi mitra
+        </h2>
+        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6">
+          <InfoRow label="Nama mitra" value={profile?.nama_mitra} />
+          <InfoRow label="Email" value={email} />
+          <InfoRow label="NIK / NIB" value={profile?.nik_nib} />
+          <InfoRow label="Nomor telepon" value={profile?.telepon} />
+          <InfoRow
+            label="Alamat lengkap"
+            value={profile?.alamat}
+            className="sm:col-span-2"
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+```
 
-            <div className="flex gap-3">
-              {step > 0 && <BackButton onClick={goBack} />}
-              <SubmitButton type="submit" disabled={status === "loading"}>
-                {step < stepLabels.length - 1
-                  ? "Lanjut"
-                  : status === "loading"
-                  ? "Memproses..."
-                  : "Daftar sebagai Mitra"}
-              </SubmitButton>
-            </div>
-          </form>
-        </>
-      )}
-    </AuthShell>
+## FILE: app/globals.css
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #f6f2e6;
+  color: #221d16;
+}
+
+::selection {
+  background: #c99a3d;
+  color: #17301f;
+}
+
+/* Leaflet popup restyle to match the brand */
+.leaflet-popup-content-wrapper {
+  border-radius: 10px;
+  font-family: var(--font-body), sans-serif;
+  box-shadow: 0 10px 25px rgba(23, 48, 31, 0.2);
+}
+
+.leaflet-popup-tip {
+  box-shadow: 0 10px 25px rgba(23, 48, 31, 0.15);
+}
+
+.marker-pin {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+```
+
+## FILE: app/kebijakan-privasi/page.tsx
+
+```tsx
+import { LegalShell, LegalSection } from "@/components/legal/legal-shell";
+
+export default function KebijakanPrivasiPage() {
+  return (
+    <LegalShell title="Kebijakan Privasi">
+      <LegalSection title="1. Data yang Kami Kumpulkan">
+        Saat mendaftar, kami mengumpulkan data seperti nama mitra/perusahaan,
+        NIK/NIB atau NPWP, alamat lengkap, nomor telepon, dan alamat email
+        yang Anda berikan melalui formulir pendaftaran.
+      </LegalSection>
+      <LegalSection title="2. Cara Kami Menggunakan Data">
+        Data yang dikumpulkan digunakan untuk mengelola akun Anda, memproses
+        permintaan stok/pemesanan, serta berkomunikasi terkait status
+        kemitraan dengan LENTERA.
+      </LegalSection>
+      <LegalSection title="3. Keamanan Data">
+        Kami menyimpan data Anda menggunakan penyedia infrastruktur terpercaya
+        dengan kontrol akses yang ketat, dan tidak membagikan data pribadi
+        Anda ke pihak ketiga tanpa persetujuan, kecuali diwajibkan oleh
+        hukum.
+      </LegalSection>
+      <LegalSection title="4. Hak Anda atas Data">
+        Anda berhak meminta akses, koreksi, atau penghapusan data pribadi
+        yang kami simpan dengan menghubungi tim LENTERA melalui kontak yang
+        tersedia di situs ini.
+      </LegalSection>
+      <LegalSection title="5. Kontak">
+        Untuk pertanyaan seputar kebijakan privasi ini, silakan hubungi tim
+        LENTERA melalui halaman kontak pada situs ini.
+      </LegalSection>
+    </LegalShell>
+  );
+}
+```
+
+## FILE: app/layout.tsx
+
+```tsx
+import type { Metadata } from "next";
+import { Space_Grotesk, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import "./globals.css";
+
+const display = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-display",
+});
+
+const body = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-body",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["500"],
+  variable: "--font-mono",
+});
+
+export const metadata: Metadata = {
+  title: "LENTERA â€” Limbah Energi Terjangkau Rakyat",
+  description:
+    "LENTERA mengolah limbah industri dan pabrik menjadi energi terjangkau, disalurkan melalui jaringan mitra dan agen di seluruh Indonesia.",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="id">
+      <body
+        className={`${display.variable} ${body.variable} ${mono.variable} font-body bg-cream text-ink antialiased`}
+      >
+        {children}
+      </body>
+    </html>
   );
 }
 ```
@@ -2190,12 +2639,15 @@ export default function DaftarMitraPage() {
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/auth/form-field";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { BackButton } from "@/components/auth/back-button";
 import { ProgressSteps } from "@/components/auth/progress-steps";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { translateAuthError } from "@/lib/auth-errors";
 
 const stepLabels = ["Email", "Kata Sandi"];
 
@@ -2206,11 +2658,13 @@ const variants = {
 };
 
 export default function MasukPage() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
+  const [error, setError] = useState<string | null>(null);
 
   function goNext() {
     setDirection(1);
@@ -2218,18 +2672,35 @@ export default function MasukPage() {
   }
   function goBack() {
     setDirection(-1);
+    setError(null);
     setStep((s) => Math.max(s - 1, 0));
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setError(null);
+
     if (step < stepLabels.length - 1) {
       goNext();
       return;
     }
+
     setStatus("loading");
-    // TODO: sambungkan ke provider auth sesungguhnya (mis. NextAuth, Supabase Auth).
-    setTimeout(() => setStatus("submitted"), 600);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) throw signInError;
+
+      setStatus("submitted");
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      setStatus("idle");
+      setError(translateAuthError(err instanceof Error ? err.message : null));
+    }
   }
 
   return (
@@ -2248,7 +2719,8 @@ export default function MasukPage() {
     >
       {status === "submitted" ? (
         <div className="text-center py-4">
-          <p className="text-forest font-medium mb-1">Permintaan masuk terkirim.</p>
+          <p className="text-forest font-medium mb-1">Berhasil masuk.</p>
+          <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
         </div>
       ) : (
         <>
@@ -2308,6 +2780,12 @@ export default function MasukPage() {
               </motion.div>
             </AnimatePresence>
 
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">
+                {error}
+              </p>
+            )}
+
             <div className="flex gap-3">
               {step > 0 && <BackButton onClick={goBack} />}
               <SubmitButton type="submit" disabled={status === "loading"}>
@@ -2322,6 +2800,316 @@ export default function MasukPage() {
         </>
       )}
     </AuthShell>
+  );
+}
+```
+
+## FILE: app/page.tsx
+
+```tsx
+import { Navbar } from "@/components/navbar";
+import { Hero } from "@/components/hero";
+import { HowItWorks } from "@/components/how-it-works";
+import { Partners } from "@/components/partners";
+import { Network } from "@/components/network";
+import { Leaderboard } from "@/components/leaderboard";
+import { PartnersMarquee } from "@/components/partners-marquee";
+import { CtaFooter } from "@/components/cta-footer";
+import { getLeaderboardEntries } from "@/lib/get-leaderboard";
+
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const leaderboardEntries = await getLeaderboardEntries();
+
+  return (
+    <main>
+      <Navbar />
+      <Hero />
+      <HowItWorks />
+      <Partners />
+      <Network />
+      <Leaderboard entries={leaderboardEntries} />
+      <PartnersMarquee />
+      <CtaFooter />
+    </main>
+  );
+}
+```
+
+## FILE: app/syarat-ketentuan/page.tsx
+
+```tsx
+import { LegalShell, LegalSection } from "@/components/legal/legal-shell";
+
+export default function SyaratKetentuanPage() {
+  return (
+    <LegalShell title="Syarat & Ketentuan">
+      <LegalSection title="1. Ketentuan Umum">
+        Dengan mendaftar sebagai mitra atau industri di LENTERA, Anda setuju
+        untuk terikat pada syarat dan ketentuan ini. LENTERA berhak
+        memperbarui ketentuan ini sewaktu-waktu, dan perubahan akan
+        diberitahukan melalui email terdaftar Anda.
+      </LegalSection>
+      <LegalSection title="2. Kewajiban Mitra & Industri">
+        Mitra dan industri wajib memberikan data pendaftaran yang benar dan
+        terkini (nama, NIK/NIB atau NPWP, alamat, dan nomor telepon), serta
+        bertanggung jawab atas keakuratan informasi yang disampaikan kepada
+        LENTERA.
+      </LegalSection>
+      <LegalSection title="3. Pemesanan & Penyaluran">
+        Permintaan stok ulang atau pemesanan yang diajukan melalui dashboard
+        akan diproses sesuai ketersediaan dan jadwal penyaluran LENTERA.
+        Harga dan ketersediaan produk dapat berubah sewaktu-waktu.
+      </LegalSection>
+      <LegalSection title="4. Pembatalan & Pengembalian">
+        Pembatalan pesanan hanya dapat dilakukan sebelum proses penyaluran
+        dimulai. Kebijakan pengembalian mengikuti ketentuan yang berlaku
+        untuk masing-masing jenis produk.
+      </LegalSection>
+      <LegalSection title="5. Penghentian Akun">
+        LENTERA berhak menangguhkan atau menghentikan akun mitra/industri
+        yang melanggar ketentuan ini atau menyalahgunakan layanan yang
+        disediakan.
+      </LegalSection>
+    </LegalShell>
+  );
+}
+```
+
+## FILE: components/auth/auth-shell.tsx
+
+```tsx
+import { ReactNode } from "react";
+
+export function AuthShell({
+  eyebrow,
+  title,
+  subtitle,
+  children,
+  footer,
+  wide = false,
+}: {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+  footer?: ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <main className="relative min-h-screen flex items-center justify-center px-6 py-16 bg-cream overflow-hidden">
+      <div
+        aria-hidden
+        className="absolute w-[480px] h-[480px] rounded-full bg-green/20 blur-[90px] -top-32 -left-32"
+      />
+      <div
+        aria-hidden
+        className="absolute w-[420px] h-[420px] rounded-full bg-gold/20 blur-[90px] -bottom-32 -right-24"
+      />
+
+      <div className={`relative w-full ${wide ? "max-w-2xl" : "max-w-md"}`}>
+        <div className="bg-paper rounded-3xl border border-forest/10 shadow-[0_30px_60px_-20px_rgba(23,48,31,0.25)] p-8 md:p-10">
+          {eyebrow && (
+            <p className="font-mono text-xs tracking-widest uppercase text-green mb-3 text-center">
+              {eyebrow}
+            </p>
+          )}
+          <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest text-center mb-2">
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="text-ink/60 text-sm text-center mb-8 max-w-sm mx-auto">
+              {subtitle}
+            </p>
+          )}
+          {!subtitle && <div className="mb-8" />}
+
+          {children}
+        </div>
+
+        {footer && <div className="text-center mt-6">{footer}</div>}
+      </div>
+    </main>
+  );
+}
+```
+
+## FILE: components/auth/back-button.tsx
+
+```tsx
+export function BackButton({
+  children = "Kembali",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      {...props}
+      className="shrink-0 border border-forest/15 text-forest font-medium rounded-full px-5 py-3.5 mt-2 transition-colors hover:bg-forest/5"
+    >
+      {children}
+    </button>
+  );
+}
+```
+
+## FILE: components/auth/form-field.tsx
+
+```tsx
+import { InputHTMLAttributes } from "react";
+
+export function FormField({
+  label,
+  ...props
+}: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <label className="block mb-4">
+      <span className="block text-sm font-medium text-forest mb-1.5">
+        {label}
+      </span>
+      <input
+        {...props}
+        className="w-full rounded-xl border border-forest/15 bg-cream/50 px-4 py-3 text-sm text-ink placeholder:text-ink/35 outline-none transition-colors focus:border-green focus:bg-paper"
+      />
+    </label>
+  );
+}
+```
+
+## FILE: components/auth/progress-steps.tsx
+
+```tsx
+export function ProgressSteps({
+  steps,
+  current,
+}: {
+  steps: string[];
+  current: number;
+}) {
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-center gap-1">
+        {steps.map((label, i) => (
+          <div key={label} className="flex items-center">
+            <div
+              className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-mono font-medium transition-colors duration-300 ${
+                i <= current ? "bg-green text-cream" : "bg-forest/8 text-ink/35"
+              }`}
+            >
+              {i < current ? (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-3.5 h-3.5"
+                >
+                  <path d="M5 12l5 5L20 7" />
+                </svg>
+              ) : (
+                i + 1
+              )}
+            </div>
+            {i < steps.length - 1 && (
+              <div
+                className={`w-10 md:w-14 h-[2px] mx-1 transition-colors duration-300 ${
+                  i < current ? "bg-green" : "bg-forest/10"
+                }`}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="text-center text-xs font-mono uppercase tracking-widest text-ink/40 mt-3">
+        Langkah {current + 1} dari {steps.length} Â· {steps[current]}
+      </p>
+    </div>
+  );
+}
+```
+
+## FILE: components/auth/submit-button.tsx
+
+```tsx
+export function SubmitButton({
+  children,
+  className = "",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      {...props}
+      className={`${className || "w-full"} bg-forest text-cream font-medium rounded-full py-3.5 transition-colors hover:bg-forest-2 disabled:opacity-60 disabled:pointer-events-none`}
+    >
+      {children}
+    </button>
+  );
+}
+```
+
+## FILE: components/auth/terms-checkbox.tsx
+
+```tsx
+"use client";
+
+import Link from "next/link";
+
+export function TermsCheckbox({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start gap-3 mb-5">
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={checked}
+        aria-label="Setuju dengan Syarat & Ketentuan dan Kebijakan Privasi"
+        onClick={() => onChange(!checked)}
+        className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
+          checked ? "bg-green border-green" : "border-forest/25 hover:border-forest/40"
+        }`}
+      >
+        {checked && (
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="w-3 h-3 text-cream"
+          >
+            <path d="M5 12l5 5L20 7" />
+          </svg>
+        )}
+      </button>
+      <p className="text-sm text-ink/65 leading-relaxed">
+        Saya menyetujui{" "}
+        <Link
+          href="/syarat-ketentuan"
+          target="_blank"
+          className="text-green font-medium hover:underline"
+        >
+          Syarat &amp; Ketentuan
+        </Link>{" "}
+        dan{" "}
+        <Link
+          href="/kebijakan-privasi"
+          target="_blank"
+          className="text-green font-medium hover:underline"
+        >
+          Kebijakan Privasi
+        </Link>{" "}
+        LENTERA.
+      </p>
+    </div>
   );
 }
 ```
@@ -2396,6 +3184,224 @@ export function CtaFooter() {
 }
 ```
 
+## FILE: components/dashboard/product-card.tsx
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import type { MitraProduct } from "@/lib/mitra-products";
+
+function stockLevel(stock: number) {
+  if (stock >= 60) return { label: "Stok aman", cls: "bg-green/10 text-green" };
+  if (stock >= 25) return { label: "Stok menipis", cls: "bg-gold/15 text-gold" };
+  return { label: "Segera pesan", cls: "bg-clay/10 text-clay" };
+}
+
+export function ProductCard({ product }: { product: MitraProduct }) {
+  const [qty, setQty] = useState(1);
+  const [status, setStatus] = useState<"idle" | "sent">("idle");
+  const level = stockLevel(product.stock);
+
+  function handleOrder() {
+    setStatus("sent");
+    // TODO: kirim permintaan stok ulang ke API sungguhan (mis. POST /api/pesanan)
+    setTimeout(() => setStatus("idle"), 2500);
+  }
+
+  return (
+    <div className="bg-paper rounded-2xl border border-forest/10 p-6">
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="min-w-0">
+          <p className="font-display font-semibold text-forest leading-snug">
+            {product.name}
+          </p>
+          <p className="text-xs text-ink/50 mt-0.5">{product.category}</p>
+        </div>
+        <span
+          className={`shrink-0 text-[11px] font-mono px-2.5 py-1 rounded-full whitespace-nowrap ${level.cls}`}
+        >
+          {product.stock} {product.unit}
+        </span>
+      </div>
+
+      <p className="font-mono text-lg font-semibold text-forest mb-1">
+        Rp {product.price.toLocaleString("id-ID")}
+        <span className="text-xs text-ink/45 font-body font-normal">
+          {" "}
+          / {product.unit}
+        </span>
+      </p>
+      <p className="text-[11px] text-ink/40 mb-5">{level.label}</p>
+
+      <div className="flex items-center gap-3">
+        <div className="flex items-center border border-forest/15 rounded-full shrink-0">
+          <button
+            type="button"
+            onClick={() => setQty((q) => Math.max(1, q - 1))}
+            aria-label="Kurangi jumlah"
+            className="w-8 h-8 flex items-center justify-center text-forest hover:bg-forest/5 rounded-full transition-colors"
+          >
+            âˆ’
+          </button>
+          <span className="w-7 text-center text-sm font-mono text-forest">
+            {qty}
+          </span>
+          <button
+            type="button"
+            onClick={() => setQty((q) => q + 1)}
+            aria-label="Tambah jumlah"
+            className="w-8 h-8 flex items-center justify-center text-forest hover:bg-forest/5 rounded-full transition-colors"
+          >
+            +
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={handleOrder}
+          disabled={status === "sent"}
+          className="flex-1 bg-forest text-cream rounded-full py-2.5 text-sm font-medium transition-colors hover:bg-forest-2 disabled:opacity-70"
+        >
+          {status === "sent" ? "Permintaan terkirim âœ“" : "Pesan Ulang"}
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+## FILE: components/dashboard/sidebar.tsx
+
+```tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+
+const navItems = [
+  {
+    href: "#ringkasan",
+    label: "Ringkasan",
+    icon: (
+      <>
+        <path d="M3 12 12 3l9 9" />
+        <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
+      </>
+    ),
+  },
+  {
+    href: "#pesan-stok",
+    label: "Pesan Stok",
+    icon: (
+      <>
+        <path d="M21 8 12 3 3 8l9 5 9-5Z" />
+        <path d="M3 8v8l9 5 9-5V8" />
+        <path d="M12 13v8" />
+      </>
+    ),
+  },
+  {
+    href: "#profil-mitra",
+    label: "Profil Mitra",
+    icon: (
+      <>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+      </>
+    ),
+  },
+];
+
+export function DashboardSidebar() {
+  const router = useRouter();
+  const [mitraName, setMitraName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: profile } = await supabase
+        .from("mitra_profiles")
+        .select("nama_mitra")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      setMitraName(profile?.nama_mitra ?? data.user.email ?? null);
+    });
+  }, []);
+
+  async function handleLogout() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/masuk");
+  }
+
+  return (
+    <aside className="w-64 shrink-0 bg-forest text-cream flex flex-col h-screen sticky top-0">
+      <div className="p-6 border-b border-cream/10">
+        <span className="font-display font-semibold text-lg tracking-tight">
+          LENTERA
+        </span>
+        <p className="text-xs text-cream/45 mt-1">Portal Mitra</p>
+      </div>
+
+      <nav className="flex-1 p-4 space-y-1">
+        {navItems.map((item) => (
+          <a
+            key={item.href}
+            href={item.href}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-4 h-4 shrink-0"
+            >
+              {item.icon}
+            </svg>
+            {item.label}
+          </a>
+        ))}
+      </nav>
+
+      <div className="p-4 border-t border-cream/10">
+        {mitraName && (
+          <div className="flex items-center gap-3 px-2 mb-2 pb-3 border-b border-cream/10">
+            <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
+              {mitraName.charAt(0).toUpperCase()}
+            </div>
+            <p className="text-sm text-cream/80 truncate">{mitraName}</p>
+          </div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors w-full"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="w-4 h-4 shrink-0"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="M16 17 21 12 16 7" />
+            <path d="M21 12H9" />
+          </svg>
+          Keluar
+        </button>
+      </div>
+    </aside>
+  );
+}
+```
+
 ## FILE: components/hero.tsx
 
 ```tsx
@@ -2451,6 +3457,15 @@ export function Hero() {
 
       <div className="max-w-7xl mx-auto w-full grid md:grid-cols-2 gap-16 items-center relative z-10">
         <div>
+          <Reveal>
+            <div className="inline-flex items-center gap-2 border border-forest/20 rounded-full px-4 py-1.5 mb-7">
+              <span className="w-1.5 h-1.5 rounded-full bg-green" />
+              <span className="font-mono text-[11px] tracking-widest uppercase text-forest/80">
+                Limbah Energi Terjangkau Rakyat
+              </span>
+            </div>
+          </Reveal>
+
           <Reveal delay={0.08}>
             <h1 className="font-display font-semibold text-[2.6rem] leading-[1.08] md:text-[3.4rem] text-forest mb-6">
               Dari limbah pabrik,
@@ -3068,6 +4083,105 @@ export function Leaderboard({
 }
 ```
 
+## FILE: components/legal/legal-shell.tsx
+
+```tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ReactNode } from "react";
+
+function BackControl() {
+  const router = useRouter();
+  const [openedInNewTab, setOpenedInNewTab] = useState(false);
+
+  useEffect(() => {
+    // Kalau halaman ini dibuka lewat target="_blank" (mis. dari checkbox
+    // Syarat & Ketentuan di form daftar), window.opener ada isinya â€” tab
+    // asal (form daftar) masih utuh di tab satunya. Tombolnya jadi "Tutup
+    // tab ini" supaya user balik ke situ, bukan navigasi ke beranda dan
+    // kehilangan progres form-nya.
+    setOpenedInNewTab(!!window.opener);
+  }, []);
+
+  if (openedInNewTab) {
+    return (
+      <button
+        type="button"
+        onClick={() => window.close()}
+        className="inline-flex items-center gap-1.5 text-sm text-forest/60 hover:text-forest transition-colors mb-14"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg>
+        Tutup tab ini
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => router.back()}
+      className="inline-flex items-center gap-1.5 text-sm text-forest/60 hover:text-forest transition-colors mb-14"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+        <path d="M19 12H5M12 19l-7-7 7-7" />
+      </svg>
+      Kembali
+    </button>
+  );
+}
+
+export function LegalShell({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <main className="min-h-screen bg-cream px-6 py-20 md:py-28">
+      <article className="max-w-[680px] mx-auto">
+        <BackControl />
+
+        <p className="font-mono text-xs tracking-widest uppercase text-green mb-4">
+          Terakhir diperbarui: Agustus 2026
+        </p>
+        <h1 className="font-display font-semibold text-4xl md:text-5xl text-forest leading-tight mb-8">
+          {title}
+        </h1>
+
+        <p className="text-ink/55 text-[15px] leading-[1.85] border-l-2 border-gold/40 pl-4 mb-16">
+          Ini teks placeholder untuk keperluan pratinjau desain â€” ganti dengan{" "}
+          {title.toLowerCase()} resmi LENTERA sebelum situs ini dipublikasikan.
+        </p>
+
+        <div className="space-y-12">{children}</div>
+      </article>
+    </main>
+  );
+}
+
+export function LegalSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <h2 className="font-display font-semibold text-2xl text-forest mb-4">
+        {title}
+      </h2>
+      <p className="text-ink/70 text-[17px] leading-[1.85]">{children}</p>
+    </section>
+  );
+}
+```
+
 ## FILE: components/navbar.tsx
 
 ```tsx
@@ -3194,6 +4308,103 @@ export function Network() {
         <Reveal>
           <PartnersMap />
         </Reveal>
+      </div>
+    </section>
+  );
+}
+```
+
+## FILE: components/partners.tsx
+
+```tsx
+"use client";
+
+import { motion } from "motion/react";
+import { Reveal, RevealGroup, RevealItem } from "./ui/reveal";
+
+const benefits = [
+  {
+    title: "Harga kompetitif",
+    description:
+      "Skema harga yang wajar bagi mitra, dengan margin yang jelas di setiap penyaluran.",
+    color: "text-green",
+    ring: "group-hover:ring-green/25",
+    icon: (
+      <>
+        <path d="M12 2v20M2 12h20" />
+        <circle cx="12" cy="12" r="9" />
+      </>
+    ),
+  },
+  {
+    title: "Pasokan stabil",
+    description:
+      "Kapasitas produksi terjadwal, sehingga stok di titik mitra tetap terjaga.",
+    color: "text-gold",
+    ring: "group-hover:ring-gold/25",
+    icon: <path d="M3 12h18M3 6h18M3 18h18" />,
+  },
+  {
+    title: "Dukungan operasional",
+    description:
+      "Pendampingan logistik dan operasional dari tim LENTERA sejak awal bergabung.",
+    color: "text-clay",
+    ring: "group-hover:ring-clay/25",
+    icon: <path d="M4 21v-7a4 4 0 014-4h8a4 4 0 014 4v7M12 3v7" />,
+  },
+];
+
+export function Partners() {
+  return (
+    <section
+      id="mitra"
+      className="min-h-screen flex items-center py-24 px-6 md:px-10 bg-cream"
+    >
+      <div className="max-w-7xl mx-auto w-full">
+        <Reveal className="max-w-xl mb-16 md:mb-20">
+          <p className="font-mono text-xs tracking-widest uppercase text-clay mb-3">
+            Untuk mitra & agen
+          </p>
+          <h2 className="font-display font-semibold text-3xl md:text-4xl text-forest">
+            Bangun usaha energi bersama LENTERA.
+          </h2>
+        </Reveal>
+
+        <RevealGroup className="grid md:grid-cols-3 gap-6">
+          {benefits.map((b) => (
+            <RevealItem key={b.title} className="group">
+              <motion.div
+                whileHover={{ y: -10, scale: 1.015 }}
+                transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                className={`bg-paper rounded-2xl p-8 border border-forest/10 h-full ring-1 ring-transparent transition-shadow duration-300 ${b.ring} hover:shadow-[0_24px_48px_-16px_rgba(23,48,31,0.16)]`}
+              >
+                <motion.svg
+                  className={`w-9 h-9 mb-6 ${b.color}`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  initial={{ opacity: 0, rotate: -12, scale: 0.7 }}
+                  whileInView={{ opacity: 1, rotate: 0, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{
+                    duration: 0.7,
+                    ease: [0.34, 1.56, 0.64, 1],
+                    delay: 0.15,
+                  }}
+                >
+                  {b.icon}
+                </motion.svg>
+                <h3 className="font-display font-semibold text-lg text-forest mb-2">
+                  {b.title}
+                </h3>
+                <p className="text-ink/65 text-[15px] leading-relaxed">
+                  {b.description}
+                </p>
+              </motion.div>
+            </RevealItem>
+          ))}
+        </RevealGroup>
       </div>
     </section>
   );
@@ -3372,285 +4583,6 @@ export function PartnersMarquee() {
         <MarqueeRow companies={rowB} reverse />
       </div>
     </section>
-  );
-}
-```
-
-## FILE: components/partners.tsx
-
-```tsx
-"use client";
-
-import { motion } from "motion/react";
-import { Reveal, RevealGroup, RevealItem } from "./ui/reveal";
-
-const benefits = [
-  {
-    title: "Harga kompetitif",
-    description:
-      "Skema harga yang wajar bagi mitra, dengan margin yang jelas di setiap penyaluran.",
-    color: "text-green",
-    ring: "group-hover:ring-green/25",
-    icon: (
-      <>
-        <path d="M12 2v20M2 12h20" />
-        <circle cx="12" cy="12" r="9" />
-      </>
-    ),
-  },
-  {
-    title: "Pasokan stabil",
-    description:
-      "Kapasitas produksi terjadwal, sehingga stok di titik mitra tetap terjaga.",
-    color: "text-gold",
-    ring: "group-hover:ring-gold/25",
-    icon: <path d="M3 12h18M3 6h18M3 18h18" />,
-  },
-  {
-    title: "Dukungan operasional",
-    description:
-      "Pendampingan logistik dan operasional dari tim LENTERA sejak awal bergabung.",
-    color: "text-clay",
-    ring: "group-hover:ring-clay/25",
-    icon: <path d="M4 21v-7a4 4 0 014-4h8a4 4 0 014 4v7M12 3v7" />,
-  },
-];
-
-export function Partners() {
-  return (
-    <section
-      id="mitra"
-      className="min-h-screen flex items-center py-24 px-6 md:px-10 bg-cream"
-    >
-      <div className="max-w-7xl mx-auto w-full">
-        <Reveal className="max-w-xl mb-16 md:mb-20">
-          <p className="font-mono text-xs tracking-widest uppercase text-clay mb-3">
-            Untuk mitra & agen
-          </p>
-          <h2 className="font-display font-semibold text-3xl md:text-4xl text-forest">
-            Bangun usaha energi bersama LENTERA.
-          </h2>
-        </Reveal>
-
-        <RevealGroup className="grid md:grid-cols-3 gap-6">
-          {benefits.map((b) => (
-            <RevealItem key={b.title} className="group">
-              <motion.div
-                whileHover={{ y: -10, scale: 1.015 }}
-                transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                className={`bg-paper rounded-2xl p-8 border border-forest/10 h-full ring-1 ring-transparent transition-shadow duration-300 ${b.ring} hover:shadow-[0_24px_48px_-16px_rgba(23,48,31,0.16)]`}
-              >
-                <motion.svg
-                  className={`w-9 h-9 mb-6 ${b.color}`}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  initial={{ opacity: 0, rotate: -12, scale: 0.7 }}
-                  whileInView={{ opacity: 1, rotate: 0, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{
-                    duration: 0.7,
-                    ease: [0.34, 1.56, 0.64, 1],
-                    delay: 0.15,
-                  }}
-                >
-                  {b.icon}
-                </motion.svg>
-                <h3 className="font-display font-semibold text-lg text-forest mb-2">
-                  {b.title}
-                </h3>
-                <p className="text-ink/65 text-[15px] leading-relaxed">
-                  {b.description}
-                </p>
-              </motion.div>
-            </RevealItem>
-          ))}
-        </RevealGroup>
-      </div>
-    </section>
-  );
-}
-```
-
-## FILE: components/auth/auth-shell.tsx
-
-```tsx
-import Image from "next/image";
-import Link from "next/link";
-import { ReactNode } from "react";
-
-export function AuthShell({
-  eyebrow,
-  title,
-  subtitle,
-  children,
-  footer,
-  wide = false,
-}: {
-  eyebrow?: string;
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-  footer?: ReactNode;
-  wide?: boolean;
-}) {
-  return (
-    <main className="relative min-h-screen flex items-center justify-center px-6 py-16 bg-cream overflow-hidden">
-      <div
-        aria-hidden
-        className="absolute w-[480px] h-[480px] rounded-full bg-green/20 blur-[90px] -top-32 -left-32"
-      />
-      <div
-        aria-hidden
-        className="absolute w-[420px] h-[420px] rounded-full bg-gold/20 blur-[90px] -bottom-32 -right-24"
-      />
-
-      <div className={`relative w-full ${wide ? "max-w-2xl" : "max-w-md"}`}>
-        <Link href="/" className="flex items-center justify-center gap-3 mb-8">
-          <Image src="/images/logo.png" alt="LENTERA" width={48} height={48} className="h-12 w-auto" />
-          <span className="font-display font-semibold text-xl tracking-tight text-forest">
-            LENTERA
-          </span>
-        </Link>
-
-        <div className="bg-paper rounded-3xl border border-forest/10 shadow-[0_30px_60px_-20px_rgba(23,48,31,0.25)] p-8 md:p-10">
-          {eyebrow && (
-            <p className="font-mono text-xs tracking-widest uppercase text-green mb-3 text-center">
-              {eyebrow}
-            </p>
-          )}
-          <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest text-center mb-2">
-            {title}
-          </h1>
-          {subtitle && (
-            <p className="text-ink/60 text-sm text-center mb-8 max-w-sm mx-auto">
-              {subtitle}
-            </p>
-          )}
-          {!subtitle && <div className="mb-8" />}
-
-          {children}
-        </div>
-
-        {footer && <div className="text-center mt-6">{footer}</div>}
-      </div>
-    </main>
-  );
-}
-```
-
-## FILE: components/auth/back-button.tsx
-
-```tsx
-export function BackButton({
-  children = "Kembali",
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      type="button"
-      {...props}
-      className="shrink-0 border border-forest/15 text-forest font-medium rounded-full px-5 py-3.5 mt-2 transition-colors hover:bg-forest/5"
-    >
-      {children}
-    </button>
-  );
-}
-```
-
-## FILE: components/auth/form-field.tsx
-
-```tsx
-import { InputHTMLAttributes } from "react";
-
-export function FormField({
-  label,
-  ...props
-}: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <label className="block mb-4">
-      <span className="block text-sm font-medium text-forest mb-1.5">
-        {label}
-      </span>
-      <input
-        {...props}
-        className="w-full rounded-xl border border-forest/15 bg-cream/50 px-4 py-3 text-sm text-ink placeholder:text-ink/35 outline-none transition-colors focus:border-green focus:bg-paper"
-      />
-    </label>
-  );
-}
-```
-
-## FILE: components/auth/progress-steps.tsx
-
-```tsx
-export function ProgressSteps({
-  steps,
-  current,
-}: {
-  steps: string[];
-  current: number;
-}) {
-  return (
-    <div className="mb-8">
-      <div className="flex items-center justify-center gap-1">
-        {steps.map((label, i) => (
-          <div key={label} className="flex items-center">
-            <div
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-mono font-medium transition-colors duration-300 ${
-                i <= current ? "bg-green text-cream" : "bg-forest/8 text-ink/35"
-              }`}
-            >
-              {i < current ? (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-3.5 h-3.5"
-                >
-                  <path d="M5 12l5 5L20 7" />
-                </svg>
-              ) : (
-                i + 1
-              )}
-            </div>
-            {i < steps.length - 1 && (
-              <div
-                className={`w-10 md:w-14 h-[2px] mx-1 transition-colors duration-300 ${
-                  i < current ? "bg-green" : "bg-forest/10"
-                }`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-      <p className="text-center text-xs font-mono uppercase tracking-widest text-ink/40 mt-3">
-        Langkah {current + 1} dari {steps.length} Â· {steps[current]}
-      </p>
-    </div>
-  );
-}
-```
-
-## FILE: components/auth/submit-button.tsx
-
-```tsx
-export function SubmitButton({
-  children,
-  className = "",
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={`${className || "w-full"} bg-forest text-cream font-medium rounded-full py-3.5 transition-colors hover:bg-forest-2 disabled:opacity-60 disabled:pointer-events-none`}
-    >
-      {children}
-    </button>
   );
 }
 ```
@@ -4163,37 +5095,162 @@ export function TiltCard({
 }
 ```
 
+## FILE: eslint.config.mjs
+
+```js
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;
+```
+
+## FILE: lib/auth-errors.ts
+
+```ts
+const errorMap: [string, string][] = [
+  ["User already registered", "Email ini sudah terdaftar. Coba masuk, atau pakai email lain."],
+  ["already been registered", "Email ini sudah terdaftar. Coba masuk, atau pakai email lain."],
+  ["Invalid login credentials", "Email atau kata sandi salah."],
+  ["Email not confirmed", "Email belum dikonfirmasi. Cek kotak masuk email kamu."],
+  ["Password should be at least", "Kata sandi minimal 6 karakter."],
+  ["Unable to validate email address", "Format email tidak valid."],
+  ["rate limit", "Terlalu banyak percobaan. Coba lagi beberapa saat lagi."],
+];
+
+/**
+ * Supabase mengembalikan pesan error dalam bahasa Inggris. Fungsi ini
+ * menerjemahkan pesan yang umum terjadi ke Bahasa Indonesia; pesan yang
+ * tidak dikenali jatuh ke pesan generik (bukan ditampilkan mentah-mentah).
+ */
+export function translateAuthError(message: string | undefined | null): string {
+  if (!message) return "Terjadi kesalahan, coba lagi.";
+  const found = errorMap.find(([needle]) =>
+    message.toLowerCase().includes(needle.toLowerCase())
+  );
+  return found ? found[1] : "Terjadi kesalahan, coba lagi.";
+}
+```
+
 ## FILE: lib/get-leaderboard.ts
 
-```typescript
+```ts
+import { getUpstashClient, getIoRedisClient } from "./redis";
+import { getSupabaseClient } from "./supabase";
 import { leaderboardEntries as dummyLeaderboardEntries, type LeaderboardEntry } from "./leaderboard-data";
 
+// Nama key sorted-set di Redis. Sesuaikan dengan yang dipakai backend kamu
+// kalau namanya beda.
+const REDIS_KEY = "leaderboard:entries";
+
+/**
+ * Tiap member di sorted set diasumsikan berupa JSON string berisi field
+ * LeaderboardEntry TANPA "rank" (mis. {"name":"...","initials":"...",...}),
+ * dengan score = volume dalam angka (mis. 1480), supaya ZREVRANGE otomatis
+ * mengurutkan dari yang terbesar. Rank diisi berdasarkan urutan hasilnya.
+ * Kalau struktur data di Redis kamu beda, sesuaikan fungsi ini.
+ */
+function parseRedisMembers(members: string[]): LeaderboardEntry[] {
+  return members.map((item, i) => {
+    const parsed = JSON.parse(item);
+    return { rank: i + 1, ...parsed };
+  });
+}
+
+/**
+ * Mengambil data papan peringkat, dengan urutan prioritas:
+ *   1. Redis via Upstash (REST), jika UPSTASH_REDIS_REST_URL +
+ *      UPSTASH_REDIS_REST_TOKEN sudah diisi â€” cocok untuk deploy
+ *      serverless/edge (mis. Vercel Edge Runtime).
+ *   2. Redis via koneksi TCP langsung (ioredis), jika REDIS_URL sudah
+ *      diisi â€” cocok untuk Redis self-hosted / Redis Cloud / server
+ *      Node.js biasa.
+ *   3. Supabase, jika NEXT_PUBLIC_SUPABASE_URL + (SUPABASE_SERVICE_ROLE_KEY
+ *      atau NEXT_PUBLIC_SUPABASE_ANON_KEY) sudah diisi.
+ *   4. REST API custom, jika LEADERBOARD_API_URL sudah diisi.
+ *   5. Data dummy di lib/leaderboard-data.ts (supaya halaman tidak pernah
+ *      rusak walau backend belum siap / lagi down).
+ *
+ * Dipanggil dari Server Component (app/page.tsx), hasilnya dioper sebagai
+ * prop ke <Leaderboard entries={...} /> â€” komponennya sendiri tetap
+ * "use client" karena butuh animasi Motion, jadi fetching harus terjadi
+ * di luar komponen itu.
+ */
 export async function getLeaderboardEntries(): Promise<LeaderboardEntry[]> {
-  const apiUrl = process.env.LEADERBOARD_API_URL; // Pastikan di .env isinya: http://localhost:3000/api/namaroutekamu
-  
+  const upstash = getUpstashClient();
+  if (upstash) {
+    try {
+      const raw = await upstash.zrange<string[]>(REDIS_KEY, 0, 4, { rev: true });
+      if (raw.length > 0) return parseRedisMembers(raw);
+    } catch (err) {
+      console.error("Gagal mengambil leaderboard dari Redis (Upstash), pakai data dummy:", err);
+    }
+    return dummyLeaderboardEntries;
+  }
+
+  const ioredis = getIoRedisClient();
+  if (ioredis) {
+    try {
+      const raw = await ioredis.zrevrange(REDIS_KEY, 0, 4);
+      if (raw.length > 0) return parseRedisMembers(raw);
+    } catch (err) {
+      console.error("Gagal mengambil leaderboard dari Redis (TCP), pakai data dummy:", err);
+    }
+    return dummyLeaderboardEntries;
+  }
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("leaderboard_entries")
+        .select("rank, name, initials, industry, volume, logo_type, logo_url, accent")
+        .order("rank", { ascending: true })
+        .limit(5);
+
+      if (error) throw error;
+      if (data && data.length > 0) {
+        return data.map((row) => ({
+          rank: row.rank,
+          name: row.name,
+          initials: row.initials,
+          industry: row.industry,
+          volume: row.volume,
+          logoType: row.logo_type,
+          logoUrl: row.logo_url ?? undefined,
+          accent: row.accent,
+        }));
+      }
+    } catch (err) {
+      console.error("Gagal mengambil leaderboard dari Supabase, pakai data dummy:", err);
+    }
+    return dummyLeaderboardEntries;
+  }
+
+  const apiUrl = process.env.LEADERBOARD_API_URL;
   if (apiUrl) {
     try {
       const res = await fetch(apiUrl, { next: { revalidate: 3600 } });
       if (!res.ok) throw new Error(`Status ${res.status}`);
-      
-      const response = await res.json();
-      
-      // Mengubah format dari API kamu agar cocok dengan format UI temanmu
-      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-        return response.data.map((item: any) => ({
-          rank: item.peringkat,
-          name: item.nama_perusahaan,
-          initials: item.nama_perusahaan.substring(0, 2).toUpperCase(), // Bikin inisial otomatis
-          industry: "Manufaktur", // Nilai default sementara
-          volume: item.poin_eco_credits,
-          logoType: item.avatar ? "image" : "text",
-          logoUrl: item.avatar || undefined,
-          accent: "bg-blue-500", // Warna default sementara
-        }));
-      }
+      const data: LeaderboardEntry[] = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
     } catch (err) {
-      console.error("Gagal mengambil leaderboard dari API, pakai data dummy:", err);
+      console.error("Gagal mengambil leaderboard dari API custom, pakai data dummy:", err);
     }
+    return dummyLeaderboardEntries;
   }
 
   return dummyLeaderboardEntries;
@@ -4202,7 +5259,7 @@ export async function getLeaderboardEntries(): Promise<LeaderboardEntry[]> {
 
 ## FILE: lib/leaderboard-data.ts
 
-```typescript
+```ts
 import type { CompanyIconType } from "@/components/ui/company-mark";
 
 export interface LeaderboardEntry {
@@ -4274,9 +5331,58 @@ export const leaderboardEntries: LeaderboardEntry[] = [
 ];
 ```
 
+## FILE: lib/mitra-products.ts
+
+```ts
+export interface MitraProduct {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  price: number;
+  stock: number;
+}
+
+// Data dummy â€” ganti dengan data stok/produk sesungguhnya dari backend.
+export const mitraProducts: MitraProduct[] = [
+  {
+    id: "briket-5kg",
+    name: "Briket Energi LENTERA 5kg",
+    category: "Briket padat",
+    unit: "karung",
+    price: 45000,
+    stock: 128,
+  },
+  {
+    id: "pelet-10kg",
+    name: "Pelet Biomassa 10kg",
+    category: "Pelet biomassa",
+    unit: "karung",
+    price: 78000,
+    stock: 84,
+  },
+  {
+    id: "cair-20l",
+    name: "Tabung Energi Cair 20L",
+    category: "Energi cair",
+    unit: "tabung",
+    price: 210000,
+    stock: 36,
+  },
+  {
+    id: "serbuk-25kg",
+    name: "Serbuk Biomassa Curah 25kg",
+    category: "Serbuk curah",
+    unit: "karung",
+    price: 95000,
+    stock: 19,
+  },
+];
+```
+
 ## FILE: lib/network-data.ts
 
-```typescript
+```ts
 export type NetworkPointType = "industri" | "mitra" | "fasilitas";
 
 export interface NetworkPoint {
@@ -4314,7 +5420,7 @@ export const networkPoints: NetworkPoint[] = [
 
 ## FILE: lib/partner-companies.ts
 
-```typescript
+```ts
 import type { CompanyIconType } from "@/components/ui/company-mark";
 
 export interface PartnerCompany {
@@ -4434,15 +5540,76 @@ export const partnerCompanies: PartnerCompany[] = [
 
 ## FILE: lib/redis.ts
 
-```typescript
-import { Redis } from '@upstash/redis';
+```ts
+import { Redis as UpstashRedis } from "@upstash/redis";
+import IORedis from "ioredis";
 
-export const redis = Redis.fromEnv();
+/**
+ * Ada 2 cara umum menyambungkan Next.js ke Redis:
+ *
+ * 1) Upstash (REST) â€” kalau redis-nya di-hosting di Upstash, atau kamu
+ *    deploy ke Vercel Edge Runtime / serverless yang tidak cocok pakai
+ *    koneksi TCP yang tetap terbuka. Redis biasa TIDAK punya REST API
+ *    sendiri; Upstash yang membungkusnya jadi HTTP di depannya.
+ *    Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+ *
+ * 2) Koneksi TCP langsung (ioredis) â€” cara umum untuk Redis self-hosted,
+ *    Redis Cloud, AWS ElastiCache, DigitalOcean Managed Redis, dll, ATAU
+ *    kalau Next.js kamu jalan di server Node.js biasa (bukan edge).
+ *    Env: REDIS_URL (format: redis://default:password@host:6379,
+ *    atau rediss:// kalau pakai TLS)
+ *
+ * getLeaderboardEntries() di get-leaderboard.ts otomatis pakai salah satu
+ * dari dua ini, tergantung env variable mana yang diisi.
+ */
+
+export function getUpstashClient(): UpstashRedis | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  return new UpstashRedis({ url, token });
+}
+
+let ioredisClient: IORedis | null = null;
+
+export function getIoRedisClient(): IORedis | null {
+  const url = process.env.REDIS_URL;
+  if (!url) return null;
+  if (!ioredisClient) {
+    ioredisClient = new IORedis(url, { maxRetriesPerRequest: 2 });
+  }
+  return ioredisClient;
+}
+```
+
+## FILE: lib/supabase.ts
+
+```ts
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+let client: SupabaseClient | null = null;
+
+/**
+ * Mengembalikan Supabase client, atau null kalau env variable belum diisi.
+ * Dengan begitu bagian lain dari aplikasi bisa cek `if (supabase) { ... }`
+ * tanpa perlu takut environment belum di-setup (misal saat development awal).
+ */
+export function getSupabaseClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) return null;
+
+  if (!client) {
+    client = createClient(url, key);
+  }
+  return client;
+}
 ```
 
 ## FILE: lib/supabase/server.ts
 
-```typescript
+```ts
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js';
@@ -4491,9 +5658,74 @@ export function createAdminClient() {
 }
 ```
 
+## FILE: lib/supabase-admin.ts
+
+```ts
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+let client: SupabaseClient | null = null;
+
+/**
+ * Client Supabase dengan SERVICE ROLE KEY â€” akses penuh, melewati RLS.
+ * HANYA boleh dipakai di server (Route Handler / Server Component), TIDAK
+ * PERNAH diimpor dari file "use client", karena kalau bocor ke browser
+ * siapapun bisa baca/tulis semua data.
+ *
+ * Ini dipakai khusus untuk proses pendaftaran (lihat app/api/daftar/...),
+ * supaya pembuatan akun + penyimpanan profil terjadi dalam satu langkah di
+ * server, tidak bergantung pada sesi login di browser yang belum tentu ada
+ * (itu penyebab bug "akun kebuat tapi profil kosong" sebelumnya).
+ */
+export function getSupabaseAdminClient(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY belum diisi di .env.local"
+    );
+  }
+
+  if (!client) {
+    client = createClient(url, key, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return client;
+}
+```
+
+## FILE: lib/supabase-browser.ts
+
+```ts
+import { createBrowserClient } from "@supabase/ssr";
+
+/**
+ * Client Supabase khusus untuk dipakai di browser (client component) â€”
+ * dipakai oleh form Masuk & Daftar untuk memanggil supabase.auth langsung.
+ * Beda dari lib/supabase.ts yang dipakai di server (Server Component) untuk
+ * membaca data leaderboard.
+ *
+ * Butuh NEXT_PUBLIC_SUPABASE_URL & NEXT_PUBLIC_SUPABASE_ANON_KEY di
+ * .env.local (sama seperti yang dipakai leaderboard).
+ */
+export function createSupabaseBrowserClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY belum diisi di .env.local"
+    );
+  }
+
+  return createBrowserClient(url, key);
+}
+```
+
 ## FILE: middleware.ts
 
-```typescript
+```ts
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
@@ -4540,15 +5772,15 @@ export async function middleware(request: NextRequest) {
 
   // Aturan A: Mau masuk dashboard tapi belum login? Tendang ke halaman login!
   if (url.startsWith('/dashboard') && !user) {
-    return redirectSambilBawaCookie('/login');
+    return redirectSambilBawaCookie('/masuk');
   }
 
   // Aturan B: Orang sudah login, tapi buka halaman '/login' lagi? Kembalikan ke dashboard.
   if (url === '/login' && user) {
     if (role === 'agen') {
-      return redirectSambilBawaCookie('/dashboard/agen');
+      return redirectSambilBawaCookie('/dashboard');
     } else if (role === 'perusahaan') {
-      return redirectSambilBawaCookie('/dashboard/perusahaan');
+      return redirectSambilBawaCookie('/dashboard');
     } else if (role === 'admin') {
       return redirectSambilBawaCookie('/dashboard/admin');
     }
@@ -4588,598 +5820,65 @@ export const config = {
 }
 ```
 
-## FILE: app/kebijakan-privasi/page.tsx
+## FILE: next.config.mjs
 
-```tsx
-import { LegalShell, LegalSection } from "@/components/legal/legal-shell";
-
-export default function KebijakanPrivasiPage() {
-  return (
-    <LegalShell title="Kebijakan Privasi">
-      <LegalSection title="1. Data yang Kami Kumpulkan">
-        Saat mendaftar, kami mengumpulkan data seperti nama mitra/perusahaan,
-        NIK/NIB atau NPWP, alamat lengkap, nomor telepon, dan alamat email
-        yang Anda berikan melalui formulir pendaftaran.
-      </LegalSection>
-      <LegalSection title="2. Cara Kami Menggunakan Data">
-        Data yang dikumpulkan digunakan untuk mengelola akun Anda, memproses
-        permintaan stok/pemesanan, serta berkomunikasi terkait status
-        kemitraan dengan LENTERA.
-      </LegalSection>
-      <LegalSection title="3. Keamanan Data">
-        Kami menyimpan data Anda menggunakan penyedia infrastruktur terpercaya
-        dengan kontrol akses yang ketat, dan tidak membagikan data pribadi
-        Anda ke pihak ketiga tanpa persetujuan, kecuali diwajibkan oleh
-        hukum.
-      </LegalSection>
-      <LegalSection title="4. Hak Anda atas Data">
-        Anda berhak meminta akses, koreksi, atau penghapusan data pribadi
-        yang kami simpan dengan menghubungi tim LENTERA melalui kontak yang
-        tersedia di situs ini.
-      </LegalSection>
-      <LegalSection title="5. Kontak">
-        Untuk pertanyaan seputar kebijakan privasi ini, silakan hubungi tim
-        LENTERA melalui halaman kontak pada situs ini.
-      </LegalSection>
-    </LegalShell>
-  );
-}
-```
-
-## FILE: app/syarat-ketentuan/page.tsx
-
-```tsx
-import { LegalShell, LegalSection } from "@/components/legal/legal-shell";
-
-export default function SyaratKetentuanPage() {
-  return (
-    <LegalShell title="Syarat & Ketentuan">
-      <LegalSection title="1. Ketentuan Umum">
-        Dengan mendaftar sebagai mitra atau industri di LENTERA, Anda setuju
-        untuk terikat pada syarat dan ketentuan ini. LENTERA berhak
-        memperbarui ketentuan ini sewaktu-waktu, dan perubahan akan
-        diberitahukan melalui email terdaftar Anda.
-      </LegalSection>
-      <LegalSection title="2. Kewajiban Mitra & Industri">
-        Mitra dan industri wajib memberikan data pendaftaran yang benar dan
-        terkini (nama, NIK/NIB atau NPWP, alamat, dan nomor telepon), serta
-        bertanggung jawab atas keakuratan informasi yang disampaikan kepada
-        LENTERA.
-      </LegalSection>
-      <LegalSection title="3. Pemesanan & Penyaluran">
-        Permintaan stok ulang atau pemesanan yang diajukan melalui dashboard
-        akan diproses sesuai ketersediaan dan jadwal penyaluran LENTERA.
-        Harga dan ketersediaan produk dapat berubah sewaktu-waktu.
-      </LegalSection>
-      <LegalSection title="4. Pembatalan & Pengembalian">
-        Pembatalan pesanan hanya dapat dilakukan sebelum proses penyaluran
-        dimulai. Kebijakan pengembalian mengikuti ketentuan yang berlaku
-        untuk masing-masing jenis produk.
-      </LegalSection>
-      <LegalSection title="5. Penghentian Akun">
-        LENTERA berhak menangguhkan atau menghentikan akun mitra/industri
-        yang melanggar ketentuan ini atau menyalahgunakan layanan yang
-        disediakan.
-      </LegalSection>
-    </LegalShell>
-  );
-}
-```
-
-## FILE: components/auth/terms-checkbox.tsx
-
-```tsx
-"use client";
-
-import Link from "next/link";
-
-export function TermsCheckbox({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-start gap-3 mb-5">
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={checked}
-        aria-label="Setuju dengan Syarat & Ketentuan dan Kebijakan Privasi"
-        onClick={() => onChange(!checked)}
-        className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
-          checked ? "bg-green border-green" : "border-forest/25 hover:border-forest/40"
-        }`}
-      >
-        {checked && (
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-3 h-3 text-cream"
-          >
-            <path d="M5 12l5 5L20 7" />
-          </svg>
-        )}
-      </button>
-      <p className="text-sm text-ink/65 leading-relaxed">
-        Saya menyetujui{" "}
-        <Link
-          href="/syarat-ketentuan"
-          target="_blank"
-          className="text-green font-medium hover:underline"
-        >
-          Syarat &amp; Ketentuan
-        </Link>{" "}
-        dan{" "}
-        <Link
-          href="/kebijakan-privasi"
-          target="_blank"
-          className="text-green font-medium hover:underline"
-        >
-          Kebijakan Privasi
-        </Link>{" "}
-        LENTERA.
-      </p>
-    </div>
-  );
-}
-```
-
-## FILE: components/dashboard/product-card.tsx
-
-```tsx
-"use client";
-
-import { useState } from "react";
-import type { MitraProduct } from "@/lib/mitra-products";
-
-function stockLevel(stock: number) {
-  if (stock >= 60) return { label: "Stok aman", cls: "bg-green/10 text-green" };
-  if (stock >= 25) return { label: "Stok menipis", cls: "bg-gold/15 text-gold" };
-  return { label: "Segera pesan", cls: "bg-clay/10 text-clay" };
-}
-
-export function ProductCard({ product }: { product: MitraProduct }) {
-  const [qty, setQty] = useState(1);
-  const [status, setStatus] = useState<"idle" | "sent">("idle");
-  const level = stockLevel(product.stock);
-
-  function handleOrder() {
-    setStatus("sent");
-    // TODO: kirim permintaan stok ulang ke API sungguhan (mis. POST /api/pesanan)
-    setTimeout(() => setStatus("idle"), 2500);
-  }
-
-  return (
-    <div className="bg-paper rounded-2xl border border-forest/10 p-6">
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="min-w-0">
-          <p className="font-display font-semibold text-forest leading-snug">
-            {product.name}
-          </p>
-          <p className="text-xs text-ink/50 mt-0.5">{product.category}</p>
-        </div>
-        <span
-          className={`shrink-0 text-[11px] font-mono px-2.5 py-1 rounded-full whitespace-nowrap ${level.cls}`}
-        >
-          {product.stock} {product.unit}
-        </span>
-      </div>
-
-      <p className="font-mono text-lg font-semibold text-forest mb-1">
-        Rp {product.price.toLocaleString("id-ID")}
-        <span className="text-xs text-ink/45 font-body font-normal">
-          {" "}
-          / {product.unit}
-        </span>
-      </p>
-      <p className="text-[11px] text-ink/40 mb-5">{level.label}</p>
-
-      <div className="flex items-center gap-3">
-        <div className="flex items-center border border-forest/15 rounded-full shrink-0">
-          <button
-            type="button"
-            onClick={() => setQty((q) => Math.max(1, q - 1))}
-            aria-label="Kurangi jumlah"
-            className="w-8 h-8 flex items-center justify-center text-forest hover:bg-forest/5 rounded-full transition-colors"
-          >
-            −
-          </button>
-          <span className="w-7 text-center text-sm font-mono text-forest">
-            {qty}
-          </span>
-          <button
-            type="button"
-            onClick={() => setQty((q) => q + 1)}
-            aria-label="Tambah jumlah"
-            className="w-8 h-8 flex items-center justify-center text-forest hover:bg-forest/5 rounded-full transition-colors"
-          >
-            +
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={handleOrder}
-          disabled={status === "sent"}
-          className="flex-1 bg-forest text-cream rounded-full py-2.5 text-sm font-medium transition-colors hover:bg-forest-2 disabled:opacity-70"
-        >
-          {status === "sent" ? "Permintaan terkirim ✓" : "Pesan Ulang"}
-        </button>
-      </div>
-    </div>
-  );
-}
-```
-
-## FILE: components/dashboard/sidebar.tsx
-
-```tsx
-"use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-
-const navItems = [
-  {
-    href: "#ringkasan",
-    label: "Ringkasan",
-    icon: (
-      <>
-        <path d="M3 12 12 3l9 9" />
-        <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
-      </>
-    ),
+```js
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  allowedDevOrigins: ['192.168.100.128'],
+  images: {
+    // Kalau logoUrl nanti berupa URL eksternal (misal dari Supabase Storage
+    // atau CDN lain), tambahkan hostname-nya di sini supaya next/image bisa
+    // memuatnya. Contoh: { protocol: "https", hostname: "xxxx.supabase.co" }
+    remotePatterns: [],
   },
-  {
-    href: "#pesan-stok",
-    label: "Pesan Stok",
-    icon: (
-      <>
-        <path d="M21 8 12 3 3 8l9 5 9-5Z" />
-        <path d="M3 8v8l9 5 9-5V8" />
-        <path d="M12 13v8" />
-      </>
-    ),
-  },
-  {
-    href: "#profil-mitra",
-    label: "Profil Mitra",
-    icon: (
-      <>
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
-      </>
-    ),
-  },
-];
+};
 
-export function DashboardSidebar() {
-  const router = useRouter();
-  const [mitraName, setMitraName] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
-      const { data: profile } = await supabase
-        .from("mitra_profiles")
-        .select("nama_mitra")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
-      setMitraName(profile?.nama_mitra ?? data.user.email ?? null);
-    });
-  }, []);
-
-  async function handleLogout() {
-    const supabase = createSupabaseBrowserClient();
-    await supabase.auth.signOut();
-    router.push("/masuk");
-  }
-
-  return (
-    <aside className="w-64 shrink-0 bg-forest text-cream flex flex-col h-screen sticky top-0">
-      <div className="p-6 border-b border-cream/10">
-        <span className="font-display font-semibold text-lg tracking-tight">
-          LENTERA
-        </span>
-        <p className="text-xs text-cream/45 mt-1">Portal Mitra</p>
-      </div>
-
-      <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => (
-          <a
-            key={item.href}
-            href={item.href}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="w-4 h-4 shrink-0"
-            >
-              {item.icon}
-            </svg>
-            {item.label}
-          </a>
-        ))}
-      </nav>
-
-      <div className="p-4 border-t border-cream/10">
-        {mitraName && (
-          <div className="flex items-center gap-3 px-2 mb-2 pb-3 border-b border-cream/10">
-            <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
-              {mitraName.charAt(0).toUpperCase()}
-            </div>
-            <p className="text-sm text-cream/80 truncate">{mitraName}</p>
-          </div>
-        )}
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors w-full"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-4 h-4 shrink-0"
-          >
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <path d="M16 17 21 12 16 7" />
-            <path d="M21 12H9" />
-          </svg>
-          Keluar
-        </button>
-      </div>
-    </aside>
-  );
-}
+export default nextConfig;
 ```
 
-## FILE: components/legal/legal-shell.tsx
+## FILE: next.config.ts
 
-```tsx
-import Link from "next/link";
-import { ReactNode } from "react";
+```ts
+import type { NextConfig } from "next";
 
-export function LegalShell({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <main className="min-h-screen bg-cream px-6 py-16 md:py-20">
-      <div className="max-w-3xl mx-auto">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-forest/70 hover:text-forest transition-colors mb-10"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          Kembali ke beranda
-        </Link>
+const nextConfig: NextConfig = {
+  /* config options here */
+};
 
-        <p className="font-mono text-xs tracking-widest uppercase text-green mb-3">
-          Terakhir diperbarui: Agustus 2026
-        </p>
-        <h1 className="font-display font-semibold text-3xl md:text-4xl text-forest mb-8">
-          {title}
-        </h1>
-
-        <div className="bg-paper rounded-3xl border border-forest/10 p-8 md:p-10">
-          <div className="bg-gold/10 border border-gold/20 rounded-xl px-4 py-3 mb-8 text-sm text-forest/80">
-            Ini teks placeholder untuk keperluan pratinjau desain — ganti dengan{" "}
-            {title.toLowerCase()} resmi LENTERA sebelum situs ini dipublikasikan.
-          </div>
-          <div className="space-y-8">{children}</div>
-        </div>
-      </div>
-    </main>
-  );
-}
-
-export function LegalSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section>
-      <h2 className="font-display font-semibold text-lg text-forest mb-2">{title}</h2>
-      <p className="text-ink/65 leading-relaxed text-sm">{children}</p>
-    </section>
-  );
-}
+export default nextConfig;
 ```
 
-## FILE: lib/auth-errors.ts
+## FILE: next-env.d.ts
 
-```typescript
-const errorMap: [string, string][] = [
-  ["User already registered", "Email ini sudah terdaftar. Coba masuk, atau pakai email lain."],
-  ["already been registered", "Email ini sudah terdaftar. Coba masuk, atau pakai email lain."],
-  ["Invalid login credentials", "Email atau kata sandi salah."],
-  ["Email not confirmed", "Email belum dikonfirmasi. Cek kotak masuk email kamu."],
-  ["Password should be at least", "Kata sandi minimal 6 karakter."],
-  ["Unable to validate email address", "Format email tidak valid."],
-  ["rate limit", "Terlalu banyak percobaan. Coba lagi beberapa saat lagi."],
-];
+```ts
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/dev/types/routes.d.ts";
+import "./.next/dev/types/root-params.d.ts";
 
-/**
- * Supabase mengembalikan pesan error dalam bahasa Inggris. Fungsi ini
- * menerjemahkan pesan yang umum terjadi ke Bahasa Indonesia; pesan yang
- * tidak dikenali jatuh ke pesan generik (bukan ditampilkan mentah-mentah).
- */
-export function translateAuthError(message: string | undefined | null): string {
-  if (!message) return "Terjadi kesalahan, coba lagi.";
-  const found = errorMap.find(([needle]) =>
-    message.toLowerCase().includes(needle.toLowerCase())
-  );
-  return found ? found[1] : "Terjadi kesalahan, coba lagi.";
-}
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
 ```
 
-## FILE: lib/mitra-products.ts
+## FILE: postcss.config.mjs
 
-```typescript
-export interface MitraProduct {
-  id: string;
-  name: string;
-  category: string;
-  unit: string;
-  price: number;
-  stock: number;
-}
-
-// Data dummy — ganti dengan data stok/produk sesungguhnya dari backend.
-export const mitraProducts: MitraProduct[] = [
-  {
-    id: "briket-5kg",
-    name: "Briket Energi LENTERA 5kg",
-    category: "Briket padat",
-    unit: "karung",
-    price: 45000,
-    stock: 128,
+```js
+const config = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
   },
-  {
-    id: "pelet-10kg",
-    name: "Pelet Biomassa 10kg",
-    category: "Pelet biomassa",
-    unit: "karung",
-    price: 78000,
-    stock: 84,
-  },
-  {
-    id: "cair-20l",
-    name: "Tabung Energi Cair 20L",
-    category: "Energi cair",
-    unit: "tabung",
-    price: 210000,
-    stock: 36,
-  },
-  {
-    id: "serbuk-25kg",
-    name: "Serbuk Biomassa Curah 25kg",
-    category: "Serbuk curah",
-    unit: "karung",
-    price: 95000,
-    stock: 19,
-  },
-];
-```
+};
 
-## FILE: lib/supabase-admin.ts
-
-```typescript
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
-let client: SupabaseClient | null = null;
-
-/**
- * Client Supabase dengan SERVICE ROLE KEY — akses penuh, melewati RLS.
- * HANYA boleh dipakai di server (Route Handler / Server Component), TIDAK
- * PERNAH diimpor dari file "use client", karena kalau bocor ke browser
- * siapapun bisa baca/tulis semua data.
- *
- * Ini dipakai khusus untuk proses pendaftaran (lihat app/api/daftar/...),
- * supaya pembuatan akun + penyimpanan profil terjadi dalam satu langkah di
- * server, tidak bergantung pada sesi login di browser yang belum tentu ada
- * (itu penyebab bug "akun kebuat tapi profil kosong" sebelumnya).
- */
-export function getSupabaseAdminClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !key) {
-    throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY belum diisi di .env.local"
-    );
-  }
-
-  if (!client) {
-    client = createClient(url, key, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-  }
-  return client;
-}
-```
-
-## FILE: lib/supabase-browser.ts
-
-```typescript
-import { createBrowserClient } from "@supabase/ssr";
-
-/**
- * Client Supabase khusus untuk dipakai di browser (client component) —
- * dipakai oleh form Masuk & Daftar untuk memanggil supabase.auth langsung.
- * Beda dari lib/supabase.ts yang dipakai di server (Server Component) untuk
- * membaca data leaderboard.
- *
- * Butuh NEXT_PUBLIC_SUPABASE_URL & NEXT_PUBLIC_SUPABASE_ANON_KEY di
- * .env.local (sama seperti yang dipakai leaderboard).
- */
-export function createSupabaseBrowserClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !key) {
-    throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY belum diisi di .env.local"
-    );
-  }
-
-  return createBrowserClient(url, key);
-}
-```
-
-## FILE: lib/supabase.ts
-
-```typescript
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
-let client: SupabaseClient | null = null;
-
-/**
- * Mengembalikan Supabase client, atau null kalau env variable belum diisi.
- * Dengan begitu bagian lain dari aplikasi bisa cek `if (supabase) { ... }`
- * tanpa perlu takut environment belum di-setup (misal saat development awal).
- */
-export function getSupabaseClient(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !key) return null;
-
-  if (!client) {
-    client = createClient(url, key);
-  }
-  return client;
-}
+export default config;
 ```
 
 ## FILE: supabase/schema.sql
 
 ```sql
 -- Jalankan di Supabase SQL editor kalau memilih Supabase sebagai sumber data
--- leaderboard. Nama tabel & kolom ini yang dipakai lib/get-leaderboard.ts —
+-- leaderboard. Nama tabel & kolom ini yang dipakai lib/get-leaderboard.ts â€”
 -- kalau mau nama lain, sesuaikan juga query di file itu.
 
 create table if not exists leaderboard_entries (
@@ -5201,7 +5900,7 @@ create policy "Public read access" on leaderboard_entries
 
 
 -- ============================================================
--- Profil Mitra & Industri — dibuat saat orang mendaftar lewat
+-- Profil Mitra & Industri â€” dibuat saat orang mendaftar lewat
 -- /daftar/mitra atau /daftar/industri. user_id merujuk ke akun
 -- Supabase Auth (auth.users) yang dibuat lewat supabase.auth.signUp().
 -- ============================================================
@@ -5239,6 +5938,54 @@ create policy "Industri bisa baca profil sendiri" on industri_profiles
   for select using (auth.uid() = user_id);
 ```
 
-## FILE: it_techno-project
+## FILE: tailwind.config.ts
 
-`it_techno-project` tercatat sebagai gitlink/submodule (`mode 160000`), sehingga tidak memiliki isi source yang dapat disalin ke dokumen ini.
+```ts
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  content: [
+    "./app/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        cream: "#F6F2E6",
+        paper: "#FBF9F3",
+        forest: { DEFAULT: "#17301F", 2: "#0F2417" },
+        green: { DEFAULT: "#2F6B3F", light: "#5C9A55", 50: "#EAF3E7" },
+        gold: { DEFAULT: "#C99A3D", light: "#E4C078" },
+        clay: { DEFAULT: "#7A5738", light: "#A9835C" },
+        ink: "#221D16",
+      },
+      fontFamily: {
+        display: ["var(--font-display)", "sans-serif"],
+        body: ["var(--font-body)", "sans-serif"],
+        mono: ["var(--font-mono)", "monospace"],
+      },
+      borderRadius: {
+        card: "16px",
+      },
+      keyframes: {
+        marquee: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
+        "marquee-reverse": {
+          "0%": { transform: "translateX(-50%)" },
+          "100%": { transform: "translateX(0)" },
+        },
+      },
+      animation: {
+        marquee: "marquee 46s linear infinite",
+        "marquee-reverse": "marquee-reverse 54s linear infinite",
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;
+```
+

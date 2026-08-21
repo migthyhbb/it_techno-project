@@ -1,106 +1,36 @@
-import { getUpstashClient, getIoRedisClient } from "./redis";
-import { getSupabaseClient } from "./supabase";
 import { leaderboardEntries as dummyLeaderboardEntries, type LeaderboardEntry } from "./leaderboard-data";
 
-// Nama key sorted-set di Redis. Sesuaikan dengan yang dipakai backend kamu
-// kalau namanya beda.
-const REDIS_KEY = "leaderboard:entries";
-
-/**
- * Tiap member di sorted set diasumsikan berupa JSON string berisi field
- * LeaderboardEntry TANPA "rank" (mis. {"name":"...","initials":"...",...}),
- * dengan score = volume dalam angka (mis. 1480), supaya ZREVRANGE otomatis
- * mengurutkan dari yang terbesar. Rank diisi berdasarkan urutan hasilnya.
- * Kalau struktur data di Redis kamu beda, sesuaikan fungsi ini.
- */
-function parseRedisMembers(members: string[]): LeaderboardEntry[] {
-  return members.map((item, i) => {
-    const parsed = JSON.parse(item);
-    return { rank: i + 1, ...parsed };
-  });
-}
-
-/**
- * Mengambil data papan peringkat, dengan urutan prioritas:
- *   1. Redis via Upstash (REST), jika UPSTASH_REDIS_REST_URL +
- *      UPSTASH_REDIS_REST_TOKEN sudah diisi — cocok untuk deploy
- *      serverless/edge (mis. Vercel Edge Runtime).
- *   2. Redis via koneksi TCP langsung (ioredis), jika REDIS_URL sudah
- *      diisi — cocok untuk Redis self-hosted / Redis Cloud / server
- *      Node.js biasa.
- *   3. Supabase, jika NEXT_PUBLIC_SUPABASE_URL + (SUPABASE_SERVICE_ROLE_KEY
- *      atau NEXT_PUBLIC_SUPABASE_ANON_KEY) sudah diisi.
- *   4. REST API custom, jika LEADERBOARD_API_URL sudah diisi.
- *   5. Data dummy di lib/leaderboard-data.ts (supaya halaman tidak pernah
- *      rusak walau backend belum siap / lagi down).
- *
- * Dipanggil dari Server Component (app/page.tsx), hasilnya dioper sebagai
- * prop ke <Leaderboard entries={...} /> — komponennya sendiri tetap
- * "use client" karena butuh animasi Motion, jadi fetching harus terjadi
- * di luar komponen itu.
- */
 export async function getLeaderboardEntries(): Promise<LeaderboardEntry[]> {
-  const upstash = getUpstashClient();
-  if (upstash) {
-    try {
-      const raw = await upstash.zrange<string[]>(REDIS_KEY, 0, 4, { rev: true });
-      if (raw.length > 0) return parseRedisMembers(raw);
-    } catch (err) {
-      console.error("Gagal mengambil leaderboard dari Redis (Upstash), pakai data dummy:", err);
-    }
-    return dummyLeaderboardEntries;
-  }
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const apiUrl = `${baseUrl}/api/leaderboard`;
 
-  const ioredis = getIoRedisClient();
-  if (ioredis) {
-    try {
-      const raw = await ioredis.zrevrange(REDIS_KEY, 0, 4);
-      if (raw.length > 0) return parseRedisMembers(raw);
-    } catch (err) {
-      console.error("Gagal mengambil leaderboard dari Redis (TCP), pakai data dummy:", err);
-    }
-    return dummyLeaderboardEntries;
-  }
+  try {
+    const res = await fetch(apiUrl, { next: { revalidate: 60 } });
+    if (!res.ok) throw new Error(`Status API: ${res.status}`);
+    
+    const response = await res.json();
+    
+    if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+      return response.data.map((item: any) => {
+        let accentColor: "gold" | "forest" | "clay" | "green" = "green";
+        if (item.peringkat === 1) accentColor = "gold";
+        else if (item.peringkat === 2) accentColor = "forest";
+        else if (item.peringkat === 3) accentColor = "clay";
 
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("leaderboard_entries")
-        .select("rank, name, initials, industry, volume, logo_type, logo_url, accent")
-        .order("rank", { ascending: true })
-        .limit(5);
-
-      if (error) throw error;
-      if (data && data.length > 0) {
-        return data.map((row) => ({
-          rank: row.rank,
-          name: row.name,
-          initials: row.initials,
-          industry: row.industry,
-          volume: row.volume,
-          logoType: row.logo_type,
-          logoUrl: row.logo_url ?? undefined,
-          accent: row.accent,
-        }));
-      }
-    } catch (err) {
-      console.error("Gagal mengambil leaderboard dari Supabase, pakai data dummy:", err);
+        return {
+          rank: item.peringkat,
+          name: item.nama_perusahaan,
+          initials: item.nama_perusahaan.substring(0, 2).toUpperCase(),
+          industry: "Mitra LENTERA",
+          volume: `${item.poin_eco_credits.toLocaleString('id-ID')} Poin`,
+          logoType: "generic",
+          logoUrl: item.avatar || undefined,
+          accent: accentColor,
+        };
+      });
     }
-    return dummyLeaderboardEntries;
-  }
-
-  const apiUrl = process.env.LEADERBOARD_API_URL;
-  if (apiUrl) {
-    try {
-      const res = await fetch(apiUrl, { next: { revalidate: 3600 } });
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const data: LeaderboardEntry[] = await res.json();
-      if (Array.isArray(data) && data.length > 0) return data;
-    } catch (err) {
-      console.error("Gagal mengambil leaderboard dari API custom, pakai data dummy:", err);
-    }
-    return dummyLeaderboardEntries;
+  } catch (err) {
+    console.error("Gagal konek ke API Leaderboard Redis. Memuat data dummy...", err);
   }
 
   return dummyLeaderboardEntries;

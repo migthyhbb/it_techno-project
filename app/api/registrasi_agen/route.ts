@@ -27,19 +27,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
     }
 
-    const { email, password, namaAgen, nikNib, alamatLengkap, noTelepon } = body as Record<string, unknown>;
+    const { email, password, namaAgen, nik, alamatLengkap, noTelepon } = body as Record<string, unknown>;
 
     if (
       typeof email !== 'string' ||
       typeof password !== 'string' ||
       typeof namaAgen !== 'string' ||
-      typeof nikNib !== 'string' ||
+  typeof nik !== 'string' ||
       typeof alamatLengkap !== 'string' ||
       typeof noTelepon !== 'string' ||
       !email.trim() ||
       !password.trim() ||
       !namaAgen.trim() ||
-      !nikNib.trim() ||
+      !nik.trim() ||
       !alamatLengkap.trim() ||
       !noTelepon.trim()
     ) {
@@ -118,7 +118,7 @@ if (daftarKelemahan.length > 0) {
         {
           auth_id: userId,
           nama_agen: namaAgen,
-          nik_nib: nikNib,
+          nik_nib: nik ,
           alamat_lengkap: alamatLengkap,
           no_telepon: noTelepon,
           status_verifikasi: 'pending',
@@ -182,7 +182,7 @@ if (daftarKelemahan.length > 0) {
         {
           auth_id: userId,
           nama_agen: namaAgen,
-          nik_nib: nikNib,
+          nik: nik,
           alamat_lengkap: alamatLengkap,
           no_telepon: noTelepon,
           status_verifikasi: 'pending',

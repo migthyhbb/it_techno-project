@@ -42,16 +42,32 @@ export function DashboardSidebar() {
   const router = useRouter();
   const [mitraName, setMitraName] = useState<string | null>(null);
 
-  useEffect(() => {
+ useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
-      const { data: profile } = await supabase
-        .from("mitra_profiles")
-        .select("nama_mitra")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
-      setMitraName(profile?.nama_mitra ?? data.user.email ?? null);
+
+      const role = data.user.app_metadata?.role;
+      let namaTampil = data.user.email ?? "Pengguna";
+
+      if (role === 'agen') {
+        const { data: profile } = await supabase
+          .from("agen")
+          .select("nama_agen")
+          .eq("auth_id", data.user.id)
+          .maybeSingle();
+        if (profile?.nama_agen) namaTampil = profile.nama_agen;
+      } 
+      else if (role === 'perusahaan') {
+        const { data: profile } = await supabase
+          .from("perusahaan_industri")
+          .select("nama_perusahaan")
+          .eq("auth_id", data.user.id)
+          .maybeSingle();
+        if (profile?.nama_perusahaan) namaTampil = profile.nama_perusahaan;
+      }
+
+      setMitraName(namaTampil);
     });
   }, []);
 

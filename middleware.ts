@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
 
   // Aturan A: Mau masuk dashboard tapi belum login? Tendang ke halaman login!
   if (url.startsWith('/dashboard') && !user) {
-    return redirectSambilBawaCookie('/login');
+    return redirectSambilBawaCookie('/masuk');
   }
 
   // Aturan B: Orang sudah login, tapi buka halaman '/login' lagi? Kembalikan ke dashboard.
@@ -60,8 +60,8 @@ export async function middleware(request: NextRequest) {
 
   // Aturan C & D: Setiap area dashboard hanya boleh diakses oleh role yang cocok (Sistem Default Deny).
   const areaByRole: Record<string, string> = {
-    agen: '/dashboard/agen',
-    perusahaan: '/dashboard/perusahaan',
+    agen: '/dashboard',
+    perusahaan: '/dashboard',
     admin: '/dashboard/admin',
   };
 
