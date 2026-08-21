@@ -25,7 +25,7 @@ type FormState = {
   email: string;
   password: string;
   nama_mitra: string;
-  nik: string;
+  nik_nib: string;
   alamat: string;
   telepon: string;
 };
@@ -38,7 +38,7 @@ export default function DaftarMitraPage() {
     email: "",
     password: "",
     nama_mitra: "",
-    nik: "",
+    nik_nib: "",
     alamat: "",
     telepon: "",
   });
@@ -54,7 +54,6 @@ export default function DaftarMitraPage() {
     setDirection(1);
     setStep((s) => Math.min(s + 1, stepLabels.length - 1));
   }
-  
   function goBack() {
     setDirection(-1);
     setError(null);
@@ -77,23 +76,14 @@ export default function DaftarMitraPage() {
 
     setStatus("loading");
     try {
-      // 1) Buat akun + simpan profil sekaligus di server
-      // Disesuaikan dengan URL dan Format Body Back-End abang
-      const res = await fetch("/api/registrasi_agen", {
+      // 1) Buat akun + simpan profil sekaligus di server (satu langkah,
+      //    tidak bergantung sesi browser yang belum tentu ada).
+      const res = await fetch("/api/daftar/mitra", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: form.email,
-          password: form.password,
-          namaAgen: form.nama_mitra,
-          nik: form.nik,
-          alamatLengkap: form.alamat,
-          noTelepon: form.telepon
-        }),
+        body: JSON.stringify(form),
       });
-      
       const result = await res.json();
-      
       if (!res.ok) {
         setStatus("idle");
         setError(result.error ?? "Terjadi kesalahan, coba lagi.");
@@ -106,7 +96,6 @@ export default function DaftarMitraPage() {
         email: form.email,
         password: form.password,
       });
-      
       if (signInError) throw signInError;
 
       setStatus("submitted");
@@ -208,8 +197,8 @@ export default function DaftarMitraPage() {
                     <FormField
                       label="NIK / NIB"
                       type="text"
-                      value={form.nik}
-                      onChange={(e) => update("nik", e.target.value)}
+                      value={form.nik_nib}
+                      onChange={(e) => update("nik_nib", e.target.value)}
                       placeholder="Nomor NIK atau NIB"
                       required
                     />
@@ -229,6 +218,7 @@ export default function DaftarMitraPage() {
                       placeholder="08xxxxxxxxxx"
                       required
                     />
+
                     <TermsCheckbox checked={agreed} onChange={setAgreed} />
                   </>
                 )}

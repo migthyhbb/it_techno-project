@@ -8,6 +8,8 @@ import { PartnersMarquee } from "@/components/partners-marquee";
 import { CtaFooter } from "@/components/cta-footer";
 import { getLeaderboardEntries } from "@/lib/get-leaderboard";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const leaderboardEntries = await getLeaderboardEntries();
 

@@ -4,9 +4,9 @@ import { translateAuthError } from "@/lib/auth-errors";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { email, password, nama_agen , nik, alamat_lengkap, no_telepon } = body;
+  const { email, password, nama_mitra, nik_nib, alamat, telepon } = body;
 
-  if (!email || !password || !nama_agen || !nik || !alamat_lengkap || !no_telepon) {
+  if (!email || !password || !nama_mitra || !nik_nib || !alamat || !telepon) {
     return NextResponse.json(
       { error: "Semua kolom wajib diisi." },
       { status: 400 }
@@ -15,7 +15,6 @@ export async function POST(request: Request) {
 
   try {
     const supabase = getSupabaseAdminClient();
-
     if (!supabase) {
       return NextResponse.json(
         {
@@ -46,14 +45,14 @@ export async function POST(request: Request) {
     //    login yang belum tentu ada di titik ini.
     const { error: profileError } = await supabase.from("mitra_profiles").insert({
       user_id: userData.user.id,
-      nama_mitra: nama_agen,
-      nik : nik,
-      alamat: alamat_lengkap,
-      telepon: no_telepon ,
+      nama_mitra,
+      nik_nib,
+      alamat,
+      telepon,
     });
     if (profileError) {
-
-      console.error("Gagal menyimpan profil mitra:", profileError);      // Akun sudah kebuat tapi profil gagal disimpan — hapus lagi akunnya
+      console.error("Gagal menyimpan profil mitra:", profileError);
+      // Akun sudah kebuat tapi profil gagal disimpan — hapus lagi akunnya
       // supaya tidak nyangkut jadi akun "kosong" dan email-nya bisa dipakai
       // untuk coba daftar ulang.
       await supabase.auth.admin.deleteUser(userData.user.id);

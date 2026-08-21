@@ -15,8 +15,7 @@ export async function POST(request: Request) {
     // Menggunakan Gemini generasi terbaru (2.5 Flash)
     // GANTI BARIS INI:
 const model = genAI.getGenerativeModel({ 
-  model: 'gemini-3.6-flash',
-  generationConfig: { responseMimeType: "application/json" }, // Paksa AI HANYA balas JSON! // <--- INI DIA MODEL TERBARUNYA!
+  model: 'gemini-3.6-flash', // <--- INI DIA MODEL TERBARUNYA!
   systemInstruction: `Kamu adalah asisten ahli dan konsultan resmi dalam bidang pengelolaan limbah industri. 
   Tugasmu adalah membantu perusahaan dan agen dalam memahami regulasi limbah, jenis-jenis limbah (B3 dan Non-B3), serta prosedur daur ulang.
   Gunakan bahasa Indonesia yang profesional, sopan, dan ringkas.

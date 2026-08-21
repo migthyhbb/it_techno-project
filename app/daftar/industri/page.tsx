@@ -54,7 +54,6 @@ export default function DaftarIndustriPage() {
     setDirection(1);
     setStep((s) => Math.min(s + 1, stepLabels.length - 1));
   }
-  
   function goBack() {
     setDirection(-1);
     setError(null);
@@ -77,23 +76,14 @@ export default function DaftarIndustriPage() {
 
     setStatus("loading");
     try {
-      // 1) Buat akun + simpan profil sekaligus di server
-      // Mengarah ke API registrasi perusahaan sesuai dengan Back-End
-      const res = await fetch("/api/registrasi_perusahaan", {
+      // 1) Buat akun + simpan profil sekaligus di server (satu langkah,
+      //    tidak bergantung sesi browser yang belum tentu ada).
+      const res = await fetch("/api/daftar/industri", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: form.email,
-          password: form.password,
-          nama_perusahaan: form.nama_perusahaan,
-          npwp: form.npwp,
-          alamat_lengkap: form.alamat,
-          noTelepon: form.telepon
-        }),
+        body: JSON.stringify(form),
       });
-      
       const result = await res.json();
-      
       if (!res.ok) {
         setStatus("idle");
         setError(result.error ?? "Terjadi kesalahan, coba lagi.");
@@ -106,12 +96,11 @@ export default function DaftarIndustriPage() {
         email: form.email,
         password: form.password,
       });
-      
       if (signInError) throw signInError;
 
       setStatus("submitted");
-      // Mengarahkan ke dashboard khusus jika ada, atau kembalikan ke beranda
-      router.push("/dashboard");
+      // Belum ada dashboard khusus industri, jadi kembali ke beranda.
+      router.push("/");
       router.refresh();
     } catch (err) {
       setStatus("idle");
@@ -144,7 +133,7 @@ export default function DaftarIndustriPage() {
       {status === "submitted" ? (
         <div className="text-center py-4">
           <p className="text-forest font-medium mb-1">Pendaftaran industri berhasil.</p>
-          <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
+          <p className="text-ink/55 text-sm">Mengalihkan ke beranda...</p>
         </div>
       ) : (
         <>

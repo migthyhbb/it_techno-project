@@ -24,10 +24,8 @@ export async function GET(request: Request) {
     // ==========================================
     // 2. ANALISIS PASAR OLEH GEMINI AI
     // ==========================================
-const model = genAI.getGenerativeModel({ 
-  model: "gemini-1.5-flash",
-  generationConfig: { responseMimeType: "application/json" } // Paksa AI HANYA balas JSON!
-});    
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
     // Prompt ini bisa abang modifikasi nanti dengan menyuntikkan cuaca asli atau total stok gudang
     const prompt = `
       Kamu adalah AI Economist untuk platform Waste-to-Energy di Palembang.

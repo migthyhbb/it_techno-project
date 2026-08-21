@@ -33,7 +33,6 @@ export default function MasukPage() {
     setDirection(1);
     setStep((s) => Math.min(s + 1, stepLabels.length - 1));
   }
-  
   function goBack() {
     setDirection(-1);
     setError(null);
@@ -51,13 +50,11 @@ export default function MasukPage() {
 
     setStatus("loading");
     try {
-      // Menembak ke Supabase Auth secara langsung dari Browser (Client)
       const supabase = createSupabaseBrowserClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      
       if (signInError) throw signInError;
 
       setStatus("submitted");

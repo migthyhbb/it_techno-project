@@ -1,5 +1,3 @@
-import Image from "next/image";
-import Link from "next/link";
 import { ReactNode } from "react";
 
 export function AuthShell({
@@ -29,13 +27,6 @@ export function AuthShell({
       />
 
       <div className={`relative w-full ${wide ? "max-w-2xl" : "max-w-md"}`}>
-        <Link href="/" className="flex items-center justify-center gap-3 mb-8">
-          <Image src="/images/logo.png" alt="LENTERA" width={48} height={48} className="h-12 w-auto" />
-          <span className="font-display font-semibold text-xl tracking-tight text-forest">
-            LENTERA
-          </span>
-        </Link>
-
         <div className="bg-paper rounded-3xl border border-forest/10 shadow-[0_30px_60px_-20px_rgba(23,48,31,0.25)] p-8 md:p-10">
           {eyebrow && (
             <p className="font-mono text-xs tracking-widest uppercase text-green mb-3 text-center">
