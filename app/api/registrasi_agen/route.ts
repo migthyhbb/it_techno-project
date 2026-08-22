@@ -118,7 +118,7 @@ if (daftarKelemahan.length > 0) {
         {
           auth_id: userId,
           nama_agen: namaAgen,
-          nik_nib: nik ,
+          nik: nik,
           alamat_lengkap: alamatLengkap,
           no_telepon: noTelepon,
           status_verifikasi: 'pending',
