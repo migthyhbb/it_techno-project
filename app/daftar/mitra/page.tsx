@@ -1,252 +1,361 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { FormField } from "@/components/auth/form-field";
+import { OtpField } from "@/components/auth/otp-field";
+import { SubmitButton } from "@/components/auth/submit-button";
+import { BackButton } from "@/components/auth/back-button";
+import { ProgressSteps } from "@/components/auth/progress-steps";
+import { TermsCheckbox } from "@/components/auth/terms-checkbox";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { translateAuthError } from "@/lib/auth-errors";
+import {
+  isValidNikNib,
+  isValidAddress,
+  isValidPhone,
+  isValidPassword,
+  validationMessages,
+} from "@/lib/validation";
+import { PasswordRequirements } from "@/components/auth/password-requirements";
 
-interface MitraProfile {
+const stepLabels = ["Email", "Verifikasi Email", "Kata Sandi", "Detail Profil"];
+
+const variants = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
+  center: { opacity: 1, x: 0 },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
+};
+
+type FormState = {
+  email: string;
+  otp: string;
+  password: string;
   nama_mitra: string;
   nik_nib: string;
-  alamat: string;
+  provinsi: string;
+  kota: string;
+  detail_alamat: string;
   telepon: string;
-  created_at: string;
-}
+  foto_nik: File | null;
+};
 
-export default function DashboardMitraPage() {
+type FieldErrors = Partial<Record<"nama_mitra" | "nik_nib" | "provinsi" | "kota" | "detail_alamat" | "telepon" | "foto_nik", string>>;
+
+export default function DaftarMitraPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState<string | null>(null);
-  const [profile, setProfile] = useState<MitraProfile | null>(null);
+  const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const [form, setForm] = useState<FormState>({
+    email: "", otp: "", password: "", nama_mitra: "", nik_nib: "", provinsi: "", kota: "", detail_alamat: "", telepon: "", foto_nik: null,
+  });
   
-  // State untuk harga dinamis dari admin berdasarkan wilayah mitra
-  const [mitraKota, setMitraKota] = useState<string>("");
-  const [basePrice, setBasePrice] = useState<number | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [agreed, setAgreed] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  const [provinces, setProvinces] = useState<{id: string, name: string}[]>([]);
+  const [cities, setCities] = useState<{id: string, name: string}[]>([]);
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
+    fetch("https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json")
+      .then((res) => res.json())
+      .then((data) => setProvinces(data))
+      .catch((err) => console.error("Gagal load provinsi:", err));
+  }, []);
 
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) {
-        router.replace("/masuk");
-        return;
-      }
-      setEmail(data.user.email ?? null);
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setInterval(() => setResendCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(id);
+  }, [resendCooldown]);
 
-      // 1. Ambil Profil Mitra
-      const { data: profileData } = await supabase
-        .from("mitra_profiles")
-        .select("nama_mitra, nik_nib, alamat, telepon, created_at")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
-
-      if (!profileData) {
-        router.replace("/masuk");
-        return;
-      }
-
-      setProfile(profileData);
-
-      // 2. Ekstrak Kota dari Alamat Mitra (Format: "Detail, KOTA, PROVINSI")
-      if (profileData.alamat) {
-        const parts = profileData.alamat.split(",");
-        if (parts.length >= 2) {
-          const kotaName = parts[1].trim();
-          setMitraKota(kotaName);
-
-          // 3. Tarik Harga dari Tabel regional_prices (Admin) berdasarkan Kota
-          const { data: priceData } = await supabase
-            .from("regional_prices")
-            .select("harga_per_kg")
-            .ilike("kota", `%${kotaName}%`)
-            .maybeSingle();
-
-          if (priceData && priceData.harga_per_kg) {
-            setBasePrice(priceData.harga_per_kg);
-          }
-        }
-      }
-
-      setLoading(false);
-    });
-  }, [router]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-ink/40 text-sm">Memuat Dashboard Mitra...</p>
-      </div>
-    );
+  function update<K extends keyof FormState>(key: K, value: string) {
+    setForm((f) => ({ ...f, [key]: value }));
   }
 
-  const joinedLabel = profile?.created_at
-    ? new Date(profile.created_at).toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
-    : "-";
-
-  // Fungsi helper untuk menghitung harga dinamis atau kisaran berdasarkan harga admin
-  // Jika harga admin X, kita buat kisaran (X - 3000) sampai X
-  const getDisplayPrice = (defaultPrice: number, multiplier: number = 1) => {
-    if (!basePrice) return `Rp ${defaultPrice.toLocaleString("id-ID")}`;
+  const handleProvinsiChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const provId = e.target.value;
+    const provName = e.target.options[e.target.selectedIndex].text;
     
-    const adjustedBase = basePrice * multiplier;
-    const minRange = adjustedBase - 3000;
-    const maxRange = adjustedBase;
+    update("provinsi", provName);
+    update("kota", "");
     
-    return `Rp ${minRange.toLocaleString("id-ID")} - Rp ${maxRange.toLocaleString("id-ID")}`;
+    if (provId) {
+      fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`)
+        .then((res) => res.json())
+        .then((data) => setCities(data))
+        .catch((err) => console.error("Gagal load kota:", err));
+    } else {
+      setCities([]);
+    }
   };
 
-  return (
-    <div className="px-6 md:px-12 py-10 md:py-12 max-w-5xl">
+  function goNext() {
+    setDirection(1);
+    setStep((s) => Math.min(s + 1, stepLabels.length - 1));
+  }
+  function goBack() {
+    setDirection(-1);
+    setError(null);
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  async function sendOtp() {
+    const supabase = createSupabaseBrowserClient();
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email: form.email,
+      options: { shouldCreateUser: true },
+    });
+    if (otpError) throw otpError;
+    setResendCooldown(30);
+  }
+
+  async function handleResend() {
+    if (resendCooldown > 0) return;
+    setError(null);
+    setStatus("loading");
+    try {
+      await sendOtp();
+    } catch (err) {
+      setError(translateAuthError(err instanceof Error ? err.message : null));
+    } finally {
+      setStatus("idle");
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    if (step === 0) {
+      setStatus("loading");
+      try {
+        await sendOtp();
+        setStatus("idle");
+        goNext();
+      } catch (err) {
+        setStatus("idle");
+        setError(translateAuthError(err instanceof Error ? err.message : null));
+      }
+      return;
+    }
+
+    if (step === 1) {
+      if (form.otp.length !== 6) {
+        setError("Masukkan 6 digit kode verifikasi.");
+        return;
+      }
+      setStatus("loading");
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          email: form.email, token: form.otp, type: "email",
+        });
+        if (verifyError) throw verifyError;
+        setStatus("idle");
+        goNext();
+      } catch {
+        setStatus("idle");
+        setError("Kode salah atau sudah kedaluwarsa. Coba lagi atau kirim ulang kode.");
+      }
+      return;
+    }
+
+    if (step === 2) {
+      if (!isValidPassword(form.password)) {
+        setError(validationMessages.password);
+        return;
+      }
+      setStatus("loading");
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: form.password,
+        });
+        if (updateError) throw updateError;
+        setStatus("idle");
+        goNext();
+      } catch (err) {
+        setStatus("idle");
+        setError(translateAuthError(err instanceof Error ? err.message : null));
+      }
+      return;
+    }
+
+    const errors: FieldErrors = {};
+    if (!form.nama_mitra.trim()) errors.nama_mitra = "Nama mitra wajib diisi.";
+    if (!isValidNikNib(form.nik_nib)) errors.nik_nib = validationMessages.nikNib;
+    if (!form.foto_nik) errors.foto_nik = "Foto NIK/NPWP wajib diupload.";
+    if (!form.provinsi) errors.provinsi = "Provinsi wajib dipilih.";
+    if (!form.kota) errors.kota = "Kota/Kabupaten wajib dipilih.";
+    if (!form.detail_alamat.trim()) errors.detail_alamat = "Detail alamat wajib diisi.";
+    
+    const alamatLengkap = `${form.detail_alamat}, ${form.kota}, ${form.provinsi}`;
+    if (form.provinsi && form.kota && form.detail_alamat && !isValidAddress(alamatLengkap)) {
+      errors.detail_alamat = validationMessages.address;
+    }
+
+    if (!isValidPhone(form.telepon)) errors.telepon = validationMessages.phone;
+    
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    if (!agreed) {
+      setError("Kamu harus menyetujui Syarat & Ketentuan dan Kebijakan Privasi dulu.");
+      return;
+    }
+
+    setStatus("loading");
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user ?? (await supabase.auth.getUser()).data.user;
+
+      if (!user) throw new Error("no-session");
+
+      let fotoUrl = "";
+      if (form.foto_nik) {
+        const fileExt = form.foto_nik.name.split('.').pop();
+        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('mitra_documents').upload(`nik/${fileName}`, form.foto_nik);
+        if (uploadError) throw uploadError;
+        const { data: publicUrlData } = supabase.storage.from('mitra_documents').getPublicUrl(`nik/${fileName}`);
+        fotoUrl = publicUrlData.publicUrl;
+      }
+
+      const { error: profileError } = await supabase.from("mitra_profiles").upsert({
+        user_id: user.id,
+        nama_mitra: form.nama_mitra,
+        nik_nib: form.nik_nib,
+        alamat: alamatLengkap,
+        telepon: form.telepon,
+        foto_nik_url: fotoUrl, 
+      }, { onConflict: 'user_id' });
+
+      if (profileError) throw profileError;
+
+      setStatus("submitted");
+      // Menggunakan hard redirect agar sesi terbaca sempurna oleh middleware Next.js
+      window.location.href = "/dashboard";
       
-      {/* Ringkasan */}
-      <section id="ringkasan" className="scroll-mt-8 mb-10">
-        <p className="font-mono text-xs tracking-widest uppercase text-green mb-3">
-          Ringkasan Mitra
+    } catch (err) {
+      setStatus("idle");
+      if (err instanceof Error && err.message === "no-session") {
+        setError("Sesi kamu berakhir. Silakan login kembali.");
+      } else if (err && typeof err === "object" && "message" in err) {
+        setError((err as { message: string }).message);
+      } else {
+        setError("Gagal menyimpan data profil, coba lagi.");
+      }
+    }
+  }
+
+  return (
+    <AuthShell
+      eyebrow="Pendaftaran mitra"
+      title="Daftar sebagai Mitra"
+      subtitle="Untuk agen dan distributor energi LENTERA."
+      footer={
+        <p className="text-sm text-ink/60 space-y-1.5">
+          <span className="block">
+            Sudah punya akun?{" "}
+            <Link href="/masuk" className="text-green font-medium hover:underline">Masuk</Link>
+          </span>
+          <span className="block">
+            Mau daftar sebagai industri?{" "}
+            <Link href="/daftar/industri" className="text-green font-medium hover:underline">Klik di sini</Link>
+          </span>
         </p>
-        <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest mb-2">
-          Selamat datang, {profile?.nama_mitra ?? "Mitra"}
-        </h1>
-        <p className="text-ink/60 mb-2">
-          Pantau stok di titikmu dan ajukan permintaan stok ulang langsung ke LENTERA.
-        </p>
-        {mitraKota && (
-          <p className="text-xs text-green font-medium">
-            📍 Wilayah Penyesuaian Harga: <span className="uppercase">{mitraKota}</span> {basePrice ? "(Sinkron dengan Admin)" : "(Menggunakan Harga Standar)"}
-          </p>
-        )}
-      </section>
-
-      {/* Katalog Produk dengan Harga Dinamis */}
-      <section className="mb-12">
-        <div className="grid sm:grid-cols-2 gap-6">
-          
-          {/* Card 1 */}
-          <div className="bg-paper rounded-2xl border border-forest/10 p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-display font-semibold text-forest text-lg">Briket Energi LENTERA 5kg</h3>
-                <span className="bg-green/10 text-green text-xs font-semibold px-2.5 py-1 rounded-full">128 karung</span>
-              </div>
-              <p className="text-xs text-ink/50 mb-4">Briket padat siap distribusikan</p>
-            </div>
-            <div>
-              <p className="font-display font-semibold text-forest text-xl mb-1">
-                {getDisplayPrice(45000, 1)} <span className="text-xs font-normal text-ink/60">/karung</span>
-              </p>
-              <p className="text-[11px] text-ink/45 mb-4">Stok aman di gudang mitra</p>
-              <button 
-                onClick={() => alert("Permintaan stok ulang Briket dikirim ke LENTERA!")}
-                className="w-full bg-forest text-paper py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors"
-              >
-                Pesan Ulang
-              </button>
-            </div>
-          </div>
-
-          {/* Card 2 */}
-          <div className="bg-paper rounded-2xl border border-forest/10 p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-display font-semibold text-forest text-lg">Pelet Biomassa 10kg</h3>
-                <span className="bg-green/10 text-green text-xs font-semibold px-2.5 py-1 rounded-full">84 karung</span>
-              </div>
-              <p className="text-xs text-ink/50 mb-4">Pelet biomassa kualitas tinggi</p>
-            </div>
-            <div>
-              <p className="font-display font-semibold text-forest text-xl mb-1">
-                {getDisplayPrice(78000, 1.5)} <span className="text-xs font-normal text-ink/60">/karung</span>
-              </p>
-              <p className="text-[11px] text-ink/45 mb-4">Stok aman di gudang mitra</p>
-              <button 
-                onClick={() => alert("Permintaan stok ulang Pelet dikirim ke LENTERA!")}
-                className="w-full bg-forest text-paper py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors"
-              >
-                Pesan Ulang
-              </button>
-            </div>
-          </div>
-
-          {/* Card 3 */}
-          <div className="bg-paper rounded-2xl border border-forest/10 p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-display font-semibold text-forest text-lg">Tabung Energi Cair 20L</h3>
-                <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-1 rounded-full">36 tabung</span>
-              </div>
-              <p className="text-xs text-ink/50 mb-4">Energi cair ramah lingkungan</p>
-            </div>
-            <div>
-              <p className="font-display font-semibold text-forest text-xl mb-1">
-                {getDisplayPrice(210000, 4)} <span className="text-xs font-normal text-ink/60">/tabung</span>
-              </p>
-              <p className="text-[11px] text-yellow-600 font-medium mb-4">Stok menipis, segera pesan</p>
-              <button 
-                onClick={() => alert("Permintaan stok ulang Tabung Cair dikirim ke LENTERA!")}
-                className="w-full bg-forest text-paper py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors"
-              >
-                Pesan Ulang
-              </button>
-            </div>
-          </div>
-
-          {/* Card 4 */}
-          <div className="bg-paper rounded-2xl border border-forest/10 p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="font-display font-semibold text-forest text-lg">Serbuk Biomassa Curah 25kg</h3>
-                <span className="bg-red-100 text-red-700 text-xs font-semibold px-2.5 py-1 rounded-full">19 karung</span>
-              </div>
-              <p className="text-xs text-ink/50 mb-4">Serbuk curah industri</p>
-            </div>
-            <div>
-              <p className="font-display font-semibold text-forest text-xl mb-1">
-                {getDisplayPrice(95000, 2)} <span className="text-xs font-normal text-ink/60">/karung</span>
-              </p>
-              <p className="text-[11px] text-red-600 font-medium mb-4">Segera pesan ulang</p>
-              <button 
-                onClick={() => alert("Permintaan stok ulang Serbuk Curah dikirim ke LENTERA!")}
-                className="w-full bg-forest text-paper py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors"
-              >
-                Pesan Ulang
-              </button>
-            </div>
-          </div>
-
+      }
+    >
+      {status === "submitted" ? (
+        <div className="text-center py-4">
+          <p className="text-forest font-medium mb-1">Pendaftaran mitra berhasil.</p>
+          <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
         </div>
-      </section>
+      ) : (
+        <>
+          <ProgressSteps steps={stepLabels} current={step} />
+          <form onSubmit={handleSubmit}>
+            <AnimatePresence mode="wait" custom={direction} initial={false}>
+              <motion.div
+                key={step} custom={direction} variants={variants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {step === 0 && (
+                  <FormField label="Email" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} placeholder="nama@email.com" required autoFocus />
+                )}
 
-      {/* Profil Mitra */}
-      <section id="profil-mitra" className="scroll-mt-8 mb-10">
-        <h2 className="font-display font-semibold text-xl text-forest mb-6">
-          Informasi mitra
-        </h2>
-        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6">
-          <div>
-            <p className="text-xs text-ink/45 mb-1">Nama mitra</p>
-            <p className="text-forest font-medium">{profile?.nama_mitra}</p>
-          </div>
-          <div>
-            <p className="text-xs text-ink/45 mb-1">Email</p>
-            <p className="text-forest font-medium">{email}</p>
-          </div>
-          <div>
-            <p className="text-xs text-ink/45 mb-1">NIK / NIB</p>
-            <p className="text-forest font-medium">{profile?.nik_nib}</p>
-          </div>
-          <div>
-            <p className="text-xs text-ink/45 mb-1">Nomor telepon</p>
-            <p className="text-forest font-medium">{profile?.telepon}</p>
-          </div>
-          <div className="sm:col-span-2">
-            <p className="text-xs text-ink/45 mb-1">Alamat lengkap</p>
-            <p className="text-forest font-medium">{profile?.alamat}</p>
-          </div>
-        </div>
-      </section>
+                {step === 1 && (
+                  <>
+                    <p className="text-sm text-ink/55 mb-4">
+                      Kode dikirim ke <span className="text-forest font-medium">{form.email}</span> · <button type="button" onClick={goBack} className="text-green hover:underline">ganti</button>
+                    </p>
+                    <OtpField value={form.otp} onChange={(v) => update("otp", v)} />
+                    <button type="button" onClick={handleResend} disabled={resendCooldown > 0 || status === "loading"} className="text-xs text-green hover:underline disabled:text-ink/35 mb-2">
+                      {resendCooldown > 0 ? `Kirim ulang kode (${resendCooldown}s)` : "Kirim ulang kode"}
+                    </button>
+                  </>
+                )}
 
-    </div>
+                {step === 2 && (
+                  <>
+                    <FormField label="Kata sandi" type="password" value={form.password} onChange={(e) => update("password", e.target.value)} placeholder="••••••••" required autoFocus />
+                    <PasswordRequirements value={form.password} />
+                  </>
+                )}
+
+                {step === 3 && (
+                  <>
+                    <FormField label="Nama mitra" type="text" value={form.nama_mitra} onChange={(e) => update("nama_mitra", e.target.value)} placeholder="Nama perorangan / usaha" error={fieldErrors.nama_mitra} required autoFocus />
+                    <FormField label="NIK / NIB" type="text" value={form.nik_nib} onChange={(e) => update("nik_nib", e.target.value)} placeholder="16 digit NIK atau 13 digit NIB" error={fieldErrors.nik_nib} required />
+                    
+                    <div className="mb-4 text-left">
+                      <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto NIK / NPWP</label>
+                      <input type="file" accept="image/png, image/jpeg, image/jpg" onChange={(e) => setForm(f => ({ ...f, foto_nik: e.target.files?.[0] || null }))} className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2" required />
+                      {fieldErrors.foto_nik && <p className="text-xs text-red-600 mt-1.5">{fieldErrors.foto_nik}</p>}
+                    </div>
+
+                    <div className="mb-4 text-left">
+                      <label className="block text-sm font-medium mb-1.5 text-ink">Provinsi</label>
+                      <select className={`block w-full text-sm text-ink/80 border ${fieldErrors.provinsi ? 'border-red-500' : 'border-ink/20'} rounded-md p-2.5 bg-white`} onChange={handleProvinsiChange} required>
+                        <option value="">Pilih Provinsi...</option>
+                        {provinces.map((prov) => <option key={prov.id} value={prov.id}>{prov.name}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="mb-4 text-left">
+                      <label className="block text-sm font-medium mb-1.5 text-ink">Kota / Kabupaten</label>
+                      <select className={`block w-full text-sm text-ink/80 border ${fieldErrors.kota ? 'border-red-500' : 'border-ink/20'} rounded-md p-2.5 bg-white disabled:bg-ink/5`} onChange={(e) => update("kota", e.target.options[e.target.selectedIndex].text)} disabled={cities.length === 0} required>
+                        <option value="">Pilih Kota/Kabupaten...</option>
+                        {cities.map((city) => <option key={city.id} value={city.id}>{city.name}</option>)}
+                      </select>
+                    </div>
+
+                    <FormField label="Detail Alamat" type="text" value={form.detail_alamat} onChange={(e) => update("detail_alamat", e.target.value.toUpperCase())} placeholder="Jalan, RT/RW, no. rumah, patokan" error={fieldErrors.detail_alamat} required />
+                    <FormField label="Nomor telepon" type="tel" value={form.telepon} onChange={(e) => update("telepon", e.target.value)} placeholder="08123456789" error={fieldErrors.telepon} required />
+                    <TermsCheckbox checked={agreed} onChange={setAgreed} />
+                  </>
+                )}
+              </motion.div>
+            </AnimatePresence>
+
+            {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">{error}</p>}
+
+            <div className="flex gap-3">
+              {step > 0 && <BackButton onClick={goBack} />}
+              <SubmitButton type="submit" disabled={status === "loading"}>
+                {status === "loading" ? "Memproses..." : step === 0 ? "Kirim Kode" : step === 1 ? "Verifikasi" : step < stepLabels.length - 1 ? "Lanjut" : "Daftar sebagai Mitra"}
+              </SubmitButton>
+            </div>
+          </form>
+        </>
+      )}
+    </AuthShell>
   );
 }
