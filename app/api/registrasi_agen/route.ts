@@ -114,7 +114,7 @@ if (daftarKelemahan.length > 0) {
         return NextResponse.json({ message: 'Registrasi agen berhasil!' }, { status: 201 });
       }
 
-      const { error: profileError } = await supabaseAdmin.from('agen').insert([
+      const { error: profileError } = await supabaseAdmin.from('mitra_profiles').insert([
         {
           auth_id: userId,
           nama_agen: namaAgen,
@@ -177,7 +177,7 @@ if (daftarKelemahan.length > 0) {
     // Lanjut masukkan data ke tabel profil (agen / perusahaan_industri)
     // Lanjut masukkan data ke tabel profil
     const { error: profileError } = await supabaseAdmin
-      .from('agen')
+      .from('mitra_profiles') // Ganti 'mitra_profiles' jadi 'industri_profiles' untuk file registrasi_perusahaan
       .insert([
         {
           auth_id: userId,

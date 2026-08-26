@@ -16,58 +16,30 @@ const navItems = [
     ),
   },
   {
-    href: "#pesan-stok",
-    label: "Pesan Stok",
+    href: "#profil-industri",
+    label: "Profil Industri",
     icon: (
       <>
-        <path d="M21 8 12 3 3 8l9 5 9-5Z" />
-        <path d="M3 8v8l9 5 9-5V8" />
-        <path d="M12 13v8" />
-      </>
-    ),
-  },
-  {
-    href: "#profil-mitra",
-    label: "Profil Mitra",
-    icon: (
-      <>
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+        <path d="M3 21h18M5 21V9l6-4 6 4v12M9 21v-6h6v6" />
       </>
     ),
   },
 ];
 
-export function DashboardSidebar() {
+export function IndustriSidebar() {
   const router = useRouter();
-  const [mitraName, setMitraName] = useState<string | null>(null);
+  const [nama, setNama] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
-
-      const role = data.user.app_metadata?.role;
-      let namaTampil = data.user.email ?? "Pengguna";
-
-      if (role === 'agen') {
-        const { data: profile } = await supabase
-          .from("agen")
-          .select("nama_agen")
-          .eq("auth_id", data.user.id)
-          .maybeSingle();
-        if (profile?.nama_agen) namaTampil = profile.nama_agen;
-      } 
-      else if (role === 'perusahaan') {
-        const { data: profile } = await supabase
-          .from("perusahaan_industri")
-          .select("nama_perusahaan")
-          .eq("auth_id", data.user.id)
-          .maybeSingle();
-        if (profile?.nama_perusahaan) namaTampil = profile.nama_perusahaan;
-      }
-
-      setMitraName(namaTampil);
+      const { data: profile } = await supabase
+        .from("industri_profiles")
+        .select("nama_perusahaan")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      setNama(profile?.nama_perusahaan ?? data.user.email ?? null);
     });
   }, []);
 
@@ -83,7 +55,7 @@ export function DashboardSidebar() {
         <span className="font-display font-semibold text-lg tracking-tight">
           LENTERA
         </span>
-        <p className="text-xs text-cream/45 mt-1">Portal Mitra</p>
+        <p className="text-xs text-cream/45 mt-1">Portal Industri</p>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
@@ -110,12 +82,12 @@ export function DashboardSidebar() {
       </nav>
 
       <div className="p-4 border-t border-cream/10">
-        {mitraName && (
+        {nama && (
           <div className="flex items-center gap-3 px-2 mb-2 pb-3 border-b border-cream/10">
             <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
-              {mitraName.charAt(0).toUpperCase()}
+              {nama.charAt(0).toUpperCase()}
             </div>
-            <p className="text-sm text-cream/80 truncate">{mitraName}</p>
+            <p className="text-sm text-cream/80 truncate">{nama}</p>
           </div>
         )}
         <button

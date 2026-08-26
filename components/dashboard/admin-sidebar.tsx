@@ -7,7 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 const navItems = [
   {
     href: "#ringkasan",
-    label: "Ringkasan",
+    label: "Ringkasan Admin",
     icon: (
       <>
         <path d="M3 12 12 3l9 9" />
@@ -16,58 +16,39 @@ const navItems = [
     ),
   },
   {
-    href: "#pesan-stok",
-    label: "Pesan Stok",
+    href: "#pengiriman",
+    label: "Semua Pengiriman",
     icon: (
       <>
-        <path d="M21 8 12 3 3 8l9 5 9-5Z" />
-        <path d="M3 8v8l9 5 9-5V8" />
-        <path d="M12 13v8" />
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
       </>
     ),
   },
   {
-    href: "#profil-mitra",
-    label: "Profil Mitra",
+    href: "#harga-wilayah",
+    label: "Harga Wilayah",
     icon: (
       <>
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+        <line x1="12" y1="1" x2="12" y2="23" />
+        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
       </>
     ),
   },
 ];
 
-export function DashboardSidebar() {
+export function AdminSidebar() {
   const router = useRouter();
-  const [mitraName, setMitraName] = useState<string | null>(null);
+  const [nama, setNama] = useState<string | null>("Administrator");
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
-    supabase.auth.getUser().then(async ({ data }) => {
+    supabase.auth.getUser().then(({ data }) => {
       if (!data.user) return;
-
-      const role = data.user.app_metadata?.role;
-      let namaTampil = data.user.email ?? "Pengguna";
-
-      if (role === 'agen') {
-        const { data: profile } = await supabase
-          .from("agen")
-          .select("nama_agen")
-          .eq("auth_id", data.user.id)
-          .maybeSingle();
-        if (profile?.nama_agen) namaTampil = profile.nama_agen;
-      } 
-      else if (role === 'perusahaan') {
-        const { data: profile } = await supabase
-          .from("perusahaan_industri")
-          .select("nama_perusahaan")
-          .eq("auth_id", data.user.id)
-          .maybeSingle();
-        if (profile?.nama_perusahaan) namaTampil = profile.nama_perusahaan;
-      }
-
-      setMitraName(namaTampil);
+      // Bisa disesuaikan jika admin punya tabel profil khusus, 
+      // untuk sekarang kita tampilkan email atau label Administrator
+      setNama(data.user.email ?? "Administrator");
     });
   }, []);
 
@@ -83,7 +64,7 @@ export function DashboardSidebar() {
         <span className="font-display font-semibold text-lg tracking-tight">
           LENTERA
         </span>
-        <p className="text-xs text-cream/45 mt-1">Portal Mitra</p>
+        <p className="text-xs text-cream/45 mt-1">Portal Admin</p>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
@@ -110,12 +91,12 @@ export function DashboardSidebar() {
       </nav>
 
       <div className="p-4 border-t border-cream/10">
-        {mitraName && (
+        {nama && (
           <div className="flex items-center gap-3 px-2 mb-2 pb-3 border-b border-cream/10">
             <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
-              {mitraName.charAt(0).toUpperCase()}
+              {nama.charAt(0).toUpperCase()}
             </div>
-            <p className="text-sm text-cream/80 truncate">{mitraName}</p>
+            <p className="text-sm text-cream/80 truncate">{nama}</p>
           </div>
         )}
         <button

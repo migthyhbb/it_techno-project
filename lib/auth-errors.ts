@@ -5,6 +5,9 @@ const errorMap: [string, string][] = [
   ["Email not confirmed", "Email belum dikonfirmasi. Cek kotak masuk email kamu."],
   ["Password should be at least", "Kata sandi minimal 6 karakter."],
   ["Unable to validate email address", "Format email tidak valid."],
+  ["Token has expired", "Kode verifikasi sudah kedaluwarsa. Kirim ulang kode."],
+  ["Invalid token", "Kode verifikasi salah. Coba periksa lagi kodenya."],
+  ["Email rate limit exceeded", "Terlalu banyak permintaan kode. Tunggu beberapa saat lalu coba lagi."],
   ["rate limit", "Terlalu banyak percobaan. Coba lagi beberapa saat lagi."],
 ];
 

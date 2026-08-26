@@ -21,7 +21,6 @@ const variants = {
   exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
 };
 
-// 1) Diubah jadi nik
 type FormState = {
   email: string;
   password: string;
@@ -39,7 +38,7 @@ export default function DaftarMitraPage() {
     email: "",
     password: "",
     nama_mitra: "",
-    nik: "", // 2) Diubah jadi nik
+    nik: "",
     alamat: "",
     telepon: "",
   });
@@ -78,7 +77,6 @@ export default function DaftarMitraPage() {
 
     setStatus("loading");
     try {
-      // 1) Buat akun + simpan profil sekaligus di server
       const res = await fetch("/api/registrasi_agen", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -86,7 +84,7 @@ export default function DaftarMitraPage() {
           email: form.email,
           password: form.password,
           namaAgen: form.nama_mitra,
-          nik: form.nik,              // 3) Mengirim dengan key "nik" ke backend
+          nik: form.nik,
           alamatLengkap: form.alamat,
           noTelepon: form.telepon
         }),
@@ -100,7 +98,6 @@ export default function DaftarMitraPage() {
         return;
       }
 
-      // 2) Login beneran di browser supaya dapat sesi asli, baru redirect.
       const supabase = createSupabaseBrowserClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: form.email,
@@ -110,7 +107,7 @@ export default function DaftarMitraPage() {
       if (signInError) throw signInError;
 
       setStatus("submitted");
-      router.push("/dashboard");
+      router.push("/dashboard/mitra"); // Redirect disesuaikan
       router.refresh();
     } catch (err) {
       setStatus("idle");
@@ -127,15 +124,11 @@ export default function DaftarMitraPage() {
         <p className="text-sm text-ink/60 space-y-1.5">
           <span className="block">
             Sudah punya akun?{" "}
-            <Link href="/masuk" className="text-green font-medium hover:underline">
-              Masuk
-            </Link>
+            <Link href="/masuk" className="text-green font-medium hover:underline">Masuk</Link>
           </span>
           <span className="block">
             Mau daftar sebagai industri?{" "}
-            <Link href="/daftar/industri" className="text-green font-medium hover:underline">
-              Klik di sini
-            </Link>
+            <Link href="/daftar/industri" className="text-green font-medium hover:underline">Klik di sini</Link>
           </span>
         </p>
       }
@@ -160,95 +153,36 @@ export default function DaftarMitraPage() {
                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
               >
                 {step === 0 && (
-                  <FormField
-                    label="Email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
-                    placeholder="nama@email.com"
-                    required
-                    autoFocus
-                  />
+                  <FormField label="Email" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} placeholder="nama@email.com" required autoFocus />
                 )}
 
                 {step === 1 && (
                   <>
                     <p className="text-sm text-ink/55 mb-4">
-                      Untuk{" "}
-                      <span className="text-forest font-medium">{form.email}</span>{" "}
-                      ·{" "}
-                      <button type="button" onClick={goBack} className="text-green hover:underline">
-                        ganti
-                      </button>
+                      Untuk <span className="text-forest font-medium">{form.email}</span> · <button type="button" onClick={goBack} className="text-green hover:underline">ganti</button>
                     </p>
-                    <FormField
-                      label="Kata sandi"
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => update("password", e.target.value)}
-                      placeholder="••••••••"
-                      minLength={6}
-                      required
-                      autoFocus
-                    />
+                    <FormField label="Kata sandi" type="password" value={form.password} onChange={(e) => update("password", e.target.value)} placeholder="••••••••" minLength={6} required autoFocus />
                   </>
                 )}
 
                 {step === 2 && (
                   <>
-                    <FormField
-                      label="Nama mitra"
-                      type="text"
-                      value={form.nama_mitra}
-                      onChange={(e) => update("nama_mitra", e.target.value)}
-                      placeholder="Nama perorangan / usaha"
-                      required
-                      autoFocus
-                    />
-                    <FormField
-                      label="NIK / NIB"
-                      type="text"
-                      value={form.nik} // 4) Diubah jadi nik
-                      onChange={(e) => update("nik", e.target.value)} // 5) Diubah jadi nik
-                      placeholder="Nomor NIK atau NIB"
-                      required
-                    />
-                    <FormField
-                      label="Alamat lengkap"
-                      type="text"
-                      value={form.alamat}
-                      onChange={(e) => update("alamat", e.target.value)}
-                      placeholder="Jalan, kota, provinsi"
-                      required
-                    />
-                    <FormField
-                      label="Nomor telepon"
-                      type="tel"
-                      value={form.telepon}
-                      onChange={(e) => update("telepon", e.target.value)}
-                      placeholder="08xxxxxxxxxx"
-                      required
-                    />
+                    <FormField label="Nama mitra" type="text" value={form.nama_mitra} onChange={(e) => update("nama_mitra", e.target.value)} placeholder="Nama perorangan / usaha" required autoFocus />
+                    <FormField label="NIK / NIB" type="text" value={form.nik} onChange={(e) => update("nik", e.target.value)} placeholder="Nomor NIK atau NIB" required />
+                    <FormField label="Alamat lengkap" type="text" value={form.alamat} onChange={(e) => update("alamat", e.target.value)} placeholder="Jalan, kota, provinsi" required />
+                    <FormField label="Nomor telepon" type="tel" value={form.telepon} onChange={(e) => update("telepon", e.target.value)} placeholder="08xxxxxxxxxx" required />
                     <TermsCheckbox checked={agreed} onChange={setAgreed} />
                   </>
                 )}
               </motion.div>
             </AnimatePresence>
 
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">
-                {error}
-              </p>
-            )}
+            {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">{error}</p>}
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 mt-4">
               {step > 0 && <BackButton onClick={goBack} />}
               <SubmitButton type="submit" disabled={status === "loading"}>
-                {step < stepLabels.length - 1
-                  ? "Lanjut"
-                  : status === "loading"
-                  ? "Memproses..."
-                  : "Daftar sebagai Mitra"}
+                {step < stepLabels.length - 1 ? "Lanjut" : status === "loading" ? "Memproses..." : "Daftar sebagai Mitra"}
               </SubmitButton>
             </div>
           </form>

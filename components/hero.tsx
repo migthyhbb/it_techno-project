@@ -52,7 +52,6 @@ export function Hero() {
         <div>
           <Reveal>
             <div className="inline-flex items-center gap-2 border border-forest/20 rounded-full px-4 py-1.5 mb-7">
-              <span className="w-1.5 h-1.5 rounded-full bg-green" />
               <span className="font-mono text-[11px] tracking-widest uppercase text-forest/80">
                 Limbah Energi Terjangkau Rakyat
               </span>
