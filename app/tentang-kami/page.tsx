@@ -192,7 +192,7 @@ export default function TentangKamiPage() {
                 Bergabung Sekarang
               </Link>
               <Link 
-                href="/#kontak" 
+                href="/kontak" 
                 className="px-8 py-3.5 bg-transparent border-2 border-paper/20 text-paper rounded-full font-medium hover:bg-paper/10 transition-colors w-full sm:w-auto"
               >
                 Hubungi Kami

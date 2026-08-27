@@ -109,7 +109,6 @@ export default function DashboardMitraPage() {
         const rawLocationText = profileData?.kota || profileData?.alamat || "";
         const userKotaClean = cleanCityName(rawLocationText);
 
-        // 3. Mapping Produk & STRICT FILTERING (Hanya yang didaftarkan ke wilayah mitra)
         const filteredProducts: DisplayProduct[] = [];
 
         rawProducts.forEach((p: any) => {
@@ -118,7 +117,6 @@ export default function DashboardMitraPage() {
             ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) || []),
           ];
 
-          // Cari apakah produk ini terdaftar khusus di kota/wilayah mitra ini
           const regionalMatch = regionalPricesList.find((rp: any) => {
             const rpKotaClean = cleanCityName(rp.kota || "");
             if (!rpKotaClean || !userKotaClean) return false;
@@ -130,7 +128,6 @@ export default function DashboardMitraPage() {
             );
           });
 
-          // HANYA MASUKKAN JIKA ADA MATCH WILAYAH!
           if (regionalMatch) {
             filteredProducts.push({
               id: p.id,
@@ -165,7 +162,6 @@ export default function DashboardMitraPage() {
     );
   }
 
-  const lowStockCount = products.filter((p) => p.stock < 25).length;
   const joinedLabel = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString("id-ID", {
         day: "numeric",
@@ -188,19 +184,13 @@ export default function DashboardMitraPage() {
           Pantau stok dan kelola profil kemitraan kamu di sini.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
             <p className="text-xs text-ink/45 mb-1">Status akun</p>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
               <p className="font-display font-semibold text-forest text-base sm:text-lg">Aktif</p>
             </div>
-          </div>
-          <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
-            <p className="text-xs text-ink/45 mb-1">Perlu di-restock</p>
-            <p className="font-display font-semibold text-forest text-base sm:text-lg">
-              {lowStockCount} item
-            </p>
           </div>
           <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
             <p className="text-xs text-ink/45 mb-1">Bergabung sejak</p>
@@ -219,7 +209,7 @@ export default function DashboardMitraPage() {
               Pesan stok
             </p>
             <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest">
-              Pesan ulang bahan energi
+              Pesan bahan energi
             </h2>
           </div>
           {(profile?.kota || profile?.alamat) && (
@@ -229,7 +219,7 @@ export default function DashboardMitraPage() {
           )}
         </div>
         <p className="text-ink/60 text-sm sm:text-base mb-6 md:mb-8 max-w-lg">
-          Pantau stok yang ada di titikmu dan ajukan permintaan stok ulang langsung ke LENTERA.
+          Pantau stok yang ada di titikmu dan ajukan permintaan stok langsung ke LENTERA.
         </p>
 
         {products.length === 0 ? (

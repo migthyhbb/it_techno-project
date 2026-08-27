@@ -88,7 +88,7 @@ export function ProductCard({ product }: ProductCardProps) {
             disabled={currentStock <= 0}
             className="flex-1 bg-forest text-cream py-2 px-3 rounded-xl text-xs font-medium hover:bg-forest/90 disabled:bg-gray-200 disabled:text-gray-400 transition-colors shadow-xs cursor-pointer"
           >
-            {currentStock > 0 ? "Pesan Ulang" : "Stok Habis"}
+            {currentStock > 0 ? "Pesan" : "Stok Habis"}
           </button>
         </div>
       </div>
