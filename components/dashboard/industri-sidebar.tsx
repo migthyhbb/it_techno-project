@@ -9,24 +9,29 @@ const navItems = [
     href: "#ringkasan",
     label: "Ringkasan",
     icon: (
-      <>
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 12 12 3l9 9" />
         <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
-      </>
+      </svg>
     ),
   },
   {
     href: "#profil-industri",
     label: "Profil Industri",
     icon: (
-      <>
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 21h18M5 21V9l6-4 6 4v12M9 21v-6h6v6" />
-      </>
+      </svg>
     ),
   },
 ];
 
-export function IndustriSidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export function IndustriSidebar({ isOpen = false, onClose }: SidebarProps) {
   const router = useRouter();
   const [nama, setNama] = useState<string | null>(null);
 
@@ -47,69 +52,87 @@ export function IndustriSidebar() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
     router.push("/masuk");
+    router.refresh();
   }
 
   return (
-    <aside className="w-64 shrink-0 bg-forest text-cream flex flex-col h-screen sticky top-0">
-      <div className="p-6 border-b border-cream/10">
-        <span className="font-display font-semibold text-lg tracking-tight">
-          LENTERA
-        </span>
-        <p className="text-xs text-cream/45 mt-1">Portal Industri</p>
-      </div>
+    <>
+      {/* Backdrop Gelap saat Mobile Sidebar Terbuka */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="md:hidden fixed inset-0 bg-ink/60 z-40 backdrop-blur-xs transition-opacity"
+        />
+      )}
 
-      <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => (
-          <a
-            key={item.href}
-            href={item.href}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="w-4 h-4 shrink-0"
-            >
-              {item.icon}
-            </svg>
-            {item.label}
-          </a>
-        ))}
-      </nav>
-
-      <div className="p-4 border-t border-cream/10">
-        {nama && (
-          <div className="flex items-center gap-3 px-2 mb-2 pb-3 border-b border-cream/10">
-            <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
-              {nama.charAt(0).toUpperCase()}
+      {/* Drawer Sidebar: Nempel rata dari ujung atas sampai ujung bawah */}
+      <aside
+        className={`fixed md:sticky top-0 left-0 bottom-0 z-50 h-screen w-72 bg-forest text-cream flex flex-col justify-between p-6 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+          isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+        }`}
+      >
+        <div>
+          {/* Header Mobile Drawer */}
+          <div className="flex items-center justify-between pb-6 mb-6 border-b border-cream/10">
+            <div>
+              <span className="font-display font-semibold text-lg tracking-tight text-cream">
+                LENTERA
+              </span>
+              <p className="text-xs text-cream/45 mt-0.5">Portal Industri</p>
             </div>
-            <p className="text-sm text-cream/80 truncate">{nama}</p>
+
+            {/* Tombol Close (X) */}
+            <button
+              onClick={onClose}
+              className="md:hidden p-1.5 rounded-lg hover:bg-cream/10 text-cream/70 hover:text-cream transition-colors"
+              aria-label="Tutup Menu"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-        )}
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors w-full"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-4 h-4 shrink-0"
+
+          {/* Menu Navigasi */}
+          <nav className="space-y-1">
+            {navItems.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-colors"
+              >
+                {item.icon}
+                {item.label}
+              </a>
+            ))}
+          </nav>
+        </div>
+
+        {/* User Info & Logout Button */}
+        <div className="pt-6 border-t border-cream/10 space-y-2">
+          {nama && (
+            <div className="flex items-center gap-3 px-3 py-2">
+              <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
+                {nama.charAt(0).toUpperCase()}
+              </div>
+              <p className="text-sm font-medium text-cream/90 truncate">{nama}</p>
+            </div>
+          )}
+
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-colors w-full text-left cursor-pointer"
           >
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <path d="M16 17 21 12 16 7" />
-            <path d="M21 12H9" />
-          </svg>
-          Keluar
-        </button>
-      </div>
-    </aside>
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17 21 12 16 7" />
+              <path d="M21 12H9" />
+            </svg>
+            Keluar
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

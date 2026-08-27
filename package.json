@@ -9,9 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@google/generative-ai": "^0.24.1",
     "@supabase/ssr": "^0.12.4",
-    "@supabase/supabase-js": "^2.112.1",
+    "@supabase/supabase-js": "^2.112.4",
     "@upstash/qstash": "^2.11.3",
     "@upstash/redis": "^1.38.2",
     "ioredis": "^5.4.1",

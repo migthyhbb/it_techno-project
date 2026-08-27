@@ -15,7 +15,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
             request,
           })
@@ -28,12 +28,9 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-
-  // PERBAIKAN: Gunakan app_metadata untuk keamanan tingkat tinggi, bukan user_metadata
-  const role = user?.app_metadata?.role;
   const url = request.nextUrl.pathname;
 
-  // Fungsi khusus untuk Redirect sambil tetap membawa Cookie Login yang sudah di-refresh
+  // Helper Redirect bawa Cookie
   const redirectSambilBawaCookie = (tujuan: string) => {
     const redirectRes = NextResponse.redirect(new URL(tujuan, request.url));
     supabaseResponse.cookies.getAll().forEach(cookie => {
@@ -42,39 +39,60 @@ export async function middleware(request: NextRequest) {
     return redirectRes;
   }
 
-  // Aturan A: Mau masuk dashboard tapi belum login? Tendang ke halaman login!
-  if (url.startsWith('/dashboard') && !user) {
+  // Aturan A: Belum login tapi mau masuk area dashboard?
+  const isDashboardRoute = url.startsWith('/dashboard') || url.startsWith('/dashboard-admin') || url.startsWith('/dashboard-industri');
+
+  if (isDashboardRoute && !user) {
     return redirectSambilBawaCookie('/masuk');
   }
 
-  // Aturan B: Orang sudah login, tapi buka halaman '/login' lagi? Kembalikan ke dashboard.
-  if (url === '/login' && user) {
-    if (role === 'agen') {
-      return redirectSambilBawaCookie('/dashboard/agen');
-    } else if (role === 'perusahaan') {
-      return redirectSambilBawaCookie('/dashboard/perusahaan');
-    } else if (role === 'admin') {
-      return redirectSambilBawaCookie('/dashboard/admin');
+  // Jika user terautentikasi, tentukan role secara dinamis dari Database
+  let role = 'mitra';
+
+  if (user) {
+    // 1. Cek Admin
+    const { data: adminRow } = await supabase
+      .from('admin_profiles')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (adminRow) {
+      role = 'admin';
+    } else {
+      // 2. Cek Industri
+      const { data: industriRow } = await supabase
+        .from('industri_profiles')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (industriRow) {
+        role = 'industri';
+      }
     }
   }
 
-  // Aturan C & D: Setiap area dashboard hanya boleh diakses oleh role yang cocok (Sistem Default Deny).
+  // Aturan B: Sudah login tapi membuka halaman /masuk atau /login
+  if ((url === '/masuk' || url === '/login') && user) {
+    if (role === 'admin') return redirectSambilBawaCookie('/dashboard-admin');
+    if (role === 'industri') return redirectSambilBawaCookie('/dashboard-industri');
+    return redirectSambilBawaCookie('/dashboard');
+  }
+
+  // Aturan C: Pemetaan area dashboard sesuai Role (Rute Fix: /dashboard-admin)
   const areaByRole: Record<string, string> = {
-    agen: '/dashboard',
-    perusahaan: '/dashboard',
-    admin: '/dashboard/admin',
+    mitra: '/dashboard',
+    industri: '/dashboard-industri',
+    admin: '/dashboard-admin',
   };
 
-  if (url.startsWith('/dashboard')) {
-    const allowedArea = role ? areaByRole[role] : undefined;
+  // Pengecekan Akses Rute Dashboard
+  if (isDashboardRoute) {
+    const allowedArea = areaByRole[role] || '/dashboard';
 
-    // Role tidak dikenal atau kosong: tolak akses ke seluruh area dashboard!
-    if (!allowedArea) {
-      return redirectSambilBawaCookie('/login');
-    }
-
-    const isAllowedPath =
-      url === allowedArea || url.startsWith(`${allowedArea}/`);
+    // Cek apakah halaman yang dibuka sesuai dengan area role user
+    const isAllowedPath = url === allowedArea || url.startsWith(`${allowedArea}/`);
 
     if (!isAllowedPath) {
       return redirectSambilBawaCookie(allowedArea);
@@ -86,7 +104,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Regex diperbaiki agar tidak memblokir rute seperti /apidocs
     '/((?!_next/static|_next/image|favicon.ico|api(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

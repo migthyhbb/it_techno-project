@@ -30,15 +30,9 @@ export function CtaFooter() {
           </Reveal>
           <Reveal delay={0.16}>
             <div className="flex flex-wrap justify-center gap-4">
-              <MagneticButton href="mailto:mitra@lentera.id" variant="primary" className="!bg-gold !text-forest hover:!bg-gold-light">
-                Hubungi Tim Mitra
+              <MagneticButton href="mailto:lentera1.idn@gmail.com" variant="primary" className="!bg-gold !text-forest hover:!bg-gold-light">
+                Hubungi Tim Kami
               </MagneticButton>
-              <a
-                href="#cara-kerja"
-                className="text-cream font-medium px-7 py-3.5 rounded-full border border-cream/30 hover:border-cream/60 transition-colors"
-              >
-                Pelajari Alurnya
-              </a>
             </div>
           </Reveal>
         </div>

@@ -14,7 +14,7 @@ export default async function Home() {
   const leaderboardEntries = await getLeaderboardEntries();
 
   return (
-    <main>
+    <main className="min-h-screen w-full max-w-[100vw] overflow-x-hidden relative bg-cream">
       <Navbar />
       <Hero />
       <HowItWorks />

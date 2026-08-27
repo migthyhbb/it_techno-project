@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { AIAssistant } from "@/components/ai-assistant";
 
 interface IndustriProfile {
   nama_perusahaan: string;
@@ -33,24 +34,27 @@ function InfoRow({
   return (
     <div className={className}>
       <p className="text-xs text-ink/45 mb-1">{label}</p>
-      <p className="text-forest font-medium">{value || "-"}</p>
+      <p className="text-forest font-medium text-sm md:text-base">{value || "-"}</p>
     </div>
   );
 }
+
+const KREDIT_PER_KG = 100;
 
 export default function DashboardIndustriPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<IndustriProfile | null>(null);
-  
-  // State untuk fitur pengiriman & tracking
+
   const [totalTerkirim, setTotalTerkirim] = useState(0);
+  const [totalKredit, setTotalKredit] = useState(0);
   const [shipments, setShipments] = useState<WasteShipment[]>([]);
-  
-  // State untuk Modal / Pop-up
+
+  // State Modal Penjemputan Limbah
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [formLimbah, setFormLimbah] = useState({
     nama_limbah: "",
     berat: "",
@@ -58,41 +62,71 @@ export default function DashboardIndustriPage() {
     foto: null as File | null,
   });
 
+  // State Modal Pencairan (Withdrawal)
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+  const [formWithdraw, setFormWithdraw] = useState({
+    jumlah_token: "",
+    metode: "Bank Transfer",
+    nomor_rekening: "",
+  });
+
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     const supabase = createSupabaseBrowserClient();
 
     const fetchTrackingData = async (userId: string) => {
-      const { data } = await supabase
+      // 1. Ambil data pengiriman limbah
+      const { data: shipmentData } = await supabase
         .from("waste_shipments")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
-      if (data) {
-        setShipments(data);
-        const total = data
+      // 2. Ambil riwayat pencairan dana
+      const { data: withdrawData } = await supabase
+        .from("pencairan_dana")
+        .select("jumlah_tarik_tunai")
+        .eq("id_agen", userId);
+
+      if (shipmentData) {
+        setShipments(shipmentData);
+        const totalKg = shipmentData
           .filter((s) => s.status.toLowerCase() === "selesai")
           .reduce((sum, s) => sum + Number(s.perkiraan_berat), 0);
-        setTotalTerkirim(total);
+
+        setTotalTerkirim(totalKg);
+
+        const grossToken = totalKg * KREDIT_PER_KG;
+        const totalDicairkan = withdrawData
+          ? withdrawData.reduce((sum, w) => sum + Number(w.jumlah_tarik_tunai), 0)
+          : 0;
+
+        const netKredit = grossToken - totalDicairkan;
+        setTotalKredit(netKredit > 0 ? netKredit : 0);
       }
     };
 
     supabase.auth.getUser().then(async ({ data }) => {
+      // Jika belum login, redirect ke halaman masuk
       if (!data.user) {
         router.replace("/masuk");
         return;
       }
       setEmail(data.user.email ?? null);
 
+      // Cek apakah data profil industri sudah diisi lengkap
       const { data: profileData } = await supabase
         .from("industri_profiles")
         .select("nama_perusahaan, npwp, alamat, telepon, created_at")
         .eq("user_id", data.user.id)
         .maybeSingle();
 
+      // JIKA PROFIL BELUM ADA (User re-fresh di tengah pendaftaran step profil)
+      // Kembalikan ke halaman pendaftaran industri untuk melengkapi data
       if (!profileData) {
-        router.replace("/masuk");
+        router.replace("/daftar/industri");
         return;
       }
 
@@ -100,7 +134,6 @@ export default function DashboardIndustriPage() {
       fetchTrackingData(data.user.id);
       setLoading(false);
 
-      // Auto-update setiap 5 menit
       intervalId = setInterval(() => {
         fetchTrackingData(data.user.id);
       }, 300000);
@@ -114,31 +147,31 @@ export default function DashboardIndustriPage() {
   async function handleKirimLimbah(e: React.FormEvent) {
     e.preventDefault();
     setIsSubmitting(true);
+    setErrorMsg(null);
 
     try {
       const supabase = createSupabaseBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) throw new Error("Sesi tidak valid");
+
+      if (!user) throw new Error("Sesi Anda telah berakhir, silakan login kembali.");
 
       let fotoUrl = "";
       if (formLimbah.foto) {
         const fileExt = formLimbah.foto.name.split('.').pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-        
+
         const { error: uploadError } = await supabase.storage
           .from('waste_images')
           .upload(`limbah/${fileName}`, formLimbah.foto);
 
         if (uploadError) {
-            alert(`Error upload foto: ${uploadError.message}. Pastikan bucket 'waste_images' sudah dibuat!`);
-            throw uploadError;
+          throw new Error(`Gagal mengunggah foto: ${uploadError.message}.`);
         }
 
         const { data: publicUrlData } = supabase.storage
           .from('waste_images')
           .getPublicUrl(`limbah/${fileName}`);
-        
+
         fotoUrl = publicUrlData.publicUrl;
       }
 
@@ -146,38 +179,82 @@ export default function DashboardIndustriPage() {
         user_id: user.id,
         nama_limbah: formLimbah.nama_limbah,
         perkiraan_berat: Number(formLimbah.berat),
-        lokasi_penjemputan: formLimbah.lokasi.toUpperCase(), // Otomatis capslock
+        lokasi_penjemputan: formLimbah.lokasi.toUpperCase(),
         foto_url: fotoUrl,
         status: "Menunggu Penjemputan",
       });
 
       if (insertError) throw insertError;
 
-      // Sukses: Reset form, tutup modal, dan perbarui data tabel
       setFormLimbah({ nama_limbah: "", berat: "", lokasi: "", foto: null });
-      setIsModalOpen(false); 
-      
+      setIsModalOpen(false);
+
       const { data: newData } = await supabase
         .from("waste_shipments")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
-      
+
       if (newData) setShipments(newData);
 
-      alert("Limbah berhasil dikirim!");
     } catch (err) {
       console.error(err);
-      // Hapus alert error generik, biarkan error Supabase yang spesifik muncul di log
+      setErrorMsg(err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan data.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  const handlePencairan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const jumlahCair = Number(formWithdraw.jumlah_token);
+
+    if (jumlahCair > totalKredit) {
+      alert("Token yang ingin dicairkan melebihi saldo tersedia!");
+      return;
+    }
+
+    setIsWithdrawing(true);
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) throw new Error("Sesi login berakhir.");
+
+      const { error: withdrawErr } = await supabase.from("pencairan_dana").insert({
+        id_agen: user.id,
+        jumlah_tarik_tunai: jumlahCair,
+        bank_tujuan: `${formWithdraw.metode} - ${formWithdraw.nomor_rekening}`,
+        status: "Selesai",
+      });
+
+      if (withdrawErr) throw withdrawErr;
+
+      setTotalKredit((prev) => prev - jumlahCair);
+      setWithdrawSuccess(true);
+
+      setTimeout(() => {
+        setWithdrawSuccess(false);
+        setIsWithdrawModalOpen(false);
+        setFormWithdraw({ jumlah_token: "", metode: "Bank Transfer", nomor_rekening: "" });
+      }, 3000);
+
+    } catch (err: any) {
+      console.error("Gagal melakukan pencairan:", err);
+      alert(`Gagal pencairan: ${err?.message || "Terjadi kesalahan pada database."}`);
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-ink/40 text-sm">Memuat...</p>
+      <div className="flex items-center justify-center min-h-screen bg-cream">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-forest border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-forest font-medium text-sm">Memuat data portal...</p>
+        </div>
       </div>
     );
   }
@@ -190,143 +267,306 @@ export default function DashboardIndustriPage() {
       })
     : "-";
 
+  const estimasiKredit = Number(formLimbah.berat || 0) * KREDIT_PER_KG;
+  const estimasiRupiah = Number(formWithdraw.jumlah_token || 0) * 500;
+
   return (
-    <div className="px-6 md:px-12 py-10 md:py-12 max-w-5xl relative">
+    <div className="px-4 sm:px-8 md:px-12 py-6 md:py-10 max-w-6xl mx-auto w-full relative">
       {/* Ringkasan */}
       <section id="ringkasan" className="scroll-mt-8 mb-10">
-        <p className="font-mono text-xs tracking-widest uppercase text-green mb-3">
+        <p className="font-mono text-[11px] tracking-widest uppercase text-green mb-2">
           Ringkasan
         </p>
-        <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest mb-2">
+        <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest mb-1.5">
           Selamat datang, {profile?.nama_perusahaan ?? "Industri"}
         </h1>
-        <p className="text-ink/60 mb-8">
+        <p className="text-ink/60 mb-6 text-sm">
           Pantau ringkasan kemitraan industri kamu dengan LENTERA di sini.
         </p>
 
-        <div className="grid sm:grid-cols-3 gap-4">
-          <div className="bg-paper rounded-2xl border border-forest/10 p-5">
-            <p className="text-xs text-ink/45 mb-1.5">Status akun</p>
-            <p className="font-display font-semibold text-forest text-lg">Aktif</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
+            <p className="text-xs text-ink/45 mb-1">Status akun</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
+              <p className="font-display font-semibold text-forest text-lg">Aktif</p>
+            </div>
           </div>
-          <div className="bg-paper rounded-2xl border border-forest/10 p-5">
-            <p className="text-xs text-ink/45 mb-1.5">Total limbah terkirim</p>
-            <p className="font-display font-semibold text-forest text-lg">
-              {totalTerkirim.toLocaleString("id-ID")} kg
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
+            <p className="text-xs text-ink/45 mb-1">Total limbah terkirim</p>
+            <p className="font-display font-semibold text-forest text-lg mt-2">
+              {totalTerkirim.toLocaleString("id-ID")} <span className="text-sm font-normal text-ink/60">kg</span>
             </p>
           </div>
-          <div className="bg-paper rounded-2xl border border-forest/10 p-5">
-            <p className="text-xs text-ink/45 mb-1.5">Bergabung sejak</p>
-            <p className="font-display font-semibold text-forest text-lg">{joinedLabel}</p>
+          
+          {/* KARTU KREDIT DENGAN TOMBOL CAIRKAN */}
+          <div className="bg-gradient-to-br from-forest to-forest/90 rounded-2xl border border-forest p-5 shadow-sm flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
+            <div className="flex justify-between items-start relative z-10">
+              <p className="text-xs text-cream/70 mb-1">Kredit Tersedia</p>
+              <button 
+                onClick={() => setIsWithdrawModalOpen(true)}
+                disabled={totalKredit <= 0}
+                className="bg-gold/20 hover:bg-gold/40 disabled:bg-gold/10 text-gold disabled:text-gold/50 text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+              >
+                Cairkan
+              </button>
+            </div>
+            <div className="flex items-end gap-1.5 mt-2 relative z-10">
+              <span className="text-gold font-display font-bold text-2xl">
+                {totalKredit.toLocaleString("id-ID")}
+              </span>
+              <span className="text-xs text-cream/70 font-medium mb-1.5 uppercase tracking-wider">Token</span>
+            </div>
+          </div>
+
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
+            <p className="text-xs text-ink/45 mb-1">Bergabung sejak</p>
+            <p className="font-display font-semibold text-forest text-lg mt-2">{joinedLabel}</p>
           </div>
         </div>
       </section>
 
       {/* Profil Industri */}
       <section id="profil-industri" className="scroll-mt-8 mb-10">
-        <h2 className="font-display font-semibold text-xl text-forest mb-6">
-          Informasi industri
+        <h2 className="font-display font-semibold text-xl text-forest mb-4">
+          Informasi Industri
         </h2>
-        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6">
-          <InfoRow label="Nama perusahaan" value={profile?.nama_perusahaan} />
-          <InfoRow label="Email" value={email} />
+        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6 shadow-xs">
+          <InfoRow label="Nama Perusahaan" value={profile?.nama_perusahaan} />
+          <InfoRow label="Email Kontak" value={email} />
           <InfoRow label="NPWP" value={profile?.npwp} />
-          <InfoRow label="Nomor telepon" value={profile?.telepon} />
-          <InfoRow label="Alamat lengkap" value={profile?.alamat} className="sm:col-span-2" />
+          <InfoRow label="Nomor Telepon" value={profile?.telepon} />
+          <InfoRow label="Alamat Lengkap" value={profile?.alamat} className="sm:col-span-2" />
         </div>
       </section>
 
-      {/* Lacak Pengiriman (Header dengan Tombol Tambah) */}
+      {/* Lacak Pengiriman */}
       <section id="lacak-pengiriman" className="scroll-mt-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <div>
-            <h2 className="font-display font-semibold text-xl text-forest mb-1">Status Pengiriman</h2>
+            <h2 className="font-display font-semibold text-xl text-forest mb-0.5">Status Pengiriman</h2>
             <p className="text-xs text-ink/60">Sistem diperbarui otomatis (Auto-update: Aktif)</p>
           </div>
           <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-forest text-paper px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-forest/90 transition-colors shadow-sm"
+            onClick={() => {
+              setErrorMsg(null);
+              setIsModalOpen(true);
+            }}
+            className="w-full sm:w-auto bg-forest text-paper px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors shadow-xs text-center flex items-center justify-center gap-2 cursor-pointer"
           >
-            + Buat Jadwal Penjemputan
+            <span>+</span> Buat Jadwal Penjemputan
           </button>
         </div>
-        
+
         {shipments.length === 0 ? (
           <div className="bg-paper rounded-2xl border border-forest/10 p-10 text-center">
-            <p className="text-ink/60">Belum ada riwayat pengiriman limbah.</p>
+            <p className="text-ink/60 text-sm">Belum ada riwayat pengiriman limbah.</p>
           </div>
         ) : (
           <div className="grid md:grid-cols-2 gap-4">
             {shipments.map((shipment) => (
-              <div key={shipment.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col">
-                <div className="flex justify-between items-start mb-3">
-                  <h5 className="font-semibold text-forest">{shipment.nama_limbah}</h5>
-                  <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full ${
+              <div key={shipment.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col justify-between shadow-xs hover:border-forest/20 transition-colors">
+                <div>
+                  <div className="flex justify-between items-start mb-3 gap-2">
+                    <h3 className="font-semibold text-forest text-base leading-snug">{shipment.nama_limbah}</h3>
+                    <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 ${
                       shipment.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green' 
-                    : shipment.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
-                    : 'bg-yellow-100 text-yellow-700'
-                  }`}>
-                    {shipment.status}
-                  </span>
+                      : shipment.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
+                      : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {shipment.status}
+                    </span>
+                  </div>
+                  <div className="text-sm text-ink/70 space-y-1.5 mb-4">
+                    <p><strong className="font-medium text-ink">Berat:</strong> {shipment.perkiraan_berat} kg</p>
+                    <p className="line-clamp-2"><strong className="font-medium text-ink">Lokasi:</strong> {shipment.lokasi_penjemputan}</p>
+                  </div>
                 </div>
-                <div className="text-sm text-ink/70 space-y-1.5 mb-4 flex-1">
-                  <p><strong className="font-medium text-ink">Berat:</strong> {shipment.perkiraan_berat} kg</p>
-                  <p><strong className="font-medium text-ink">Lokasi:</strong> {shipment.lokasi_penjemputan}</p>
+                <div className="flex justify-between items-center border-t border-forest/10 pt-3 mt-auto">
+                  <p className="text-xs text-ink/40">
+                    Dibuat: {new Date(shipment.created_at).toLocaleDateString("id-ID")}
+                  </p>
+                  {shipment.status.toLowerCase() === 'selesai' && (
+                    <p className="text-[10px] font-medium text-gold bg-gold/10 px-2 py-0.5 rounded-md">
+                      +{Number(shipment.perkiraan_berat) * KREDIT_PER_KG} Token
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-ink/40 border-t border-forest/10 pt-3 mt-auto">
-                  Dibuat pada: {new Date(shipment.created_at).toLocaleString("id-ID")}
-                </p>
               </div>
             ))}
           </div>
         )}
       </section>
 
+      {/* MODAL PENCAIRAN KREDIT */}
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col transform transition-all">
+            
+            {!withdrawSuccess ? (
+              <>
+                <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center bg-forest text-cream">
+                  <h3 className="font-display font-semibold text-lg">Pencairan Token</h3>
+                  <button onClick={() => setIsWithdrawModalOpen(false)} className="hover:text-gold transition-colors">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                <form onSubmit={handlePencairan} className="p-6 space-y-4">
+                  <div className="bg-gold/10 border border-gold/20 rounded-xl p-3 text-center mb-2">
+                    <p className="text-xs text-ink/60 mb-0.5">Saldo Tersedia</p>
+                    <p className="text-lg font-bold text-gold-dark">{totalKredit.toLocaleString("id-ID")} Token</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-ink">Jumlah Token</label>
+                    <input 
+                      type="number" 
+                      className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
+                      placeholder="Masukkan jumlah"
+                      value={formWithdraw.jumlah_token} 
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, jumlah_token: e.target.value })} 
+                      required 
+                      min="100"
+                      max={totalKredit}
+                    />
+                    <div className="flex justify-between mt-1 px-1">
+                      <p className="text-[10px] text-ink/50">Min. 100 Token</p>
+                      <p className="text-[10px] font-medium text-green">
+                        Est: Rp {estimasiRupiah.toLocaleString("id-ID")}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-ink">Pilih Tujuan Pencairan</label>
+                    <select 
+                      className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
+                      value={formWithdraw.metode}
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, metode: e.target.value })}
+                    >
+                      <option value="Bank Transfer">Bank Transfer (BCA, BNI, BRI)</option>
+                      <option value="GoPay">GoPay</option>
+                      <option value="DANA">DANA</option>
+                      <option value="OVO">OVO</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-ink">Nomor Rekening / E-Wallet</label>
+                    <input 
+                      type="text" 
+                      className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
+                      placeholder="Contoh: 081234567890"
+                      value={formWithdraw.nomor_rekening} 
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, nomor_rekening: e.target.value })} 
+                      required 
+                    />
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={isWithdrawing || !formWithdraw.jumlah_token || !formWithdraw.nomor_rekening}
+                    className="w-full bg-gold text-forest mt-2 py-2.5 rounded-xl text-sm font-bold hover:bg-gold/90 transition-colors disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isWithdrawing ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-forest border-t-transparent rounded-full animate-spin"></span>
+                        Memproses...
+                      </>
+                    ) : (
+                      "Cairkan Sekarang"
+                    )}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <div className="p-8 flex flex-col items-center justify-center text-center space-y-3">
+                <div className="w-16 h-16 bg-green/10 text-green rounded-full flex items-center justify-center mb-2">
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="font-display font-bold text-xl text-forest">Pencairan Berhasil!</h3>
+                <p className="text-sm text-ink/60">
+                  Dana sebesar <strong className="text-ink">Rp {(Number(formWithdraw.jumlah_token) * 500).toLocaleString("id-ID")}</strong> sedang diproses ke {formWithdraw.metode} kamu.
+                </p>
+              </div>
+            )}
+            
+          </div>
+        </div>
+      )}
+
       {/* POP-UP MODAL KIRIM LIMBAH */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4">
-          <div className="bg-paper rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
             
-            {/* Header Modal */}
-            <div className="sticky top-0 bg-paper z-10 px-6 py-4 border-b border-forest/10 flex justify-between items-center">
-              <h3 className="font-display font-semibold text-forest text-lg">Formulir Kirim Limbah</h3>
+            <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center shrink-0">
+              <h3 className="font-display font-semibold text-forest text-lg">Formulir Penjemputan</h3>
               <button 
                 onClick={() => setIsModalOpen(false)} 
-                className="text-ink/40 hover:text-red-500 transition-colors text-2xl leading-none"
+                className="p-1 rounded-lg hover:bg-forest/5 text-ink/40 hover:text-ink transition-colors"
+                aria-label="Tutup"
               >
-                &times;
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            {/* Body Modal / Form */}
-            <form onSubmit={handleKirimLimbah} className="p-6 space-y-4">
+            <form onSubmit={handleKirimLimbah} className="p-6 space-y-4 overflow-y-auto">
+              {errorMsg && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs leading-relaxed">
+                  {errorMsg}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Nama Limbah</label>
                 <input 
                   type="text" 
-                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2.5 focus:outline-none focus:ring-1 focus:ring-green bg-white"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white"
                   placeholder="Contoh: Limbah Plastik Cair"
                   value={formLimbah.nama_limbah} 
                   onChange={(e) => setFormLimbah({ ...formLimbah, nama_limbah: e.target.value })} 
                   required 
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Perkiraan Berat (kg)</label>
                 <input 
                   type="number" 
-                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2.5 focus:outline-none focus:ring-1 focus:ring-green bg-white"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white"
                   placeholder="0"
                   value={formLimbah.berat} 
                   onChange={(e) => setFormLimbah({ ...formLimbah, berat: e.target.value })} 
                   required 
                   min="1"
                 />
+                
+                <div className={`mt-2 p-3 rounded-xl border flex items-center justify-between transition-colors ${
+                  estimasiKredit > 0 ? 'bg-gold/10 border-gold/30' : 'bg-forest/5 border-forest/10'
+                }`}>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-ink/50 mb-0.5">Potensi Pendapatan</p>
+                    <p className="text-xs text-ink/70">Estimasi token yang didapat</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-display font-bold text-lg ${estimasiKredit > 0 ? 'text-gold-dark' : 'text-ink/40'}`}>
+                      +{estimasiKredit.toLocaleString("id-ID")}
+                    </p>
+                  </div>
+                </div>
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Detail Lokasi Penjemputan</label>
                 <textarea 
-                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2.5 focus:outline-none focus:ring-1 focus:ring-green bg-white"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white resize-none"
                   rows={3} 
                   placeholder="Jalan, No. Gedung, Patokan (Otomatis Kapital)"
                   value={formLimbah.lokasi} 
@@ -334,39 +574,49 @@ export default function DashboardIndustriPage() {
                   required 
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Limbah</label>
                 <input 
                   type="file" 
                   accept="image/png, image/jpeg, image/jpg"
-                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-green bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-green/10 file:text-green hover:file:bg-green/20"
+                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-green bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green/10 file:text-green hover:file:bg-green/20"
                   onChange={(e) => setFormLimbah({ ...formLimbah, foto: e.target.files?.[0] || null })} 
                   required 
                 />
-                <p className="text-[11px] text-ink/50 mt-1">Format: JPG, JPEG, PNG.</p>
+                <p className="text-[11px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
               </div>
 
-              {/* Footer Modal */}
-              <div className="pt-4 mt-2 border-t border-forest/10 flex justify-end gap-3">
+              <div className="pt-4 mt-2 border-t border-forest/10 flex justify-end gap-3 shrink-0">
                 <button 
                   type="button" 
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-ink/60 hover:text-ink transition-colors"
+                  className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors"
                 >
                   Batal
                 </button>
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="bg-green text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green/90 transition-colors disabled:opacity-50"
+                  className="bg-forest text-cream px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  {isSubmitting ? "Memproses..." : "Kirim Jadwal"}
+                  {isSubmitting ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-cream border-t-transparent rounded-full animate-spin"></span>
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    "Kirim Jadwal"
+                  )}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* AI Assistant Floating Widget */}
+      <AIAssistant />
     </div>
   );
 }

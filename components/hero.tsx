@@ -4,7 +4,7 @@ import Image from "next/image";
 import { motion } from "motion/react";
 import { Reveal } from "./ui/reveal";
 import { TiltCard } from "./ui/tilt-card";
-import { MagneticButton } from "./ui/magnetic-button";
+import Link from "next/link";
 
 const metrics = [
   {
@@ -12,7 +12,7 @@ const metrics = [
     value: "120",
     unit: "ton/hari",
     accent: "border-green",
-    position: "left-0 top-4 md:top-8 w-44 md:w-48",
+    position: "left-[-10px] sm:left-0 top-0 md:top-8 w-36 md:w-48",
     rotate: -6,
     delay: 0.2,
   },
@@ -21,7 +21,7 @@ const metrics = [
     value: "84",
     unit: "titik",
     accent: "border-gold",
-    position: "right-0 top-20 md:top-24 w-40 md:w-44",
+    position: "right-[-10px] sm:right-0 top-16 md:top-24 w-32 md:w-44",
     rotate: 5,
     delay: 0.7,
   },
@@ -30,7 +30,7 @@ const metrics = [
     value: "3.240",
     unit: "MWh/bln",
     accent: "border-clay",
-    position: "left-2 md:left-4 bottom-2 md:bottom-4 w-48 md:w-52",
+    position: "left-4 md:left-4 bottom-8 md:bottom-4 w-40 md:w-52",
     rotate: -4,
     delay: 1.2,
   },
@@ -39,6 +39,7 @@ const metrics = [
 export function Hero() {
   return (
     <header className="relative min-h-screen flex items-center pt-28 pb-16 px-6 md:px-10 overflow-hidden">
+      {/* Efek Glow Background */}
       <motion.div
         aria-hidden
         className="absolute w-[520px] h-[520px] rounded-full bg-green/30 blur-[80px] -top-40 -left-40"
@@ -49,6 +50,8 @@ export function Hero() {
       />
 
       <div className="max-w-7xl mx-auto w-full grid md:grid-cols-2 gap-16 items-center relative z-10">
+        
+        {/* KOLOM KIRI (Teks dan Tombol) */}
         <div>
           <Reveal>
             <div className="inline-flex items-center gap-2 border border-forest/20 rounded-full px-4 py-1.5 mb-7">
@@ -78,24 +81,42 @@ export function Hero() {
 
           <Reveal delay={0.24}>
             <div className="flex flex-wrap items-center gap-4">
-              <MagneticButton href="#kontak" variant="primary">
+              {/* Tombol Primary (Solid Hijau) */}
+              <Link
+                href="/daftar/mitra"
+                className="flex items-center gap-2 bg-forest text-cream px-8 py-3.5 rounded-full font-medium hover:bg-forest/90 transition-colors"
+              >
                 Jadi Mitra Sekarang
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M5 12h14M13 6l6 6-6 6" />
                 </svg>
-              </MagneticButton>
-              <MagneticButton href="#cara-kerja" variant="secondary">
-                Lihat Cara Kerja
-              </MagneticButton>
+              </Link>
+
+              {/* Tombol Secondary (Garis Tepi) */}
+              <Link
+                href="/daftar/industri"
+                className="bg-transparent border-2 border-forest/20 text-forest px-8 py-3.5 rounded-full font-medium hover:bg-forest/5 transition-colors"
+              >
+                Bergabung sebagai Industri
+              </Link>
             </div>
           </Reveal>
         </div>
 
+        {/* KOLOM KANAN (Karakter 3D dan Kartu Statistik) */}
         <div className="relative h-[420px] md:h-[520px] flex items-center justify-center">
+          
+          {/* Karakter 3D (Z-Index dinaikkan agar di depan) */}
           <motion.div
             animate={{ y: [0, -12, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-            className="relative z-10"
+            className="relative z-20 pointer-events-none"
           >
             <Image
               src="/images/hero-character.png"
@@ -107,12 +128,13 @@ export function Hero() {
             />
           </motion.div>
 
+          {/* Floating Cards (Z-Index diturunkan agar di belakang karakter) */}
           {metrics.map((m) => (
             <TiltCard
               key={m.label}
               rotate={m.rotate}
               delay={m.delay}
-              className={`absolute ${m.position} z-20`}
+              className={`absolute ${m.position} z-10`}
             >
               <div
                 className={`bg-paper rounded-2xl p-4 border-l-[3px] ${m.accent} shadow-[0_20px_40px_-12px_rgba(23,48,31,0.18)]`}
@@ -128,6 +150,7 @@ export function Hero() {
             </TiltCard>
           ))}
         </div>
+        
       </div>
     </header>
   );
