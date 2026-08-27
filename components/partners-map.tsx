@@ -89,7 +89,7 @@ export function PartnersMap() {
           .from("mitra_profiles")
           .select("user_id, nama_mitra, lat, lng");
         
-        console.log("Data Mitra dari Supabase:", mitraData, mitraErr);
+    
 
         if (mitraData && Array.isArray(mitraData)) {
           mitraData.forEach((m: any) => {
@@ -112,7 +112,7 @@ export function PartnersMap() {
           .from("industri_profiles")
           .select("user_id, nama_perusahaan, lat, lng");
 
-        console.log("Data Industri dari Supabase:", industriData, indErr);
+       
 
         if (industriData && Array.isArray(industriData)) {
           industriData.forEach((ind: any) => {

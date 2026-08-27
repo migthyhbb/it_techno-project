@@ -52,14 +52,11 @@ export function Navbar() {
         
         {/* Logo LENTERA */}
         <Link href="/" className="flex items-center gap-2 shrink-0" onClick={() => setIsOpen(false)}>
-          <Image 
-            src="/images/logo.png" 
-            alt="LENTERA" 
-            width={28} 
-            height={28} 
-            className="h-7 w-auto object-contain" 
-            priority 
-          />
+        <img 
+          src="/images/logo.png" 
+          alt="LENTERA" 
+          className="h-7 w-auto object-contain shrink-0" 
+        />
           <span className="font-display font-semibold text-base tracking-tight text-forest">
             LENTERA
           </span>
