@@ -1,23 +1,32 @@
 import { NextResponse } from 'next/server';
-import { createAdminClient} from '@/lib/supabase/server'; 
-
-const supabase = createAdminClient();
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { id_agen, volume_terjual_kg } = body;
+    // 1. KEAMANAN MUTLAK: Ambil ID dari Sesi Login, abaikan ID dari Front-End
+    const supabaseUser = await createClient();
+    const { data: { user } } = await supabaseUser.auth.getUser();
 
-    // 1. TANGKAL NILAI NEGATIF / NOL
-    if (!id_agen || !volume_terjual_kg || volume_terjual_kg <= 0) {
+    if (!user) {
+      return NextResponse.json({ error: "Sesi tidak valid / Belum login." }, { status: 401 });
+    }
+    const id_agen = user.id;
+
+    const body = await request.json();
+    const { volume_terjual_kg } = body;
+
+    // Tangkal Nilai Negatif
+    if (!volume_terjual_kg || Number(volume_terjual_kg) <= 0) {
       return NextResponse.json(
-        { error: "Data agen atau volume penjualan tidak valid." },
+        { error: "Volume penjualan tidak valid." },
         { status: 400 }
       );
     }
 
-    // 2. AMBIL HARGA HET TERBARU (Aman)
-    const { data: hargaData } = await supabase
+    const supabaseAdmin = createAdminClient();
+
+    // 2. AMBIL HARGA HET TERBARU
+    const { data: hargaData } = await supabaseAdmin
       .from('patokan_harga')
       .select('harga_rekomendasi_ai')
       .eq('status', 'Approved')
@@ -26,35 +35,27 @@ export async function POST(request: Request) {
       .single();
 
     const harga_per_kg = hargaData ? hargaData.harga_rekomendasi_ai : 3000;
-    const total_pendapatan = volume_terjual_kg * harga_per_kg;
+    const total_pendapatan = Number(volume_terjual_kg) * harga_per_kg;
 
-    // ==========================================
     // 3. DELEGASIKAN KE DATABASE (ATOMIC TRANSACTION)
-    // ==========================================
-    // Cek stok, potong stok, tambah saldo, dan catat ledger dilakukan 
-    // dalam 1 tarikan nafas di dalam database.
-    const { data: rpcResult, error: rpcError } = await supabase
+    const { data: rpcResult, error: rpcError } = await supabaseAdmin
       .rpc('eksekusi_kasir_atomic', {
         p_id_agen: id_agen,
-        p_volume_kg: volume_terjual_kg,
+        p_volume_kg: Number(volume_terjual_kg),
         p_harga_per_kg: harga_per_kg,
         p_total_pendapatan: total_pendapatan
       });
 
-    if (rpcError) {
-      throw rpcError;
-    }
+    if (rpcError) throw rpcError;
 
-    // Membaca balasan dari fungsi SQL
     if (!rpcResult.success) {
       return NextResponse.json(
-        { error: `Transaksi Gagal: ${rpcResult.message}` }, 
+        { error: `Transaksi Gagal: ${rpcResult.message}` },
         { status: 400 }
       );
     }
 
-    // 4. KEMBALIKAN STRUK DIGITAL KE FRONT-END
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: "Transaksi Kasir Berhasil!",
       struk_digital: {
         volume_kg: volume_terjual_kg,
@@ -65,11 +66,9 @@ export async function POST(request: Request) {
       }
     }, { status: 201 });
 
-  } catch (error: any) {
-    console.error("API POS/Order Error:", error);
-    return NextResponse.json(
-      { error: "Terjadi kesalahan internal saat memproses transaksi." }, 
-      { status: 500 }
-    );
+  } catch (_err: unknown) { // <-- Kerapian: Ganti 'any' jadi 'unknown'
+    const msg = _err instanceof Error ? _err.message : "Terjadi kesalahan internal";
+    console.error("API POS/Order Error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

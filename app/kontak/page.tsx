@@ -17,7 +17,7 @@ export default function KontakPage() {
     pesan: "",
   });
 
-  
+
   const EMAILJS_SERVICE_ID = "service_6j63tdv";
   const EMAILJS_TEMPLATE_ID = "template_4ic5usv";
   const EMAILJS_PUBLIC_KEY = "PTy_MgwBbnS8HonnN";
@@ -60,8 +60,8 @@ export default function KontakPage() {
 
       <main className="min-h-screen bg-cream pt-28 md:pt-36 pb-20">
         <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto">
-          
-          <motion.div 
+
+          <motion.div
             initial="hidden"
             animate="visible"
             variants={fadeUp}
@@ -80,8 +80,8 @@ export default function KontakPage() {
           </motion.div>
 
           <div className="grid lg:grid-cols-5 gap-10 md:gap-12 items-start">
-            
-            <motion.div 
+
+            <motion.div
               initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6 }}
@@ -89,9 +89,9 @@ export default function KontakPage() {
             >
               <div className="bg-forest rounded-3xl p-8 text-cream relative overflow-hidden shadow-lg">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-green opacity-20 blur-3xl rounded-full translate-x-1/3 -translate-y-1/3"></div>
-                
+
                 <h3 className="font-display font-semibold text-xl mb-6 text-cream">Informasi Kontak</h3>
-                
+
                 <div className="space-y-6 text-sm relative z-10">
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 rounded-xl bg-cream/10 border border-cream/20 flex items-center justify-center shrink-0 text-lg">
@@ -141,7 +141,7 @@ export default function KontakPage() {
               </div>
             </motion.div>
 
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6 }}
@@ -166,11 +166,11 @@ export default function KontakPage() {
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <h3 className="font-display font-semibold text-xl text-forest mb-2">Kirim Pesan</h3>
-                  
+
                   <div className="grid sm:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs font-medium text-ink/70 mb-2">Nama Lengkap</label>
-                      <input 
+                      <input
                         type="text"
                         required
                         placeholder="Masukkan nama kamu"
@@ -181,7 +181,7 @@ export default function KontakPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-ink/70 mb-2">Alamat Email</label>
-                      <input 
+                      <input
                         type="email"
                         required
                         placeholder="nama@email.com"
@@ -194,7 +194,7 @@ export default function KontakPage() {
 
                   <div>
                     <label className="block text-xs font-medium text-ink/70 mb-2">Subjek / Topik</label>
-                    <input 
+                    <input
                       type="text"
                       required
                       placeholder="Contoh: Pertanyaan Kemitraan Limbah Sawit"
@@ -206,7 +206,7 @@ export default function KontakPage() {
 
                   <div>
                     <label className="block text-xs font-medium text-ink/70 mb-2">Pesan Anda</label>
-                    <textarea 
+                    <textarea
                       required
                       rows={5}
                       placeholder="Tuliskan detail pertanyaan atau penawaran kerja sama..."

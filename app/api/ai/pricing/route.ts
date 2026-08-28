@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const authHeader = request.headers.get('authorization');
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json(
-        { error: "Akses Ditolak. Endpoint ini hanya untuk sistem otomatisasi (CRON)." }, 
+        { error: "Akses Ditolak. Endpoint ini hanya untuk sistem otomatisasi (CRON)." },
         { status: 401 }
       );
     }
@@ -25,14 +25,14 @@ export async function GET(request: Request) {
     // 2. ANALISIS PASAR OLEH GEMINI AI
     // ==========================================
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
+
     // Prompt ini bisa abang modifikasi nanti dengan menyuntikkan cuaca asli atau total stok gudang
     const prompt = `
       Kamu adalah AI Economist untuk platform Waste-to-Energy di Palembang.
       Tugasmu adalah menentukan Harga Eceran Tertinggi (HET) produk olahan hari ini.
       Kondisi hari ini: Permintaan stabil, pasokan limbah cukup baik.
       Hasilkan rentang harga dalam Rupiah (kisaran Rp 2.500 - Rp 4.500 per Kg).
-      
+
       Jawab HANYA dalam format JSON murni tanpa markdown, ikuti struktur ini:
       {
         "harga_rekomendasi_ai": 3200,
@@ -44,11 +44,11 @@ export async function GET(request: Request) {
 
     const result = await model.generateContent(prompt);
     let responseText = result.response.text().trim();
-    
+
     if (responseText.startsWith('```json')) {
       responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
     }
-    
+
     const aiData = JSON.parse(responseText);
 
     // ==========================================
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
       insight_pasar: aiData.alasan
     }, { status: 200 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("AI Pricing CRON Error:", error);
     return NextResponse.json({ error: "Gagal memproses Dynamic Pricing." }, { status: 500 });
   }

@@ -455,7 +455,7 @@ export default function DaftarMitraPage() {
       await supabase.auth.refreshSession();
       setStatus("submitted");
       router.refresh();
-      window.location.href = "/dashboard";
+      router.push("/dashboard");
     } catch (err) {
       setStatus("idle");
       setError(formatHumanFriendlyError(err));

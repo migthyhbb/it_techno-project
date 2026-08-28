@@ -18,21 +18,21 @@ export function Navbar() {
 
   // Logika kondisional item menu berdasarkan pathname aktif
   const links = [
-    { 
-      href: pathname === "/tentang-kami" ? "/" : "/tentang-kami", 
-      label: pathname === "/tentang-kami" ? "Beranda" : "Tentang Kami" 
+    {
+      href: pathname === "/tentang-kami" ? "/" : "/tentang-kami",
+      label: pathname === "/tentang-kami" ? "Beranda" : "Tentang Kami"
     },
-    { 
-      href: pathname === "/edukasi" ? "/" : "/edukasi", 
-      label: pathname === "/edukasi" ? "Beranda" : "Edukasi" 
+    {
+      href: pathname === "/edukasi" ? "/" : "/edukasi",
+      label: pathname === "/edukasi" ? "Beranda" : "Edukasi"
     },
-    { 
-      href: pathname === "/daftar-mitra-industri" ? "/" : "/daftar-mitra-industri", 
-      label: pathname === "/daftar-mitra-industri" ? "Beranda" : "Daftar Mitra & Industri" 
+    {
+      href: pathname === "/daftar-mitra-industri" ? "/" : "/daftar-mitra-industri",
+      label: pathname === "/daftar-mitra-industri" ? "Beranda" : "Daftar Mitra & Industri"
     },
-    { 
-      href: pathname === "/kontak" ? "/" : "/kontak", 
-      label: pathname === "/kontak" ? "Beranda" : "Kontak" 
+    {
+      href: pathname === "/kontak" ? "/" : "/kontak",
+      label: pathname === "/kontak" ? "Beranda" : "Kontak"
     },
   ];
 
@@ -49,13 +49,15 @@ export function Navbar() {
       }`}
     >
       <div className="w-full max-w-7xl mx-auto px-6 md:px-10 h-20 flex items-center justify-between relative z-50">
-        
+
         {/* Logo LENTERA */}
         <Link href="/" className="flex items-center gap-2 shrink-0" onClick={() => setIsOpen(false)}>
-        <img 
-          src="/images/logo.png" 
-          alt="LENTERA" 
-          className="h-7 w-auto object-contain shrink-0" 
+        <Image
+          src="/images/logo.png"
+          alt="LENTERA"
+          width={120}
+          height={28}
+          className="h-7 w-auto object-contain shrink-0"
         />
           <span className="font-display font-semibold text-base tracking-tight text-forest">
             LENTERA
@@ -115,13 +117,13 @@ export function Navbar() {
                 <Link
                   key={link.label}
                   href={link.href}
-                  onClick={() => setIsOpen(false)} 
+                  onClick={() => setIsOpen(false)}
                   className="text-lg font-medium text-forest hover:text-green transition-colors py-3 border-b border-forest/10"
                 >
                   {link.label}
                 </Link>
               ))}
-              
+
               {/* Tombol Auth di Mobile */}
               <div className="flex flex-col gap-3 mt-6">
                 <Link

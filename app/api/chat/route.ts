@@ -6,33 +6,19 @@ export async function POST(req: Request) {
     const { message } = await req.json();
     const apiKey = process.env.GEMINI_API_KEY;
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { reply: "API Key Gemini belum dipasang di .env.local!" },
-        { status: 500 }
-      );
-    }
+    if (!apiKey) return NextResponse.json({ reply: "API Key Gemini belum dipasang!" }, { status: 500 });
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.6-flash",
-      systemInstruction:
-        "Kamu adalah Asisten AI LENTERA, platform pengelolaan limbah industri menjadi bahan bakar energi terbarukan (biogas, bioetanol). " +
-        "Tugasmu membantu Mitra dan Industri menjawab pertanyaan seputar pengolahan limbah, sistem token kredit (1 kg limbah = 100 token), " +
-        "prosedur penjemputan limbah, pemesanan stok bahan energi, dan pencairan token. Jawablah dengan ramah, jelas, dan profesional dalam Bahasa Indonesia. " +
-        "SANGAT PENTING: Jangan pernah menggunakan format markdown seperti tanda bintang double (**), hashtag (#), atau simbol format teks lainnya dalam jawabanmu. Gunakan teks polos biasa.",
+      model: "gemini-1.5-flash",
+      systemInstruction: "Kamu adalah Asisten AI LENTERA..."
     });
 
     const result = await model.generateContent(message);
-    const reply = result.response.text();
-
-    return NextResponse.json({ reply });
-  } catch (error: any) {
-    console.error("Gemini SDK Error:", error);
-    return NextResponse.json(
-      { reply: `Gagal memproses AI: ${error?.message || "Terjadi kesalahan"}` },
-      { status: 500 }
-    );
+    return NextResponse.json({ reply: result.response.text() });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Terjadi kesalahan pada AI";
+    console.error("Gemini SDK Error:", msg);
+    return NextResponse.json({ reply: `Gagal memproses AI: ${msg}` }, { status: 500 });
   }
 }

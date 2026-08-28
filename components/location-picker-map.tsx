@@ -30,8 +30,9 @@ export function LocationPickerMap({ searchQuery, onLocationSelect }: LocationPic
       mapRef.current = null;
     }
 
-    if ((containerRef.current as any)._leaflet_id) {
-      (containerRef.current as any)._leaflet_id = null;
+    const leafletContainer = containerRef.current as HTMLDivElement & { _leaflet_id?: number };
+    if (leafletContainer._leaflet_id) {
+      leafletContainer._leaflet_id = undefined;
     }
 
     let isMounted = true;
@@ -90,6 +91,7 @@ export function LocationPickerMap({ searchQuery, onLocationSelect }: LocationPic
         mapRef.current = null;
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-Fly & Simpan Lat/Lng Otomatis saat dropdown Wilayah dipilih
@@ -139,6 +141,7 @@ export function LocationPickerMap({ searchQuery, onLocationSelect }: LocationPic
     }, 600);
 
     return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
 
   return (

@@ -41,10 +41,12 @@ export function CtaFooter() {
       <footer className="px-6 md:px-10 py-12 bg-forest-2 text-cream/60 text-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2.5">
-          <img 
-            src="/images/logo.png" 
-            alt="LENTERA" 
-            className="h-7 w-auto object-contain shrink-0" 
+          <Image
+            src="/images/logo.png"
+            alt="LENTERA"
+            width={120}
+            height={28}
+            className="h-7 w-auto object-contain shrink-0"
           />
             <span className="font-display font-medium text-cream">LENTERA</span>
           </div>

@@ -461,7 +461,7 @@ export default function DaftarIndustriPage() {
       await supabase.auth.refreshSession();
       setStatus("submitted");
       router.refresh();
-      window.location.href = "/dashboard-industri";
+      router.push("/dashboard-industri");
     } catch (err) {
       setStatus("idle");
       setError(formatHumanFriendlyError(err));

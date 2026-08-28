@@ -13,6 +13,14 @@ interface MapPoint {
   lng: number;
 }
 
+interface PartnerMapRecord {
+  user_id?: string;
+  nama_mitra?: string;
+  nama_perusahaan?: string;
+  lat?: number | string | null;
+  lng?: number | string | null;
+}
+
 const networkColors = {
   industri: "#8B5A2B",
   mitra: "#10B981",
@@ -44,7 +52,7 @@ const fixedPengolahanPoints: MapPoint[] = [
 
 export function PartnersMap() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<LeafletMap | null>(null); 
+  const mapRef = useRef<LeafletMap | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -53,8 +61,9 @@ export function PartnersMap() {
       mapRef.current.remove();
       mapRef.current = null;
     }
-    if ((containerRef.current as any)._leaflet_id) {
-      (containerRef.current as any)._leaflet_id = null;
+    const leafletContainer = containerRef.current as HTMLDivElement & { _leaflet_id?: number };
+    if (leafletContainer._leaflet_id) {
+      leafletContainer._leaflet_id = undefined;
     }
 
     let cancelled = false;
@@ -85,14 +94,14 @@ export function PartnersMap() {
 
       try {
         // Fetch Mitra (Pakai user_id)
-        const { data: mitraData, error: mitraErr } = await supabase
+        const { data: mitraData } = await supabase
           .from("mitra_profiles")
           .select("user_id, nama_mitra, lat, lng");
-        
-    
+
+
 
         if (mitraData && Array.isArray(mitraData)) {
-          mitraData.forEach((m: any) => {
+          mitraData.forEach((m: PartnerMapRecord) => {
             const lat = parseFloat(String(m.lat));
             const lng = parseFloat(String(m.lng));
             if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
@@ -108,14 +117,14 @@ export function PartnersMap() {
         }
 
         // Fetch Industri (Pakai user_id)
-        const { data: industriData, error: indErr } = await supabase
+        const { data: industriData } = await supabase
           .from("industri_profiles")
           .select("user_id, nama_perusahaan, lat, lng");
 
-       
+
 
         if (industriData && Array.isArray(industriData)) {
-          industriData.forEach((ind: any) => {
+          industriData.forEach((ind: PartnerMapRecord) => {
             const lat = parseFloat(String(ind.lat));
             const lng = parseFloat(String(ind.lng));
             if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {

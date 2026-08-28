@@ -50,7 +50,7 @@ export function Hero() {
       />
 
       <div className="max-w-7xl mx-auto w-full grid md:grid-cols-2 gap-16 items-center relative z-10">
-        
+
         {/* KOLOM KIRI (Teks dan Tombol) */}
         <div>
           <Reveal>
@@ -111,7 +111,7 @@ export function Hero() {
 
         {/* KOLOM KANAN (Karakter 3D dan Kartu Statistik) */}
         <div className="relative h-[420px] md:h-[520px] flex items-center justify-center">
-          
+
           {/* Karakter 3D (Z-Index dinaikkan agar di depan) */}
           <motion.div
             animate={{ y: [0, -12, 0] }}
@@ -150,7 +150,7 @@ export function Hero() {
             </TiltCard>
           ))}
         </div>
-        
+
       </div>
     </header>
   );

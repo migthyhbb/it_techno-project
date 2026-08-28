@@ -14,6 +14,7 @@ function BackControl() {
     // asal (form daftar) masih utuh di tab satunya. Tombolnya jadi "Tutup
     // tab ini" supaya user balik ke situ, bukan navigasi ke beranda dan
     // kehilangan progres form-nya.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOpenedInNewTab(!!window.opener);
   }, []);
 

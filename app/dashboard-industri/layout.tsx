@@ -30,9 +30,9 @@ export default function DashboardIndustriLayout({
       </div>
 
       {/* Sidebar Component langsung mengontrol posisi slide-in dan backdrop-nya */}
-      <IndustriSidebar 
-        isOpen={isMobileOpen} 
-        onClose={() => setIsMobileOpen(false)} 
+      <IndustriSidebar
+        isOpen={isMobileOpen}
+        onClose={() => setIsMobileOpen(false)}
       />
 
       {/* Area Konten Utama */}

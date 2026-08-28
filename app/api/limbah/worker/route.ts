@@ -5,69 +5,52 @@ import { createAdminClient } from '@/lib/supabase/server';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// ==========================================
-// FUNGSI UTAMA WORKER
-// ==========================================
 async function handler(request: Request) {
   try {
     const supabase = createAdminClient();
-    const body = await request.json();
-    const { id_perusahaan, deskripsi_input, berat_kg } = body;
+    const { user_id, deskripsi_input, berat_kg, lokasi, foto_url } = await request.json();
 
-    // 1. TANYA GEMINI AI
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `
-      Analisis limbah pabrik ini: "${deskripsi_input}".
-      Apakah ini masuk kategori limbah Berbahaya & Beracun (B3) atau bisa didaur ulang biasa (NON_B3)?
-      Jawab dalam format JSON murni:
-      {
-        "kategori": "B3",
-        "jalur_proses": "FORWARD_PIHAK_3",
-        "alasan": "Mengandung bahan kimia berbahaya"
-      }
-      ATAU
-      {
-        "kategori": "NON_B3",
-        "jalur_proses": "IN_HOUSE",
-        "alasan": "Bisa diolah menjadi briket/kompos"
-      }
-    `;
+    // 1. Prompt Gemini AI (Paksa format JSON ketat)
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      generationConfig: { responseMimeType: "application/json" } // Fitur baru Gemini: Anti gagal JSON!
+    });
+
+    const prompt = `Analisis limbah: "${deskripsi_input}". Apakah ini Berbahaya (B3) atau bisa didaur ulang biasa (NON_B3)? Jawab dengan format JSON: {"kategori": "B3" atau "NON_B3", "jalur_proses": "FORWARD_PIHAK_3" atau "IN_HOUSE", "alasan": "..."}`;
 
     const result = await model.generateContent(prompt);
-    let responseText = result.response.text().trim();
-    if (responseText.startsWith('```json')) {
-      responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    }
-    const aiData = JSON.parse(responseText);
+    const aiData = JSON.parse(result.response.text());
 
-    // 2. SIMPAN HASIL KEPUTUSAN AI KE DATABASE
-    const { error: insertError } = await supabase
-      .from('transaksi_limbah')
-      .insert([{
-        id_perusahaan,
-        deskripsi_input,
-        berat_kg,
-        kategori: aiData.kategori,
-        jalur_proses: aiData.jalur_proses,
-        status: 'menunggu_penjemputan'
-      }]);
+    // 2. Hitung Tagihan vs Poin
+    const isB3 = aiData.kategori === 'B3';
+    const totalTagihan = isB3 ? (berat_kg * 50000) : 0; // Rp 50.000 per kg untuk B3
+    const poinDidapat = isB3 ? 0 : Math.round(berat_kg * 10);
+    const statusAwal = isB3 ? 'menunggu_pembayaran' : 'menunggu_konfirmasi';
 
-    if (insertError) throw new Error("Gagal insert hasil AI ke Supabase");
+    // 3. Simpan Keputusan ke Tabel Utama
+    const { error: insertError } = await supabase.from('waste_shipments').insert([{
+      user_id: user_id,
+      nama_limbah: deskripsi_input,
+      perkiraan_berat: berat_kg,
+      lokasi_penjemputan: lokasi,
+      foto_url: foto_url,
+      kategori: aiData.kategori,
+      jalur_proses: aiData.jalur_proses,
+      keputusan_ai: aiData.alasan,
+      total_biaya: totalTagihan,
+      poin_didapat: poinDidapat,
+      status: statusAwal
+    }]);
 
-    // Catatan: Jika AI memutuskan NON_B3, abang bisa sisipkan kodingan Redis ZINCRBY di sini
-    // persis seperti yang kita buat di API setoran-limbah sebelumnya.
+    if (insertError) throw insertError;
 
-    return NextResponse.json({ success: true, ai_decision: aiData });
+    return NextResponse.json({ success: true });
 
-  } catch (error: any) {
-    console.error("Worker AI Error:", error);
-    // Jika kita return error (500), QStash tahu ini gagal dan akan mencoba lagi (Retry)
-    return NextResponse.json({ error: "Gagal memproses AI" }, { status: 500 });
+ } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Gagal memproses AI";
+    console.error("Worker AI Error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
-// ==========================================
-// MIDDLEWARE KEAMANAN QSTASH
-// ==========================================
-// Bungkus handler dengan verifySignature agar hacker tidak bisa tembak URL ini
 export const POST = verifySignatureAppRouter(handler);

@@ -81,7 +81,7 @@ export function AIAssistant() {
       {/* WINDOW CHAT AI */}
       {isOpen && (
         <div className="mb-4 w-80 sm:w-96 bg-paper rounded-2xl border border-forest/10 shadow-2xl overflow-hidden flex flex-col h-[480px] max-h-[80vh] transition-all animate-in fade-in slide-in-from-bottom-4">
-          
+
           {/* Header */}
           <div className="bg-forest text-cream p-4 flex justify-between items-center shrink-0">
             <div className="flex items-center gap-2.5">

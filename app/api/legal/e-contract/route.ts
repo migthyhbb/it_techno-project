@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 export async function PATCH() {
   try {
     const supabase = await createClient();
-    
+
     // 1. Pastikan yang menekan tombol ini sudah login
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -46,8 +46,9 @@ export async function PATCH() {
       waktu_persetujuan: waktuSekarang
     }, { status: 200 });
 
-  } catch (err: unknown) {
-    console.error('Error memproses E-Contract:', err);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown server error';
+    console.error('Error memproses E-Contract:', message);
     return NextResponse.json(
       { error: 'Terjadi kesalahan saat memproses E-Contract.' },
       { status: 500 }

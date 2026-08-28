@@ -3,12 +3,12 @@ import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
-    
+
     // 1. Parsing body dengan aman
     let body: unknown;
     try {
       body = await request.json();
-    } catch (err) {
+    } catch {
       return NextResponse.json({ error: 'Body request tidak valid' }, { status: 400 });
     }
 
@@ -43,11 +43,11 @@ export async function POST(request: Request) {
     if (error) {
       if (error.status === 429) {
         return NextResponse.json(
-          { error: 'Terlalu banyak percobaan. Silakan coba lagi nanti.' }, 
+          { error: 'Terlalu banyak percobaan. Silakan coba lagi nanti.' },
           { status: 429 }
         );
       }
-      
+
       if (error.status && error.status >= 500) {
         console.error('Supabase auth error:', error.message);
         return NextResponse.json(
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       }
 
       return NextResponse.json(
-        { error: 'Email atau password salah!' }, 
+        { error: 'Email atau password salah!' },
         { status: 401 }
       );
     }
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     // --- 5. TAMBAHAN BARU: PENGECEKAN STATUS VERIFIKASI ADMIN ---
     if (role === 'agen' || role === 'perusahaan') {
       const tableName = role === 'agen' ? 'agen' : 'perusahaan_industri';
-      
+
       // Cek status di tabel profil
       const { data: profileData, error: profileError } = await supabase
         .from(tableName)
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       if (profileData.status_verifikasi !== 'approved') {
         await supabase.auth.signOut(); // Kick user karena belum di-acc
         return NextResponse.json(
-          { error: 'Akun Anda belum disetujui oleh Admin. Harap tunggu proses verifikasi.' }, 
+          { error: 'Akun Anda belum disetujui oleh Admin. Harap tunggu proses verifikasi.' },
           { status: 403 }
         );
       }
@@ -95,18 +95,18 @@ export async function POST(request: Request) {
 
     // 6. Kembalikan data ke Frontend jika lulus semua pengecekan
     return NextResponse.json(
-      { 
-        message: 'Login berhasil!', 
-        role: role, 
-        userId: user.id 
+      {
+        message: 'Login berhasil!',
+        role: role,
+        userId: user.id
       },
       { status: 200 }
     );
-    
-  } catch (err: unknown) { 
+
+  } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown server error';
     console.error("System Error:", message);
-    
+
     return NextResponse.json(
       { error: 'Terjadi kesalahan sistem, silakan coba lagi nanti.' },
       { status: 500 }

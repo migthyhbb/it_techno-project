@@ -27,6 +27,23 @@ interface DisplayProduct {
   isRegional: boolean;
 }
 
+interface RegionalPrice {
+  product_id: string;
+  kota?: string;
+  harga?: number;
+  harga_min?: number;
+  stok?: number;
+}
+
+interface RawProduct {
+  id: string;
+  nama_produk: string;
+  deskripsi: string;
+  satuan: string;
+  harga_default: number;
+  regional_product_prices?: RegionalPrice[];
+}
+
 function InfoRow({
   label,
   value,
@@ -111,13 +128,13 @@ export default function DashboardMitraPage() {
 
         const filteredProducts: DisplayProduct[] = [];
 
-        rawProducts.forEach((p: any) => {
+        rawProducts.forEach((p: RawProduct) => {
           const regionalPricesList = [
             ...(p.regional_product_prices || []),
             ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) || []),
           ];
 
-          const regionalMatch = regionalPricesList.find((rp: any) => {
+          const regionalMatch = regionalPricesList.find((rp: RegionalPrice) => {
             const rpKotaClean = cleanCityName(rp.kota || "");
             if (!rpKotaClean || !userKotaClean) return false;
 
@@ -229,7 +246,7 @@ export default function DashboardMitraPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
             {products.map((p) => (
-              <ProductCard key={p.id} product={p as any} />
+              <ProductCard key={p.id} product={p} />
             ))}
           </div>
         )}

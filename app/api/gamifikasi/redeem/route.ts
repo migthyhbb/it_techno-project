@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { Redis } from '@upstash/redis';
 
 const redis = new Redis({
@@ -15,68 +15,64 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { jumlah_poin, metode_pencairan } = body;
+    const poinNumber = Number(jumlah_poin);
 
-    if (!jumlah_poin || jumlah_poin < 100) {
-      return NextResponse.json({ error: "Minimal penukaran adalah 100 Poin Eco-Credits." }, { status: 400 });
+    if (!poinNumber || poinNumber < 100) {
+      return NextResponse.json({ error: "Minimal penukaran 100 Token." }, { status: 400 });
     }
 
-
-    // 1. Cek Saldo Poin Saat Ini di Database
+    // 1. BACA SALDO SAAT INI DULU (Buat hitung-hitungan)
     const { data: profile } = await supabase
-      .from('perusahaan') // atau 'agen', sesuaikan dengan tabel profil
-      .select('eco-credits')
-      .eq('auth_id', user.id)
+      .from('industri_profiles')
+      .select('saldo_kredit')
+      .eq('user_id', user.id)
       .single();
 
-    // 🛠️ PERBAIKAN: Beritahu TypeScript bentuk asli datanya
-    const profileData = profile as { 'eco-credits': number } | null;
-    
-    // Sekarang TypeScript tidak akan protes lagi!
-    const saldoSekarang = profileData?.['eco-credits'] || 0;
+    const saldoSekarang = profile?.saldo_kredit || 0;
 
-    if (saldoSekarang < jumlah_poin) {
-      return NextResponse.json({ error: "Poin Eco-Credits tidak mencukupi!" }, { status: 400 });
+    if (saldoSekarang < poinNumber) {
+      return NextResponse.json({ error: "Token tidak mencukupi!" }, { status: 400 });
     }
 
-    if (saldoSekarang < jumlah_poin) {
-      return NextResponse.json({ error: "Poin Eco-Credits tidak mencukupi!" }, { status: 400 });
-    }
+    // 2. ATOMIC TRANSACTION (ANTI RACE-CONDITION)
+    // Cuma mau update KALAU saldonya masih benar-benar cukup saat query ini jalan (mencegah bot multi-klik)
+    const supabaseAdmin = createAdminClient();
+    const saldoBaru = saldoSekarang - poinNumber;
 
-    // 2. ATOMIC TRANSACTION: Potong Saldo & Catat Riwayat
-    const saldoBaru = saldoSekarang - jumlah_poin;
-
-    const { error: updateError } = await supabase
-      .from('perusahaan')
-      .update({ 'eco-credits': saldoBaru })
-      .eq('auth_id', user.id);
+    const { data: updatedProfile, error: updateError } = await supabaseAdmin
+      .from('industri_profiles')
+      .update({ saldo_kredit: saldoBaru })
+      .eq('user_id', user.id)
+      .gte('saldo_kredit', poinNumber) // JURUS SAKTI: Pastikan saldo di DB >= jumlah poin yang dicairkan
+      .select('saldo_kredit')
+      .maybeSingle();
 
     if (updateError) throw updateError;
 
-    // Catat ke tabel riwayat (Opsional tapi penting untuk audit)
-    await supabase.from('riwayat_redeem').insert([{
-      auth_id: user.id,
-      poin_dipotong: jumlah_poin,
-      metode: metode_pencairan, // e.g., 'Transfer Bank', 'Voucher Briket'
-      status: 'diproses'
+    if (!updatedProfile) {
+      // Kalau nilainya kosong, berarti filter .gte() di atas gagal (saldo sudah ditarik di request lain)
+      return NextResponse.json({ error: "Transaksi digagalkan. Saldo berubah." }, { status: 409 });
+    }
+
+    // 3. Catat Riwayat Pencairan (Supaya bisa di-audit)
+    await supabaseAdmin.from('pencairan_dana').insert([{
+      id_agen: user.id,
+      jumlah_tarik_tunai: poinNumber,
+      bank_tujuan: metode_pencairan,
+      status: 'Selesai'
     }]);
 
-    // 3. SINKRONISASI KE REDIS LEADERBOARD (Turunkan Peringkatnya!)
-    // Menggunakan angka negatif untuk mengurangi score di Sorted Set Redis
-    await redis.zincrby('eco_credits_leaderboard', -Math.abs(jumlah_poin), user.id);
+    // 4. SINKRONISASI KE REDIS LEADERBOARD (Turunkan Peringkatnya secara real-time)
+    await redis.zincrby('eco_credits_leaderboard', -Math.abs(poinNumber), user.id);
 
-    return NextResponse.json({ 
-      message: `Berhasil menukar ${jumlah_poin} poin! Permintaan sedang diproses tim keuangan.`,
-      sisa_poin: saldoBaru
+    return NextResponse.json({
+      message: `Berhasil menukar ${poinNumber} token!`,
+      sisa_poin: updatedProfile.saldo_kredit
     }, { status: 200 });
 
-  } catch (error: unknown) { // <-- PERBAIKAN DI SINI: ganti 'any' jadi 'unknown'
-    // PERBAIKAN PENGOLAHAN ERROR
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    console.error("Redeem API Error:", errorMessage);
-    
-    return NextResponse.json(
-      { error: "Gagal memproses penukaran poin." }, 
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Terjadi kesalahan internal";
+    console.error("Redeem API Error:", msg);
+    return NextResponse.json({ error: "Gagal memproses penukaran poin." }, { status: 500 });
   }
 }

@@ -1,80 +1,97 @@
 "use client";
 
 import { useState } from "react";
-import type { MitraProduct } from "@/lib/mitra-products";
 
-function stockLevel(stock: number) {
-  if (stock >= 60) return { label: "Stok aman", cls: "bg-green/10 text-green" };
-  if (stock >= 25) return { label: "Stok menipis", cls: "bg-gold/15 text-gold" };
-  return { label: "Segera pesan", cls: "bg-clay/10 text-clay" };
+interface ProductCardProps {
+  product: {
+    id: string;
+    nama_produk?: string;
+    deskripsi?: string;
+    harga_default?: number;
+    price?: number;
+    satuan?: string;
+    unit?: string;
+    stok_dummy?: number;
+    stok?: number;
+    stock?: number;
+  };
 }
 
-export function ProductCard({ product }: { product: MitraProduct }) {
-  const [qty, setQty] = useState(1);
-  const [status, setStatus] = useState<"idle" | "sent">("idle");
-  const level = stockLevel(product.stock);
+export function ProductCard({ product }: ProductCardProps) {
+  const [quantity, setQuantity] = useState(1);
+  const [status, setStatus] = useState<"idle" | "loading" | "sent">("idle");
 
-  function handleOrder() {
-    setStatus("sent");
-    // TODO: kirim permintaan stok ulang ke API sungguhan (mis. POST /api/pesanan)
-    setTimeout(() => setStatus("idle"), 2500);
+  const title = product.nama_produk || "Produk Energi";
+  const price = product.price ?? product.harga_default ?? 0;
+  const unit = product.unit || product.satuan || "unit";
+  const currentStock = product.stock ?? product.stok ?? product.stok_dummy ?? 0;
+
+  const handleDecrease = () => quantity > 1 && setQuantity(quantity - 1);
+  const handleIncrease = () => quantity < currentStock && setQuantity(quantity + 1);
+
+  async function handleOrder() {
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/transaksi/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          volume_terjual_kg: quantity,
+          produk_id: product.id
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal memproses pesanan.");
+
+      setStatus("sent");
+      alert(`Berhasil memesan ${quantity} ${unit} ${title}!`);
+      window.location.reload(); // Refresh untuk update stok UI
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Gagal terhubung ke server.";
+      alert(msg);
+      setStatus("idle");
+    }
   }
 
   return (
-    <div className="bg-paper rounded-2xl border border-forest/10 p-6">
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="min-w-0">
-          <p className="font-display font-semibold text-forest leading-snug">
-            {product.name}
-          </p>
-          <p className="text-xs text-ink/50 mt-0.5">{product.category}</p>
+    <div className="bg-paper p-5 rounded-2xl border border-forest/10 flex flex-col justify-between shadow-xs relative">
+      <div>
+        <div className="flex justify-between items-start mb-2 gap-2">
+          <h3 className="font-display font-semibold text-forest text-lg">{title}</h3>
+          <span className="text-[11px] font-mono font-medium bg-gold/15 text-gold-dark px-2.5 py-1 rounded-md shrink-0">
+            {currentStock} {unit}
+          </span>
         </div>
-        <span
-          className={`shrink-0 text-[11px] font-mono px-2.5 py-1 rounded-full whitespace-nowrap ${level.cls}`}
-        >
-          {product.stock} {product.unit}
-        </span>
+        <p className="text-xs text-ink/60 mb-4 line-clamp-2">
+          {product.deskripsi || "Bahan bakar energi terbarukan."}
+        </p>
       </div>
 
-      <p className="font-mono text-lg font-semibold text-forest mb-1">
-        Rp {product.price.toLocaleString("id-ID")}
-        <span className="text-xs text-ink/45 font-body font-normal">
-          {" "}
-          / {product.unit}
-        </span>
-      </p>
-      <p className="text-[11px] text-ink/40 mb-5">{level.label}</p>
+      <div className="border-t border-forest/10 pt-4 space-y-4">
+        <div>
+          <p className="text-[10px] text-ink/45 uppercase tracking-wider">Harga Wilayah</p>
+          <p className="font-semibold text-green text-base">
+            Rp {price.toLocaleString("id-ID")} <span className="text-xs font-normal text-ink/50">/{unit}</span>
+          </p>
+        </div>
 
-      <div className="flex items-center gap-3">
-        <div className="flex items-center border border-forest/15 rounded-full shrink-0">
+        <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center border border-forest/20 rounded-xl bg-white overflow-hidden shrink-0">
+            <button type="button" onClick={handleDecrease} disabled={quantity <= 1 || status !== "idle"} className="px-2.5 py-1.5 text-forest hover:bg-forest/5 disabled:opacity-30 text-xs font-bold transition-colors cursor-pointer">-</button>
+            <span className="px-2 py-1.5 text-xs font-semibold text-forest min-w-[1.75rem] text-center">{quantity}</span>
+            <button type="button" onClick={handleIncrease} disabled={quantity >= currentStock || status !== "idle"} className="px-2.5 py-1.5 text-forest hover:bg-forest/5 disabled:opacity-30 text-xs font-bold transition-colors cursor-pointer">+</button>
+          </div>
+
           <button
             type="button"
-            onClick={() => setQty((q) => Math.max(1, q - 1))}
-            aria-label="Kurangi jumlah"
-            className="w-8 h-8 flex items-center justify-center text-forest hover:bg-forest/5 rounded-full transition-colors"
+            onClick={handleOrder}
+            disabled={currentStock <= 0 || status !== "idle"}
+            className="flex-1 bg-forest text-cream py-2 px-3 rounded-xl text-xs font-medium hover:bg-forest/90 disabled:bg-gray-200 disabled:text-gray-400 transition-colors shadow-xs cursor-pointer"
           >
-            −
-          </button>
-          <span className="w-7 text-center text-sm font-mono text-forest">
-            {qty}
-          </span>
-          <button
-            type="button"
-            onClick={() => setQty((q) => q + 1)}
-            aria-label="Tambah jumlah"
-            className="w-8 h-8 flex items-center justify-center text-forest hover:bg-forest/5 rounded-full transition-colors"
-          >
-            +
+            {status === "loading" ? "Memproses..." : status === "sent" ? "Terkirim ✓" : currentStock > 0 ? "Pesan" : "Stok Habis"}
           </button>
         </div>
-        <button
-          type="button"
-          onClick={handleOrder}
-          disabled={status === "sent"}
-          className="flex-1 bg-forest text-cream rounded-full py-2.5 text-sm font-medium transition-colors hover:bg-forest-2 disabled:opacity-70"
-        >
-          {status === "sent" ? "Permintaan terkirim ✓" : "Pesan Ulang"}
-        </button>
       </div>
     </div>
   );

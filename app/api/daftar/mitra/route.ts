@@ -4,19 +4,19 @@ import { translateAuthError } from "@/lib/auth-errors";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { 
-    email, 
-    password, 
-    nama_mitra, 
-    nik_nib, 
-    alamat, 
+  const {
+    email,
+    password,
+    nama_mitra,
+    nik_nib,
+    alamat,
     telepon,
     provinsi,
     kota_kabupaten,
     kecamatan,
     kelurahan,
     lat,
-    lng 
+    lng
   } = body;
 
   if (!email || !password || !nama_mitra || !nik_nib || !alamat || !telepon) {

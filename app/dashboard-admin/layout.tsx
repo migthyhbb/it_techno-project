@@ -30,9 +30,9 @@ export default function DashboardAdminLayout({
       </div>
 
       {/* Sidebar Admin dengan fitur Slide-in Mobile */}
-      <AdminSidebar 
-        isOpen={isMobileOpen} 
-        onClose={() => setIsMobileOpen(false)} 
+      <AdminSidebar
+        isOpen={isMobileOpen}
+        onClose={() => setIsMobileOpen(false)}
       />
 
       {/* Area Konten Utama */}

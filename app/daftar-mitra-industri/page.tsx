@@ -51,7 +51,7 @@ export default function DaftarMitraIndustriPage() {
 
       <main className="min-h-screen bg-cream pt-28 md:pt-36 pb-20">
         <section className="px-4 sm:px-6 md:px-12 lg:px-24 max-w-7xl mx-auto">
-          
+
           {/* HEADER */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}

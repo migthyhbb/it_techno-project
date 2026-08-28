@@ -28,9 +28,9 @@ export default function TentangKamiPage() {
         {/* Hero Section dengan Gambar */}
         <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-20 md:mb-32 pt-4 md:pt-10">
           <div className="flex flex-col md:flex-row items-center gap-10 md:gap-16">
-            
+
             {/* Sisi Kiri: Teks */}
-            <motion.div 
+            <motion.div
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, margin: "-50px" }}
@@ -50,7 +50,7 @@ export default function TentangKamiPage() {
             </motion.div>
 
             {/* Sisi Kanan: Gambar Karakter 3D */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9, x: 30 }}
               whileInView={{ opacity: 1, scale: 1, x: 0 }}
               viewport={{ once: true }}
@@ -60,9 +60,9 @@ export default function TentangKamiPage() {
               <div className="relative w-full max-w-[480px] aspect-square">
                 {/* Efek Glow di belakang gambar */}
                 <div className="absolute inset-0 bg-green/10 blur-[60px] rounded-full transform -translate-y-10 scale-90 z-0"></div>
-                <Image 
-                  src="/images/character-tentang-kami.png" 
-                  alt="Tim Lentera" 
+                <Image
+                  src="/images/character-tentang-kami.png"
+                  alt="Tim Lentera"
                   fill
                   className="object-contain relative z-10 drop-shadow-xl"
                   priority
@@ -74,7 +74,7 @@ export default function TentangKamiPage() {
 
         {/* Visi & Misi */}
         <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-20 md:mb-32">
-          <motion.div 
+          <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: "-100px" }}
@@ -123,7 +123,7 @@ export default function TentangKamiPage() {
 
         {/* Nilai Inti */}
         <section className="px-6 md:px-12 lg:px-24 max-w-6xl mx-auto mb-20 md:mb-32">
-          <motion.h2 
+          <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -132,7 +132,7 @@ export default function TentangKamiPage() {
             Nilai yang Kami Pegang
           </motion.h2>
 
-          <motion.div 
+          <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
@@ -153,8 +153,8 @@ export default function TentangKamiPage() {
                 desc: "Membangun sinergi kuat antara pabrik, agen mitra, dan masyarakat untuk kemajuan bersama.",
               },
             ].map((item, idx) => (
-              <motion.div 
-                key={idx} 
+              <motion.div
+                key={idx}
                 variants={fadeUp}
                 className="bg-cream border border-forest/10 rounded-2xl p-6 md:p-8 hover:bg-white transition-colors shadow-sm hover:shadow-md"
               >
@@ -167,7 +167,7 @@ export default function TentangKamiPage() {
 
         {/* CTA Pendek */}
         <section className="px-6 max-w-4xl mx-auto text-center">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
@@ -177,7 +177,7 @@ export default function TentangKamiPage() {
             {/* Ornamen dekoratif */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-green opacity-20 blur-[80px] rounded-full translate-x-1/2 -translate-y-1/2"></div>
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-clay opacity-20 blur-[60px] rounded-full -translate-x-1/2 translate-y-1/2"></div>
-            
+
             <h2 className="font-display font-semibold text-3xl md:text-4xl text-paper mb-6 relative z-10">
               Mari Menjadi Bagian dari Perubahan
             </h2>
@@ -185,14 +185,14 @@ export default function TentangKamiPage() {
               Gabung bersama ratusan industri dan mitra lainnya untuk mewujudkan kemandirian energi nasional.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 relative z-10">
-              <Link 
-                href="/daftar" 
+              <Link
+                href="/daftar"
                 className="px-8 py-3.5 bg-green text-paper rounded-full font-medium hover:bg-green/90 transition-colors w-full sm:w-auto"
               >
                 Bergabung Sekarang
               </Link>
-              <Link 
-                href="/kontak" 
+              <Link
+                href="/kontak"
                 className="px-8 py-3.5 bg-transparent border-2 border-paper/20 text-paper rounded-full font-medium hover:bg-paper/10 transition-colors w-full sm:w-auto"
               >
                 Hubungi Kami

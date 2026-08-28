@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
-    
+
     // 1. Pastikan user sudah login
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -39,10 +39,11 @@ export async function GET(request: Request) {
       orders: riwayat || []
     }, { status: 200 });
 
-  } catch (error: any) {
-    console.error("Riwayat API Error:", error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error("Riwayat API Error:", message);
     return NextResponse.json(
-      { error: "Gagal mengambil riwayat transaksi dari server." }, 
+      { error: "Gagal mengambil riwayat transaksi dari server." },
       { status: 500 }
     );
   }

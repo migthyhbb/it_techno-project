@@ -29,32 +29,20 @@ create policy "Public read access" on leaderboard_entries
 create table if not exists mitra_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   nama_mitra text not null,
-<<<<<<< HEAD
-  nik_nib text not null,
-  alamat text not null,
-  telepon text not null,
-=======
   nik_nib text not null check (nik_nib ~ '^[0-9]{13}$' or nik_nib ~ '^[0-9]{16}$'),
   alamat text not null check (length(trim(alamat)) >= 15),
   telepon text not null check (telepon ~ '^(\+62|62|0)8[1-9][0-9]{6,10}$'),
   email text,
->>>>>>> 1094697608cc23516703167884d2e91517c75c99
   created_at timestamptz not null default now()
 );
 
 create table if not exists industri_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   nama_perusahaan text not null,
-<<<<<<< HEAD
-  npwp text not null,
-  alamat text not null,
-  telepon text not null,
-=======
   npwp text not null check (npwp ~ '^[0-9]{15}$' or npwp ~ '^[0-9]{16}$'),
   alamat text not null check (length(trim(alamat)) >= 15),
   telepon text not null check (telepon ~ '^(\+62|62|0)8[1-9][0-9]{6,10}$'),
   email text,
->>>>>>> 1094697608cc23516703167884d2e91517c75c99
   created_at timestamptz not null default now()
 );
 
@@ -71,8 +59,6 @@ create policy "Industri bisa insert profil sendiri" on industri_profiles
   for insert with check (auth.uid() = user_id);
 create policy "Industri bisa baca profil sendiri" on industri_profiles
   for select using (auth.uid() = user_id);
-<<<<<<< HEAD
-=======
 
 -- ============================================================
 -- Admin — TIDAK ada form pendaftaran publik untuk ini. Bikin manual:
@@ -183,4 +169,3 @@ create policy "Admin bisa update semua pengiriman" on waste_shipments
   for update using (
     exists (select 1 from admin_profiles where admin_profiles.user_id = auth.uid())
   );
->>>>>>> 1094697608cc23516703167884d2e91517c75c99

@@ -27,9 +27,9 @@ export default function EdukasiPage() {
         {/* HERO SECTION */}
         <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-28">
           <div className="flex flex-col md:flex-row items-center gap-10 md:gap-16">
-            
+
             {/* Teks Hero */}
-            <motion.div 
+            <motion.div
               initial="hidden"
               animate="visible"
               variants={staggerContainer}
@@ -53,7 +53,7 @@ export default function EdukasiPage() {
             </motion.div>
 
             {/* Karakter 3D Animasi & Card */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.8, ease: "easeOut" }}
@@ -61,16 +61,16 @@ export default function EdukasiPage() {
             >
               {/* Efek Glow */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[260px] h-[260px] md:w-[400px] md:h-[400px] bg-gold/20 blur-[70px] rounded-full z-0"></div>
-              
+
               {/* Container Gambar Karakter */}
               <motion.div
                 animate={{ y: [0, -12, 0] }}
                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                 className="relative z-10 w-full aspect-square flex items-center justify-center"
               >
-                <Image 
-                  src="/images/edukasi-character.png" 
-                  alt="Karakter Edukasi LENTERA" 
+                <Image
+                  src="/images/edukasi-character.png"
+                  alt="Karakter Edukasi LENTERA"
                   width={380}
                   height={380}
                   className="object-contain w-full h-auto drop-shadow-2xl"
@@ -79,7 +79,7 @@ export default function EdukasiPage() {
               </motion.div>
 
               {/* Float Card Hiasan (Diposisikan aman di bawah karakter pada mobile, absolute di desktop) */}
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4, duration: 0.5 }}
@@ -95,7 +95,7 @@ export default function EdukasiPage() {
 
         {/* SECTION MATERI: JENIS LIMBAH */}
         <section id="materi" className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-28 scroll-mt-28">
-          <motion.div 
+          <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
@@ -106,7 +106,7 @@ export default function EdukasiPage() {
             <p className="text-ink/70 text-sm md:text-base max-w-2xl mx-auto px-4">Kenali berbagai macam limbah industri yang memiliki potensi besar untuk dikonversi menjadi energi alternatif pengganti batu bara.</p>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
@@ -133,8 +133,8 @@ export default function EdukasiPage() {
                 icon: "🏭"
               }
             ].map((item, i) => (
-              <motion.div 
-                key={i} 
+              <motion.div
+                key={i}
                 variants={fadeUp}
                 className="bg-paper rounded-3xl p-6 sm:p-8 border border-forest/10 shadow-xs hover:shadow-md transition-shadow"
               >
@@ -150,7 +150,7 @@ export default function EdukasiPage() {
 
         {/* SECTION: ALUR KONVERSI */}
         <section className="px-6 md:px-12 lg:px-24 max-w-5xl mx-auto mb-16 md:mb-28">
-          <motion.div 
+          <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: "-50px" }}
@@ -158,13 +158,13 @@ export default function EdukasiPage() {
             className="bg-forest rounded-[2.5rem] md:rounded-[3rem] p-8 sm:p-12 md:p-16 text-cream relative overflow-hidden shadow-lg"
           >
             <div className="absolute top-0 right-0 w-64 h-64 bg-green opacity-20 blur-[80px] rounded-full translate-x-1/2 -translate-y-1/2"></div>
-            
+
             <div className="text-center mb-10 md:mb-14 relative z-10">
               <h2 className="font-display font-semibold text-2xl sm:text-3xl md:text-4xl mb-3">Bagaimana Prosesnya?</h2>
               <p className="text-cream/70 text-sm md:text-base">Tiga tahap utama mengubah sisa industri menjadi energi terjangkau.</p>
             </div>
 
-            <motion.div 
+            <motion.div
               variants={staggerContainer}
               initial="hidden"
               whileInView="visible"
@@ -212,7 +212,7 @@ export default function EdukasiPage() {
             </div>
           </motion.div>
         </section>
-        
+
       </main>
     </>
   );

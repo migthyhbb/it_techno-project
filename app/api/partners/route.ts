@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase-client";
 
+interface PartnerRecord {
+  id?: string;
+  nama?: string;
+  nama_mitra?: string;
+  nama_lengkap?: string;
+  nama_perusahaan?: string;
+  nama_industri?: string;
+  name?: string;
+  alamat?: string;
+  lokasi?: string;
+  alamat_lengkap?: string;
+  alamat_perusahaan?: string;
+  created_at?: string;
+}
+
 export async function GET() {
   try {
     // 1. Fetch data dari tabel mitra_profiles
@@ -22,7 +37,7 @@ export async function GET() {
     }
 
     // 3. Mapping data mitra
-    const formattedMitra = (mitraData || []).map((item: any) => ({
+    const formattedMitra = (mitraData || []).map((item: PartnerRecord) => ({
       id: item.id,
       nama: item.nama || item.nama_mitra || item.nama_lengkap || item.name || "Mitra Tanpa Nama",
       alamat: item.alamat || item.lokasi || item.alamat_lengkap || "Lokasi belum diisi",
@@ -37,7 +52,7 @@ export async function GET() {
     }));
 
     // 4. Mapping data industri
-    const formattedIndustri = (industriData || []).map((item: any) => ({
+    const formattedIndustri = (industriData || []).map((item: PartnerRecord) => ({
       id: item.id,
       nama: item.nama || item.nama_perusahaan || item.nama_industri || item.name || "Industri Tanpa Nama",
       alamat: item.alamat || item.lokasi || item.alamat_perusahaan || "Lokasi belum diisi",
@@ -55,7 +70,8 @@ export async function GET() {
     const combinedData = [...formattedMitra, ...formattedIndustri];
 
     return NextResponse.json(combinedData);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

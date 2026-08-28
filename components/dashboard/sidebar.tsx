@@ -58,7 +58,7 @@ export function DashboardSidebar() {
           .eq("auth_id", data.user.id)
           .maybeSingle();
         if (profile?.nama_agen) namaTampil = profile.nama_agen;
-      } 
+      }
       else if (role === 'perusahaan') {
         const { data: profile } = await supabase
           .from("perusahaan_industri")

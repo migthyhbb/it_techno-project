@@ -47,7 +47,6 @@ function Block({ x, w, yTop, accent, label, fontSize }: BlockSpec) {
   const A = `${x},${yTop}`;
   const B = `${x + w},${yTop}`;
   const C = `${x + w},${yBase}`;
-  const D = `${x},${yBase}`;
   const Ad = `${x + DX},${yTop + DY}`;
   const Bd = `${x + w + DX},${yTop + DY}`;
   const Cd = `${x + w + DX},${yBase + DY}`;

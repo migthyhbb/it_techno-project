@@ -46,12 +46,12 @@ export default function DashboardAdminPage() {
   const [newStatus, setNewStatus] = useState("");
 
   const [priceModalOpen, setPriceModalOpen] = useState(false);
-  const [formPrice, setFormPrice] = useState({ 
-    product_id: "", 
-    provinsi: "", 
-    kota: "", 
-    harga: "", 
-    stok: "" 
+  const [formPrice, setFormPrice] = useState({
+    product_id: "",
+    provinsi: "",
+    kota: "",
+    harga: "",
+    stok: ""
   });
 
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -94,7 +94,7 @@ export default function DashboardAdminPage() {
         .from("waste_shipments")
         .select(`*, industri_profiles(nama_perusahaan, telepon)`)
         .order("created_at", { ascending: false });
-      if (shipData) setShipments(shipData as any);
+      if (shipData) setShipments(shipData as unknown as Shipment[]);
 
       const { data: productData } = await supabase
         .from("products")
@@ -106,7 +106,7 @@ export default function DashboardAdminPage() {
         .from("regional_product_prices")
         .select(`*, products(nama_produk, satuan)`)
         .order("kota", { ascending: true });
-      if (priceData) setRegionalPrices(priceData as any);
+      if (priceData) setRegionalPrices(priceData as unknown as RegionalProductPrice[]);
 
       setLoading(false);
     };
@@ -234,7 +234,7 @@ export default function DashboardAdminPage() {
         <div className="grid sm:grid-cols-3 gap-4">
           {products.map((p) => (
             <div key={p.id} className="bg-paper border border-forest/10 p-5 rounded-2xl flex flex-col relative group shadow-xs">
-              <button 
+              <button
                 onClick={() => handleDeleteProduct(p.id)}
                 className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium"
               >
@@ -263,7 +263,7 @@ export default function DashboardAdminPage() {
           {regionalPrices.length === 0 && <div className="col-span-3 p-6 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">Belum ada pengaturan wilayah.</div>}
           {regionalPrices.map((rp) => (
             <div key={rp.id} className="bg-paper rounded-2xl border border-forest/10 p-5 relative group shadow-xs">
-              <button 
+              <button
                 onClick={() => handleDeleteRegionalPrice(rp.id)}
                 className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium"
               >
@@ -318,8 +318,8 @@ export default function DashboardAdminPage() {
                       </span>
                     </td>
                     <td className="p-4 text-center">
-                      <button 
-                        onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }} 
+                      <button
+                        onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }}
                         className="text-green hover:underline text-xs font-medium"
                       >
                         Ubah Status
@@ -360,11 +360,11 @@ export default function DashboardAdminPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-ink mb-1">Kota / Kab</label>
-                  <select 
-                    className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase disabled:bg-gray-100 outline-none bg-white" 
+                  <select
+                    className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase disabled:bg-gray-100 outline-none bg-white"
                     value={formPrice.kota}
-                    onChange={(e) => setFormPrice((prev) => ({ ...prev, kota: e.target.options[e.target.selectedIndex].text }))} 
-                    disabled={cities.length === 0} 
+                    onChange={(e) => setFormPrice((prev) => ({ ...prev, kota: e.target.options[e.target.selectedIndex].text }))}
+                    disabled={cities.length === 0}
                     required
                   >
                     <option value="">KOTA/KAB</option>

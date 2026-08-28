@@ -25,7 +25,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const title = product.nama || product.nama_produk || "Produk Energi";
   const price = product.price ?? product.harga_default ?? 0;
   const unit = product.unit || product.satuan || "unit";
-  
+
   // Ambil stok dari regional_product_prices (stock / stok)
   const currentStock = product.stock ?? product.stok ?? product.stok_dummy ?? 0;
 

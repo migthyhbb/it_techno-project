@@ -175,16 +175,18 @@ export default function DashboardIndustriPage() {
         fotoUrl = publicUrlData.publicUrl;
       }
 
-      const { error: insertError } = await supabase.from("waste_shipments").insert({
-        user_id: user.id,
-        nama_limbah: formLimbah.nama_limbah,
-        perkiraan_berat: Number(formLimbah.berat),
-        lokasi_penjemputan: formLimbah.lokasi.toUpperCase(),
-        foto_url: fotoUrl,
-        status: "Menunggu Penjemputan",
+      const response = await fetch("/api/limbah/setoran-limbah", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deskripsi_input: formLimbah.nama_limbah,
+          berat_kg: Number(formLimbah.berat),
+          lokasi: formLimbah.lokasi.toUpperCase(),
+          foto_url: fotoUrl,
+        }),
       });
-
-      if (insertError) throw insertError;
+      const responseData = await response.json();
+      if (!response.ok) throw new Error(responseData.error || "Gagal menyimpan data limbah.");
 
       setFormLimbah({ nama_limbah: "", berat: "", lokasi: "", foto: null });
       setIsModalOpen(false);
@@ -217,19 +219,16 @@ export default function DashboardIndustriPage() {
     setIsWithdrawing(true);
 
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) throw new Error("Sesi login berakhir.");
-
-      const { error: withdrawErr } = await supabase.from("pencairan_dana").insert({
-        id_agen: user.id,
-        jumlah_tarik_tunai: jumlahCair,
-        bank_tujuan: `${formWithdraw.metode} - ${formWithdraw.nomor_rekening}`,
-        status: "Selesai",
+      const response = await fetch("/api/gamifikasi/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jumlah_poin: jumlahCair,
+          metode_pencairan: `${formWithdraw.metode} - ${formWithdraw.nomor_rekening}`,
+        }),
       });
-
-      if (withdrawErr) throw withdrawErr;
+      const responseData = await response.json();
+      if (!response.ok) throw new Error(responseData.error || "Gagal memproses pencairan.");
 
       setTotalKredit((prev) => prev - jumlahCair);
       setWithdrawSuccess(true);
@@ -240,9 +239,10 @@ export default function DashboardIndustriPage() {
         setFormWithdraw({ jumlah_token: "", metode: "Bank Transfer", nomor_rekening: "" });
       }, 3000);
 
-    } catch (err: any) {
-      console.error("Gagal melakukan pencairan:", err);
-      alert(`Gagal pencairan: ${err?.message || "Terjadi kesalahan pada database."}`);
+    } catch (error: unknown) {
+      console.error("Gagal melakukan pencairan:", error);
+      const message = error instanceof Error ? error.message : "Terjadi kesalahan pada database.";
+      alert(`Gagal pencairan: ${message}`);
     } finally {
       setIsWithdrawing(false);
     }
@@ -298,13 +298,13 @@ export default function DashboardIndustriPage() {
               {totalTerkirim.toLocaleString("id-ID")} <span className="text-sm font-normal text-ink/60">kg</span>
             </p>
           </div>
-          
+
           {/* KARTU KREDIT DENGAN TOMBOL CAIRKAN */}
           <div className="bg-gradient-to-br from-forest to-forest/90 rounded-2xl border border-forest p-5 shadow-sm flex flex-col justify-between relative overflow-hidden group">
             <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
             <div className="flex justify-between items-start relative z-10">
               <p className="text-xs text-cream/70 mb-1">Kredit Tersedia</p>
-              <button 
+              <button
                 onClick={() => setIsWithdrawModalOpen(true)}
                 disabled={totalKredit <= 0}
                 className="bg-gold/20 hover:bg-gold/40 disabled:bg-gold/10 text-gold disabled:text-gold/50 text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-full transition-colors cursor-pointer"
@@ -348,7 +348,7 @@ export default function DashboardIndustriPage() {
             <h2 className="font-display font-semibold text-xl text-forest mb-0.5">Status Pengiriman</h2>
             <p className="text-xs text-ink/60">Sistem diperbarui otomatis (Auto-update: Aktif)</p>
           </div>
-          <button 
+          <button
             onClick={() => {
               setErrorMsg(null);
               setIsModalOpen(true);
@@ -371,7 +371,7 @@ export default function DashboardIndustriPage() {
                   <div className="flex justify-between items-start mb-3 gap-2">
                     <h3 className="font-semibold text-forest text-base leading-snug">{shipment.nama_limbah}</h3>
                     <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 ${
-                      shipment.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green' 
+                      shipment.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
                       : shipment.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
                       : 'bg-amber-100 text-amber-800'
                     }`}>
@@ -403,7 +403,7 @@ export default function DashboardIndustriPage() {
       {isWithdrawModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
           <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col transform transition-all">
-            
+
             {!withdrawSuccess ? (
               <>
                 <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center bg-forest text-cream">
@@ -421,13 +421,13 @@ export default function DashboardIndustriPage() {
 
                   <div>
                     <label className="block text-xs font-medium mb-1.5 text-ink">Jumlah Token</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
                       placeholder="Masukkan jumlah"
-                      value={formWithdraw.jumlah_token} 
-                      onChange={(e) => setFormWithdraw({ ...formWithdraw, jumlah_token: e.target.value })} 
-                      required 
+                      value={formWithdraw.jumlah_token}
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, jumlah_token: e.target.value })}
+                      required
                       min="100"
                       max={totalKredit}
                     />
@@ -441,7 +441,7 @@ export default function DashboardIndustriPage() {
 
                   <div>
                     <label className="block text-xs font-medium mb-1.5 text-ink">Pilih Tujuan Pencairan</label>
-                    <select 
+                    <select
                       className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
                       value={formWithdraw.metode}
                       onChange={(e) => setFormWithdraw({ ...formWithdraw, metode: e.target.value })}
@@ -455,18 +455,18 @@ export default function DashboardIndustriPage() {
 
                   <div>
                     <label className="block text-xs font-medium mb-1.5 text-ink">Nomor Rekening / E-Wallet</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
                       placeholder="Contoh: 081234567890"
-                      value={formWithdraw.nomor_rekening} 
-                      onChange={(e) => setFormWithdraw({ ...formWithdraw, nomor_rekening: e.target.value })} 
-                      required 
+                      value={formWithdraw.nomor_rekening}
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, nomor_rekening: e.target.value })}
+                      required
                     />
                   </div>
 
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={isWithdrawing || !formWithdraw.jumlah_token || !formWithdraw.nomor_rekening}
                     className="w-full bg-gold text-forest mt-2 py-2.5 rounded-xl text-sm font-bold hover:bg-gold/90 transition-colors disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500 flex items-center justify-center gap-2 cursor-pointer"
                   >
@@ -494,7 +494,7 @@ export default function DashboardIndustriPage() {
                 </p>
               </div>
             )}
-            
+
           </div>
         </div>
       )}
@@ -503,11 +503,11 @@ export default function DashboardIndustriPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
           <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-            
+
             <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center shrink-0">
               <h3 className="font-display font-semibold text-forest text-lg">Formulir Penjemputan</h3>
-              <button 
-                onClick={() => setIsModalOpen(false)} 
+              <button
+                onClick={() => setIsModalOpen(false)}
                 className="p-1 rounded-lg hover:bg-forest/5 text-ink/40 hover:text-ink transition-colors"
                 aria-label="Tutup"
               >
@@ -526,28 +526,28 @@ export default function DashboardIndustriPage() {
 
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Nama Limbah</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white"
                   placeholder="Contoh: Limbah Plastik Cair"
-                  value={formLimbah.nama_limbah} 
-                  onChange={(e) => setFormLimbah({ ...formLimbah, nama_limbah: e.target.value })} 
-                  required 
+                  value={formLimbah.nama_limbah}
+                  onChange={(e) => setFormLimbah({ ...formLimbah, nama_limbah: e.target.value })}
+                  required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Perkiraan Berat (kg)</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white"
                   placeholder="0"
-                  value={formLimbah.berat} 
-                  onChange={(e) => setFormLimbah({ ...formLimbah, berat: e.target.value })} 
-                  required 
+                  value={formLimbah.berat}
+                  onChange={(e) => setFormLimbah({ ...formLimbah, berat: e.target.value })}
+                  required
                   min="1"
                 />
-                
+
                 <div className={`mt-2 p-3 rounded-xl border flex items-center justify-between transition-colors ${
                   estimasiKredit > 0 ? 'bg-gold/10 border-gold/30' : 'bg-forest/5 border-forest/10'
                 }`}>
@@ -565,38 +565,38 @@ export default function DashboardIndustriPage() {
 
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Detail Lokasi Penjemputan</label>
-                <textarea 
+                <textarea
                   className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white resize-none"
-                  rows={3} 
+                  rows={3}
                   placeholder="Jalan, No. Gedung, Patokan (Otomatis Kapital)"
-                  value={formLimbah.lokasi} 
-                  onChange={(e) => setFormLimbah({ ...formLimbah, lokasi: e.target.value.toUpperCase() })} 
-                  required 
+                  value={formLimbah.lokasi}
+                  onChange={(e) => setFormLimbah({ ...formLimbah, lokasi: e.target.value.toUpperCase() })}
+                  required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Limbah</label>
-                <input 
-                  type="file" 
+                <input
+                  type="file"
                   accept="image/png, image/jpeg, image/jpg"
                   className="block w-full text-sm text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-green bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green/10 file:text-green hover:file:bg-green/20"
-                  onChange={(e) => setFormLimbah({ ...formLimbah, foto: e.target.files?.[0] || null })} 
-                  required 
+                  onChange={(e) => setFormLimbah({ ...formLimbah, foto: e.target.files?.[0] || null })}
+                  required
                 />
                 <p className="text-[11px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
               </div>
 
               <div className="pt-4 mt-2 border-t border-forest/10 flex justify-end gap-3 shrink-0">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors"
                 >
                   Batal
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isSubmitting}
                   className="bg-forest text-cream px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
