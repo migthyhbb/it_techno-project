@@ -1,14 +1,34 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 import { translateAuthError } from "@/lib/auth-errors";
+import { validateOfficialDocumentImage } from "@/lib/kyc-validation";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { email, password, nama_perusahaan, npwp, alamat, telepon } = body;
+  const { email, password, nama_perusahaan, npwp, alamat, telepon, dokumen_url } = body;
 
   if (!email || !password || !nama_perusahaan || !npwp || !alamat || !telepon) {
     return NextResponse.json(
       { error: "Semua kolom wajib diisi." },
+      { status: 400 }
+    );
+  }
+
+  const imageUrl = dokumen_url || body.foto_npwp_url || null;
+  if (!imageUrl) {
+    return NextResponse.json(
+      { error: "Dokumen KYC wajib diunggah sebelum pendaftaran." },
+      { status: 400 }
+    );
+  }
+
+  const isKycApproved = await validateOfficialDocumentImage(imageUrl);
+  if (!isKycApproved) {
+    return NextResponse.json(
+      {
+        error:
+          "Verifikasi KYC Gagal: Sistem mendeteksi foto yang diunggah bukan dokumen resmi (KTP/NIB) yang valid.",
+      },
       { status: 400 }
     );
   }

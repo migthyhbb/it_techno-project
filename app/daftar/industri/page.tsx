@@ -744,7 +744,11 @@ export default function DaftarIndustriPage() {
 
             <div className="flex gap-3">
               {step > 0 && <BackButton onClick={goBack} />}
-              <SubmitButton type="submit" disabled={status === "loading"}>
+              <SubmitButton
+                type="submit"
+                disabled={status === "loading"}
+                isSubmitting={status === "loading"}
+              >
                 {status === "loading"
                   ? "Memproses..."
                   : step === 0
