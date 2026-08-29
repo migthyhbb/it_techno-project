@@ -10,9 +10,10 @@ const redis = new Redis({
 });
 
 const ratelimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(5, '10 s'),
-  prefix: 'transaksi-order',
+  redis: Redis.fromEnv(),
+  // Mode Galak: Maksimal cuma boleh 2 kali klik dalam 1 Menit per IP!
+  limiter: Ratelimit.slidingWindow(2, "60 s"),
+  analytics: true,
 });
 
 export async function POST(request: Request) {
