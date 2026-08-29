@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { ProductCard } from "./product-card";
+import { ProductCard } from "@/components/dashboard/product-card";
 import { AIAssistant } from "@/components/ai-assistant";
 
 interface MitraProfile {

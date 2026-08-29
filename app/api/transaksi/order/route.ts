@@ -1,74 +1,59 @@
 import { NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
+import midtransClient from 'midtrans-client';
 
 export async function POST(request: Request) {
   try {
-    // 1. KEAMANAN MUTLAK: Ambil ID dari Sesi Login, abaikan ID dari Front-End
-    const supabaseUser = await createClient();
-    const { data: { user } } = await supabaseUser.auth.getUser();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-      return NextResponse.json({ error: "Sesi tidak valid / Belum login." }, { status: 401 });
-    }
-    const id_agen = user.id;
+    if (!user) return NextResponse.json({ error: "Sesi habis, silakan login ulang." }, { status: 401 });
 
-    const body = await request.json();
-    const { volume_terjual_kg } = body;
+    const body = await request.json() as Record<string, unknown>;
+    const volume_terjual_kg = Number(body.volume_terjual_kg);
+    const produk_id = String(body.produk_id || "");
 
-    // Tangkal Nilai Negatif
-    if (!volume_terjual_kg || Number(volume_terjual_kg) <= 0) {
-      return NextResponse.json(
-        { error: "Volume penjualan tidak valid." },
-        { status: 400 }
-      );
+    if (!volume_terjual_kg || volume_terjual_kg <= 0 || !produk_id) {
+      return NextResponse.json({ error: "Data pesanan tidak valid." }, { status: 400 });
     }
 
     const supabaseAdmin = createAdminClient();
 
-    // 2. AMBIL HARGA HET TERBARU
-    const { data: hargaData } = await supabaseAdmin
-      .from('patokan_harga')
-      .select('harga_rekomendasi_ai')
-      .eq('status', 'Approved')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    // 1. Ambil data produk (Untuk tahu harganya)
+    const { data: product } = await supabaseAdmin.from('products').select('*').eq('id', produk_id).single();
+    const harga = product?.harga_default || product?.price || 15000; // Harga fallback
+    const totalBayar = volume_terjual_kg * harga;
+    const orderId = `AGEN-${Date.now()}`;
 
-    const harga_per_kg = hargaData ? hargaData.harga_rekomendasi_ai : 3000;
-    const total_pendapatan = Number(volume_terjual_kg) * harga_per_kg;
+    // 2. Buat Transaksi Midtrans
+    const snap = new midtransClient.Snap({
+      isProduction: false,
+      serverKey: process.env.MIDTRANS_SERVER_KEY,
+      clientKey: process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY
+    });
 
-    // 3. DELEGASIKAN KE DATABASE (ATOMIC TRANSACTION)
-    const { data: rpcResult, error: rpcError } = await supabaseAdmin
-      .rpc('eksekusi_kasir_atomic', {
-        p_id_agen: id_agen,
-        p_volume_kg: Number(volume_terjual_kg),
-        p_harga_per_kg: harga_per_kg,
-        p_total_pendapatan: total_pendapatan
-      });
+    const parameter = {
+      transaction_details: { order_id: orderId, gross_amount: totalBayar },
+      customer_details: { first_name: "Mitra", email: user.email }
+    };
+    const transaction = await snap.createTransaction(parameter);
 
-    if (rpcError) throw rpcError;
+    // 3. Catat ke Database dengan status PENDING (Stok belum dikurangi! Dipotong nanti di Webhook setelah lunas)
+    await supabaseAdmin.from('pesanan_mitra').insert([{
+      id: orderId,
+      user_id: user.id,
+      produk_id: produk_id,
+      jumlah: volume_terjual_kg,
+      total_harga: totalBayar,
+      status: 'PENDING'
+    }]);
 
-    if (!rpcResult.success) {
-      return NextResponse.json(
-        { error: `Transaksi Gagal: ${rpcResult.message}` },
-        { status: 400 }
-      );
-    }
+    // Kembalikan Token Pembayaran ke Front-End
+    return NextResponse.json({ token: transaction.token, message: "Menunggu pembayaran" }, { status: 200 });
 
-    return NextResponse.json({
-      message: "Transaksi Kasir Berhasil!",
-      struk_digital: {
-        volume_kg: volume_terjual_kg,
-        harga_satuan: harga_per_kg,
-        total_bayar: total_pendapatan,
-        sisa_stok_gudang: rpcResult.sisa_stok_gudang,
-        saldo_dompet_sekarang: rpcResult.saldo_dompet_sekarang
-      }
-    }, { status: 201 });
-
-  } catch (_err: unknown) { // <-- Kerapian: Ganti 'any' jadi 'unknown'
-    const msg = _err instanceof Error ? _err.message : "Terjadi kesalahan internal";
-    console.error("API POS/Order Error:", msg);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Kesalahan Internal Server";
+    console.error("API Order Error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

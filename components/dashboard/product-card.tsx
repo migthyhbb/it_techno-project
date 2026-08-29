@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-
+// 👇 TARUH KODE INI DI SINI (Di luar komponen, setelah import) 👇
+declare global {
+  interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    snap: any;
+  }
+}
 interface ProductCardProps {
   product: {
     id: string;
@@ -29,6 +35,8 @@ export function ProductCard({ product }: ProductCardProps) {
   const handleDecrease = () => quantity > 1 && setQuantity(quantity - 1);
   const handleIncrease = () => quantity < currentStock && setQuantity(quantity + 1);
 
+  // Tambahkan ini di luar fungsi agar TypeScript tidak marah
+
   async function handleOrder() {
     setStatus("loading");
     try {
@@ -40,13 +48,35 @@ export function ProductCard({ product }: ProductCardProps) {
           produk_id: product.id
         })
       });
-
+      
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal memproses pesanan.");
+      
+      // MUNCULKAN MIDTRANS SNAP POP-UP
+      if (window.snap && data.token) {
+        window.snap.pay(data.token, {
+          onSuccess: function() {
+            alert("Pembayaran Berhasil! Stok akan segera diperbarui.");
+            setStatus("sent");
+            window.location.reload(); // Refresh layar setelah lunas
+          },
+          onPending: function() {
+            alert("Menunggu pembayaran diselesaikan...");
+            setStatus("idle");
+          },
+          onError: function() {
+            alert("Pembayaran Gagal!");
+            setStatus("idle");
+          },
+          onClose: function() {
+            setStatus("idle");
+          }
+        });
+      } else {
+        alert("Sistem pembayaran sedang tidak siap.");
+        setStatus("idle");
+      }
 
-      setStatus("sent");
-      alert(`Berhasil memesan ${quantity} ${unit} ${title}!`);
-      window.location.reload(); // Refresh untuk update stok UI
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Gagal terhubung ke server.";
       alert(msg);
