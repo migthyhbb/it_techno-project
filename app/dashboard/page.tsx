@@ -56,7 +56,9 @@ function InfoRow({
   return (
     <div className={className}>
       <p className="text-xs text-ink/45 mb-1">{label}</p>
-      <p className="text-forest font-medium text-sm sm:text-base">{value || "-"}</p>
+      <p className="text-forest font-medium text-sm sm:text-base">
+        {value || "-"}
+      </p>
     </div>
   );
 }
@@ -82,7 +84,9 @@ export default function DashboardMitraPage() {
       // 1. Ambil Profil Mitra
       const { data: profileData } = await supabase
         .from("mitra_profiles")
-        .select("nama_mitra, nik_nib, alamat, telepon, provinsi, kota, created_at")
+        .select(
+          "nama_mitra, nik_nib, alamat, telepon, provinsi, kota, created_at",
+        )
         .eq("user_id", authData.user.id)
         .maybeSingle();
 
@@ -91,7 +95,8 @@ export default function DashboardMitraPage() {
       // 2. Ambil Produk & Harga Regional
       const { data: rawProducts, error: prodError } = await supabase
         .from("products")
-        .select(`
+        .select(
+          `
           id,
           nama_produk,
           deskripsi,
@@ -99,7 +104,8 @@ export default function DashboardMitraPage() {
           harga_default,
           stok_dummy,
           regional_product_prices(*)
-        `)
+        `,
+        )
         .order("created_at", { ascending: false });
 
       const { data: allRegionalPrices } = await supabase
@@ -131,7 +137,8 @@ export default function DashboardMitraPage() {
         rawProducts.forEach((p: RawProduct) => {
           const regionalPricesList = [
             ...(p.regional_product_prices || []),
-            ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) || []),
+            ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) ||
+              []),
           ];
 
           const regionalMatch = regionalPricesList.find((rp: RegionalPrice) => {
@@ -151,7 +158,11 @@ export default function DashboardMitraPage() {
               nama: p.nama_produk,
               deskripsi: p.deskripsi,
               unit: p.satuan,
-              price: Number(regionalMatch.harga ?? regionalMatch.harga_min ?? p.harga_default),
+              price: Number(
+                regionalMatch.harga ??
+                  regionalMatch.harga_min ??
+                  p.harga_default,
+              ),
               stock: Number(regionalMatch.stok ?? 0),
               stok: Number(regionalMatch.stok ?? 0),
               isRegional: true,
@@ -173,7 +184,9 @@ export default function DashboardMitraPage() {
       <div className="flex items-center justify-center min-h-screen bg-cream">
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 border-2 border-forest border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-forest font-medium text-sm">Memuat portal mitra...</p>
+          <p className="text-forest font-medium text-sm">
+            Memuat portal mitra...
+          </p>
         </div>
       </div>
     );
@@ -206,7 +219,9 @@ export default function DashboardMitraPage() {
             <p className="text-xs text-ink/45 mb-1">Status akun</p>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
-              <p className="font-display font-semibold text-forest text-base sm:text-lg">Aktif</p>
+              <p className="font-display font-semibold text-forest text-base sm:text-lg">
+                Aktif
+              </p>
             </div>
           </div>
           <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
@@ -231,17 +246,21 @@ export default function DashboardMitraPage() {
           </div>
           {(profile?.kota || profile?.alamat) && (
             <span className="text-xs bg-forest/10 text-forest font-medium px-3 py-1 rounded-full border border-forest/20">
-              Wilayah: {profile.kota || "PALEMBANG"}
+              Wilayah:{" "}
+              {profile.kota ? profile.kota.toUpperCase() : "BELUM DISET"}
             </span>
           )}
         </div>
         <p className="text-ink/60 text-sm sm:text-base mb-6 md:mb-8 max-w-lg">
-          Pantau stok yang ada di titikmu dan ajukan permintaan stok langsung ke LENTERA.
+          Pantau stok yang ada di titikmu dan ajukan permintaan stok langsung ke
+          LENTERA.
         </p>
 
         {products.length === 0 ? (
           <div className="bg-paper rounded-2xl border border-forest/10 p-8 text-center">
-            <p className="text-ink/60 text-sm">Tidak ada produk yang dialokasikan untuk wilayah ini.</p>
+            <p className="text-ink/60 text-sm">
+              Tidak ada produk yang dialokasikan untuk wilayah ini.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
@@ -267,7 +286,11 @@ export default function DashboardMitraPage() {
           <InfoRow label="Nomor telepon" value={profile?.telepon} />
           <InfoRow
             label="Wilayah Operasional"
-            value={profile?.kota ? `${profile.kota}, ${profile.provinsi}` : "PALEMBANG"}
+            value={
+              profile?.kota
+                ? `${profile.kota}, ${profile.provinsi}`
+                : "BELUM DISET"
+            }
           />
           <InfoRow
             label="Alamat lengkap"
