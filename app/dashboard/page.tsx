@@ -12,7 +12,7 @@ interface MitraProfile {
   alamat: string;
   telepon: string;
   provinsi?: string;
-  kota?: string;
+  kota_kabupaten?: string;
   created_at: string;
 }
 
@@ -81,11 +81,11 @@ export default function DashboardMitraPage() {
       }
       setEmail(authData.user.email ?? null);
 
-      // 1. Ambil Profil Mitra
+      // 1. Ambil Profil Mitra (Diubah menjadi kota_kabupaten)
       const { data: profileData } = await supabase
         .from("mitra_profiles")
         .select(
-          "nama_mitra, nik_nib, alamat, telepon, provinsi, kota, created_at",
+          "nama_mitra, nik_nib, alamat, telepon, provinsi, kota_kabupaten, created_at",
         )
         .eq("user_id", authData.user.id)
         .maybeSingle();
@@ -129,7 +129,8 @@ export default function DashboardMitraPage() {
             .trim();
         };
 
-        const rawLocationText = profileData?.kota || profileData?.alamat || "";
+        // Menggunakan kota_kabupaten untuk filter produk
+        const rawLocationText = profileData?.kota_kabupaten || profileData?.alamat || "";
         const userKotaClean = cleanCityName(rawLocationText);
 
         const filteredProducts: DisplayProduct[] = [];
@@ -137,8 +138,7 @@ export default function DashboardMitraPage() {
         rawProducts.forEach((p: RawProduct) => {
           const regionalPricesList = [
             ...(p.regional_product_prices || []),
-            ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) ||
-              []),
+            ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) || []),
           ];
 
           const regionalMatch = regionalPricesList.find((rp: RegionalPrice) => {
@@ -244,10 +244,10 @@ export default function DashboardMitraPage() {
               Pesan bahan energi
             </h2>
           </div>
-          {(profile?.kota || profile?.alamat) && (
+          {(profile?.kota_kabupaten || profile?.alamat) && (
             <span className="text-xs bg-forest/10 text-forest font-medium px-3 py-1 rounded-full border border-forest/20">
               Wilayah:{" "}
-              {profile.kota ? profile.kota.toUpperCase() : "BELUM DISET"}
+              {profile.kota_kabupaten ? profile.kota_kabupaten.toUpperCase() : "BELUM DISET"}
             </span>
           )}
         </div>
@@ -287,8 +287,8 @@ export default function DashboardMitraPage() {
           <InfoRow
             label="Wilayah Operasional"
             value={
-              profile?.kota
-                ? `${profile.kota}, ${profile.provinsi}`
+              profile?.kota_kabupaten
+                ? `${profile.kota_kabupaten}, ${profile.provinsi}`
                 : "BELUM DISET"
             }
           />
