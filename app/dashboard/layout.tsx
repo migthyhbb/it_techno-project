@@ -10,11 +10,11 @@ export default function DashboardLayout({
     <div className="flex flex-col md:flex-row min-h-screen bg-cream">
       
       {/* TARUH MESIN MIDTRANS DI SINI BANG 👇 */}
-      <Script 
-        src="https://app.sandbox.midtrans.com/snap/snap.js" 
-        data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
-        strategy="beforeInteractive"
-      />
+     <Script 
+  src="https://app.sandbox.midtrans.com/snap/snap.js" 
+  data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY} 
+  strategy="beforeInteractive" 
+/>
       {/* 👆 ================================== 👆 */}
 
       <DashboardSidebar />
