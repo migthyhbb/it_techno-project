@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
   const url = request.nextUrl.pathname;
 
   // ==========================================
-  // 2. LOGIK RATE LIMITING (Khusus API)
+  // 2. LOGIKA RATE LIMITING (Khusus API)
   // ==========================================
   if (url.startsWith("/api/transaksi/") || url.startsWith("/api/daftar/")) {
     const forwardedFor = request.headers.get("x-forwarded-for");
@@ -36,17 +36,15 @@ export async function middleware(request: NextRequest) {
         { status: 429 }
       );
     }
-    // Kalau aman, langsung lolos ke API (nggak perlu dicek UI Auth)
     return NextResponse.next();
   }
 
-  // Abaikan sisa rute API lainnya agar tidak dicegat oleh proxy halaman
   if (url.startsWith("/api/")) {
     return NextResponse.next();
   }
 
   // ==========================================
-  // 3. LOGIK SUPABASE AUTH (Khusus Halaman Web)
+  // 3. LOGIKA SUPABASE AUTH (Khusus Halaman Web)
   // ==========================================
   let supabaseResponse = NextResponse.next({ request });
 
@@ -90,17 +88,40 @@ export async function middleware(request: NextRequest) {
 
   if (isDashboardRoute && !user) return redirectSambilBawaCookie("/masuk");
 
-  const role = user?.app_metadata?.role || "mitra";
+  // DETEKSI ROLE ASLI DARI TABEL DATABASE
+  let role = "mitra";
+  if (user) {
+    const { data: adminRow } = await supabase
+      .from("admin_profiles")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
 
+    if (adminRow) {
+      role = "admin";
+    } else {
+      const { data: industriRow } = await supabase
+        .from("industri_profiles")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (industriRow) {
+        role = "industri";
+      }
+    }
+  }
+
+  // Redirect jika user yang sudah login mencoba akses halaman login/daftar
   if ((url === "/masuk" || url === "/login" || url === "/daftar") && user) {
     if (role === "admin") return redirectSambilBawaCookie("/dashboard-admin");
     if (role === "industri") return redirectSambilBawaCookie("/dashboard-industri");
     return redirectSambilBawaCookie("/dashboard");
   }
 
+  // Proteksi Akses Berdasarkan Role
   const areaByRole: Record<string, string> = {
     mitra: "/dashboard",
-    agen: "/dashboard",
     industri: "/dashboard-industri",
     admin: "/dashboard-admin",
   };
@@ -115,7 +136,6 @@ export async function middleware(request: NextRequest) {
   return supabaseResponse;
 }
 
-// Matcher ini digabung! Menangkap SEMUA kecuali file statis (gambar, css, dll)
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
