@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 interface ProductCardProps {
   product: {
@@ -21,6 +22,7 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const [quantity, setQuantity] = useState(1);
+  const [loading, setLoading] = useState(false);
 
   const title = product.nama || product.nama_produk || "Produk Energi";
   const price = product.price ?? product.harga_default ?? 0;
@@ -35,6 +37,48 @@ export function ProductCard({ product }: ProductCardProps) {
 
   const handleIncrease = () => {
     if (quantity < currentStock) setQuantity(quantity + 1);
+  };
+
+  // Fungsi Langsung Pesan (Bypass Payment)
+  const handlePesan = async () => {
+    try {
+      setLoading(true);
+      const supabase = createSupabaseBrowserClient();
+      
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) {
+        alert("Sesi habis, silakan login kembali.");
+        return;
+      }
+
+      // Langsung insert ke database orders
+      const { error } = await supabase
+        .from("orders")
+        .insert({
+          user_id: authData.user.id,
+          total_harga: price * quantity,
+          status: "diproses", // Status pesanan awal langsung masuk ke 'diproses'
+          items: [
+            {
+              nama_produk: title,
+              jumlah: quantity,
+              harga: price,
+            }
+          ]
+        });
+
+      if (error) throw error;
+
+      alert("Pesanan berhasil dibuat! Menunggu admin memproses barang.");
+      
+      // Refresh halaman agar pesanan langsung muncul di Daftar Pesanan
+      window.location.reload(); 
+
+    } catch (err: any) {
+      alert("Gagal membuat pesanan: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -65,7 +109,7 @@ export function ProductCard({ product }: ProductCardProps) {
             <button
               type="button"
               onClick={handleDecrease}
-              disabled={quantity <= 1}
+              disabled={quantity <= 1 || loading}
               className="px-2.5 py-1.5 text-forest hover:bg-forest/5 disabled:opacity-30 text-xs font-bold transition-colors cursor-pointer"
             >
               -
@@ -76,7 +120,7 @@ export function ProductCard({ product }: ProductCardProps) {
             <button
               type="button"
               onClick={handleIncrease}
-              disabled={quantity >= currentStock}
+              disabled={quantity >= currentStock || loading}
               className="px-2.5 py-1.5 text-forest hover:bg-forest/5 disabled:opacity-30 text-xs font-bold transition-colors cursor-pointer"
             >
               +
@@ -85,10 +129,11 @@ export function ProductCard({ product }: ProductCardProps) {
 
           <button
             type="button"
-            disabled={currentStock <= 0}
+            onClick={handlePesan}
+            disabled={currentStock <= 0 || loading}
             className="flex-1 bg-forest text-cream py-2 px-3 rounded-xl text-xs font-medium hover:bg-forest/90 disabled:bg-gray-200 disabled:text-gray-400 transition-colors shadow-xs cursor-pointer"
           >
-            {currentStock > 0 ? "Pesan" : "Stok Habis"}
+            {loading ? "Memproses..." : (currentStock > 0 ? "Pesan" : "Stok Habis")}
           </button>
         </div>
       </div>

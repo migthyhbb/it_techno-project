@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
-const navItems = [
+export const navItems = [
   {
-    href: "#ringkasan",
+    id: "ringkasan",
     label: "Ringkasan Admin",
     icon: (
       <>
@@ -16,18 +16,31 @@ const navItems = [
     ),
   },
   {
-    href: "#pengiriman",
-    label: "Semua Pengiriman",
+    id: "manajemen-pengguna",
+    label: "Manajemen Akun",
     icon: (
       <>
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-        <line x1="12" y1="22.08" x2="12" y2="12" />
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </>
     ),
   },
   {
-    href: "#harga-wilayah",
+    id: "katalog-produk",
+    label: "Katalog Produk",
+    icon: (
+      <>
+        <path d="m7.5 4.27 9 5.15" />
+        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <path d="m3.3 7 8.7 5 8.7-5" />
+        <path d="M12 22V12" />
+      </>
+    ),
+  },
+  {
+    id: "harga-wilayah",
     label: "Harga Wilayah",
     icon: (
       <>
@@ -36,14 +49,32 @@ const navItems = [
       </>
     ),
   },
+  {
+    id: "pengiriman",
+    label: "Semua Pengiriman",
+    icon: (
+      <>
+        <rect width="8" height="8" x="3" y="3" rx="2" />
+        <path d="M7 11v4a2 2 0 0 0 2 2h4" />
+        <rect width="8" height="8" x="13" y="13" rx="2" />
+      </>
+    ),
+  },
 ];
 
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+  activeTab?: string;
+  setActiveTab?: (tab: string) => void;
 }
 
-export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
+export function AdminSidebar({
+  isOpen = false,
+  onClose,
+  activeTab,
+  setActiveTab,
+}: SidebarProps) {
   const router = useRouter();
   const [nama, setNama] = useState<string | null>("Administrator");
 
@@ -64,7 +95,7 @@ export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Backdrop Gelap saat Mobile Sidebar Terbuka */}
+      {/* Backdrop Mobile */}
       {isOpen && (
         <div
           onClick={onClose}
@@ -74,7 +105,7 @@ export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
 
       {/* Drawer Sidebar */}
       <aside
-        className={`fixed md:sticky top-0 left-0 bottom-0 z-50 h-screen w-64 bg-forest text-cream flex flex-col justify-between p-6 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed md:sticky top-0 left-0 bottom-0 z-50 h-screen w-64 bg-forest text-cream flex flex-col justify-between p-6 transform transition-transform duration-300 ease-in-out md:translate-x-0 shrink-0 ${
           isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         }`}
       >
@@ -88,7 +119,6 @@ export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
               <p className="text-xs text-cream/45 mt-0.5">Portal Admin</p>
             </div>
 
-            {/* Tombol Close (X) */}
             <button
               onClick={onClose}
               className="md:hidden p-1.5 rounded-lg hover:bg-cream/10 text-cream/70 hover:text-cream transition-colors"
@@ -100,29 +130,39 @@ export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
             </button>
           </div>
 
-          {/* Menu Navigasi */}
+          {/* Menu Navigasi Berbasis Tab Button */}
           <nav className="space-y-1">
-            {navItems.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/10 transition-colors"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-4 h-4 shrink-0"
+            {navItems.map((item) => {
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    if (setActiveTab) setActiveTab(item.id);
+                    if (onClose) onClose();
+                  }}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium w-full text-left transition-colors cursor-pointer ${
+                    isActive
+                      ? "bg-cream text-forest font-semibold shadow-xs"
+                      : "text-cream/65 hover:text-cream hover:bg-cream/10"
+                  }`}
                 >
-                  {item.icon}
-                </svg>
-                {item.label}
-              </a>
-            ))}
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="w-4 h-4 shrink-0"
+                  >
+                    {item.icon}
+                  </svg>
+                  {item.label}
+                </button>
+              );
+            })}
           </nav>
         </div>
 
@@ -138,6 +178,7 @@ export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
           )}
 
           <button
+            type="button"
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/10 transition-colors w-full text-left cursor-pointer"
           >

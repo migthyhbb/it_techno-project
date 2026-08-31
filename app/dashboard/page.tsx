@@ -13,6 +13,8 @@ interface MitraProfile {
   telepon: string;
   provinsi?: string;
   kota_kabupaten?: string;
+  status_akun?: string;
+  alasan_ban?: string;
   created_at: string;
 }
 
@@ -44,6 +46,18 @@ interface RawProduct {
   regional_product_prices?: RegionalPrice[];
 }
 
+interface Order {
+  id: string;
+  status: string; // 'menunggu_pembayaran' | 'diproses' | 'dikirim' | 'selesai' | 'dibatalkan'
+  total_harga: number;
+  created_at: string;
+  items?: {
+    nama_produk: string;
+    jumlah: number;
+    harga: number;
+  }[];
+}
+
 function InfoRow({
   label,
   value,
@@ -66,9 +80,28 @@ function InfoRow({
 export default function DashboardMitraPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<MitraProfile | null>(null);
   const [products, setProducts] = useState<DisplayProduct[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
+
+  // State Modal Edit Profil
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nama_mitra: "",
+    nik_nib: "",
+    telepon: "",
+    provinsi: "",
+    kota_kabupaten: "",
+    alamat: "",
+  });
+
+  // State Modal Hapus Akun
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -79,20 +112,72 @@ export default function DashboardMitraPage() {
         router.replace("/masuk");
         return;
       }
+      setUserId(authData.user.id);
       setEmail(authData.user.email ?? null);
 
-      // 1. Ambil Profil Mitra (Diubah menjadi kota_kabupaten)
+      // === 1. CEK DAHULU APABILA USER TERMASUK BLACKLIST ===
+      const { data: blacklisted } = await supabase
+        .from("blacklists")
+        .select("alasan")
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (blacklisted) {
+        alert(`Akses Ditolak: Akun Anda diblokir!\nAlasan: ${blacklisted.alasan}`);
+        await supabase.auth.signOut();
+        router.replace("/masuk");
+        return;
+      }
+
+      // === 2. AMBIL PROFIL MITRA & CEK KELENGKAPAN/STATUS BANNED ===
       const { data: profileData } = await supabase
         .from("mitra_profiles")
         .select(
-          "nama_mitra, nik_nib, alamat, telepon, provinsi, kota_kabupaten, created_at",
+          "nama_mitra, nik_nib, alamat, telepon, provinsi, kota_kabupaten, status_akun, alasan_ban, created_at"
         )
         .eq("user_id", authData.user.id)
         .maybeSingle();
 
-      setProfile(profileData);
+      if (!profileData) {
+        alert("Akses Ditolak: Profil mitra Anda tidak ditemukan atau pendaftaran sebelumnya ditolak.");
+        await supabase.auth.signOut();
+        router.replace("/masuk");
+        return;
+      }
 
-      // 2. Ambil Produk & Harga Regional
+      if (profileData.status_akun === "banned") {
+        alert(
+          `Akun Anda telah di-ban oleh Administrator!\nAlasan: ${
+            profileData.alasan_ban || "Pelanggaran ketentuan layanan."
+          }`
+        );
+        await supabase.auth.signOut();
+        router.replace("/masuk");
+        return;
+      }
+
+      setProfile(profileData);
+      setEditForm({
+        nama_mitra: profileData.nama_mitra || "",
+        nik_nib: profileData.nik_nib || "",
+        telepon: profileData.telepon || "",
+        provinsi: profileData.provinsi || "",
+        kota_kabupaten: profileData.kota_kabupaten || "",
+        alamat: profileData.alamat || "",
+      });
+
+      // === 3. AMBIL DATA PESANAN / TRANSAKSI ===
+      const { data: ordersData } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("user_id", authData.user.id)
+        .order("created_at", { ascending: false });
+
+      if (ordersData) {
+        setOrders(ordersData);
+      }
+
+      // === 4. AMBIL PRODUK & HARGA REGIONAL ===
       const { data: rawProducts, error: prodError } = await supabase
         .from("products")
         .select(
@@ -104,7 +189,7 @@ export default function DashboardMitraPage() {
           harga_default,
           stok_dummy,
           regional_product_prices(*)
-        `,
+        `
         )
         .order("created_at", { ascending: false });
 
@@ -129,7 +214,6 @@ export default function DashboardMitraPage() {
             .trim();
         };
 
-        // Menggunakan kota_kabupaten untuk filter produk
         const rawLocationText = profileData?.kota_kabupaten || profileData?.alamat || "";
         const userKotaClean = cleanCityName(rawLocationText);
 
@@ -161,7 +245,7 @@ export default function DashboardMitraPage() {
               price: Number(
                 regionalMatch.harga ??
                   regionalMatch.harga_min ??
-                  p.harga_default,
+                  p.harga_default
               ),
               stock: Number(regionalMatch.stok ?? 0),
               stok: Number(regionalMatch.stok ?? 0),
@@ -178,6 +262,94 @@ export default function DashboardMitraPage() {
 
     fetchDashboardData();
   }, [router]);
+
+  // Handler Konfirmasi Pesanan Diterima oleh Mitra
+  const handleConfirmOrder = async (orderId: string) => {
+    setConfirmingOrderId(orderId);
+    const supabase = createSupabaseBrowserClient();
+
+    const { error } = await supabase
+      .from("orders")
+      .update({ status: "selesai" })
+      .eq("id", orderId);
+
+    setConfirmingOrderId(null);
+
+    if (error) {
+      alert("Gagal mengonfirmasi pesanan: " + error.message);
+    } else {
+      alert("Terima kasih! Pesanan telah dikonfirmasi diterima.");
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: "selesai" } : o))
+      );
+    }
+  };
+
+  // Handler Simpan Perubahan Profil
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+    setEditLoading(true);
+
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase
+      .from("mitra_profiles")
+      .update({
+        nama_mitra: editForm.nama_mitra,
+        nik_nib: editForm.nik_nib,
+        telepon: editForm.telepon,
+        provinsi: editForm.provinsi,
+        kota_kabupaten: editForm.kota_kabupaten,
+        alamat: editForm.alamat,
+      })
+      .eq("user_id", userId);
+
+    setEditLoading(false);
+
+    if (!error) {
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...editForm,
+            }
+          : null
+      );
+      setIsEditOpen(false);
+    } else {
+      alert("Gagal memperbarui profil: " + error.message);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!userId) return;
+    setDeleteLoading(true);
+
+    try {
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert("Gagal menghapus akun: " + data.error);
+        setDeleteLoading(false);
+        return;
+      }
+
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+
+      alert("Akun berhasil dihapus permanen.");
+      window.location.href = "/masuk";
+    } catch {
+      alert("Terjadi kesalahan jaringan saat menghapus akun.");
+      setDeleteLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -202,7 +374,7 @@ export default function DashboardMitraPage() {
 
   return (
     <div className="px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-5xl w-full mx-auto relative">
-      {/* Ringkasan */}
+      {/* 1. Ringkasan */}
       <section id="ringkasan" className="scroll-mt-8 mb-10 md:mb-16">
         <p className="font-mono text-xs tracking-widest uppercase text-green mb-2 sm:mb-3">
           Ringkasan
@@ -233,7 +405,7 @@ export default function DashboardMitraPage() {
         </div>
       </section>
 
-      {/* Pesan Stok */}
+      {/* 2. Pesan Stok (Pesan Bahan Energi) */}
       <section id="pesan-stok" className="scroll-mt-8 mb-10 md:mb-16">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 sm:mb-3 gap-2">
           <div>
@@ -252,8 +424,7 @@ export default function DashboardMitraPage() {
           )}
         </div>
         <p className="text-ink/60 text-sm sm:text-base mb-6 md:mb-8 max-w-lg">
-          Pantau stok yang ada di titikmu dan ajukan permintaan stok langsung ke
-          LENTERA.
+          Pantau stok yang ada di titikmu dan ajukan permintaan stok langsung ke LENTERA.
         </p>
 
         {products.length === 0 ? (
@@ -271,14 +442,92 @@ export default function DashboardMitraPage() {
         )}
       </section>
 
-      {/* Profil Mitra */}
-      <section id="profil-mitra" className="scroll-mt-8">
-        <p className="font-mono text-xs tracking-widest uppercase text-clay mb-2 sm:mb-3">
-          Profil mitra
+      {/* 3. Status Pengiriman & Pesanan Mitra */}
+      <section id="pesanan-saya" className="scroll-mt-8 mb-10 md:mb-16">
+        <p className="font-mono text-xs tracking-widest uppercase text-forest mb-1">
+          Daftar Pesanan
         </p>
-        <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest mb-4 sm:mb-6">
-          Informasi mitra
+        <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest mb-4">
+          Status Pengiriman & Penerimaan
         </h2>
+
+        {orders.length === 0 ? (
+          <div className="bg-paper rounded-2xl border border-forest/10 p-6 text-center">
+            <p className="text-ink/60 text-sm">Belum ada pesanan aktif saat ini.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {orders.map((order) => (
+              <div
+                key={order.id}
+                className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xs"
+              >
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono text-xs text-ink/50">
+                      ID: {order.id.slice(0, 8)}...
+                    </span>
+                    <span
+                      className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full capitalize ${
+                        order.status === "dikirim"
+                          ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
+                          : order.status === "selesai"
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {order.status === "dikirim"
+                        ? "Barang Dalam Pengiriman"
+                        : order.status === "selesai"
+                        ? "Pesanan Selesai"
+                        : order.status}
+                    </span>
+                  </div>
+                  <p className="font-display font-semibold text-forest text-base">
+                    Total: Rp {order.total_harga?.toLocaleString("id-ID")}
+                  </p>
+                  <p className="text-xs text-ink/55 mt-0.5">
+                    Tanggal: {new Date(order.created_at).toLocaleDateString("id-ID")}
+                  </p>
+                </div>
+
+                {/* Tombol Konfirmasi jika admin sudah mengubah status menjadi 'dikirim' */}
+                {order.status === "dikirim" && (
+                  <button
+                    onClick={() => handleConfirmOrder(order.id)}
+                    disabled={confirmingOrderId === order.id}
+                    className="text-xs font-semibold px-4 py-2.5 bg-green text-white rounded-xl hover:bg-forest transition-colors shadow-xs shrink-0 disabled:opacity-50"
+                  >
+                    {confirmingOrderId === order.id
+                      ? "Memproses..."
+                      : "Konfirmasi Barang Diterima"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* 4. Profil Mitra */}
+      <section id="profil-mitra" className="scroll-mt-8 mb-10">
+        <div className="flex justify-between items-end mb-4 sm:mb-6">
+          <div>
+            <p className="font-mono text-xs tracking-widest uppercase text-clay mb-1 sm:mb-2">
+              Profil mitra
+            </p>
+            <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest">
+              Informasi mitra
+            </h2>
+          </div>
+          <button
+            onClick={() => setIsEditOpen(true)}
+            className="text-xs font-semibold px-4 py-2 bg-forest text-cream rounded-xl hover:bg-forest/90 transition-colors"
+          >
+            Ubah Profil
+          </button>
+        </div>
+
         <div className="bg-paper rounded-2xl border border-forest/10 p-5 sm:p-6 md:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 shadow-xs">
           <InfoRow label="Nama mitra" value={profile?.nama_mitra} />
           <InfoRow label="Email" value={email} />
@@ -299,6 +548,162 @@ export default function DashboardMitraPage() {
           />
         </div>
       </section>
+
+      {/* 5. Danger Zone: Hapus Akun */}
+      <section className="bg-red-50/50 border border-red-200/60 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h3 className="font-display font-semibold text-red-900 text-base sm:text-lg">
+            Hapus Akun Kemitraan
+          </h3>
+          <p className="text-xs sm:text-sm text-red-700/80 mt-0.5">
+            Tindakan ini permanen. Seluruh data profil dan alokasi wilayah kamu akan dihapus.
+          </p>
+        </div>
+        <button
+          onClick={() => setIsDeleteOpen(true)}
+          className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors shrink-0"
+        >
+          Hapus Akun
+        </button>
+      </section>
+
+      {/* MODAL UBAH PROFIL */}
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-forest/10 rounded-2xl max-w-lg w-full p-6 shadow-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="font-display font-semibold text-xl text-forest mb-4">
+              Ubah Data Profil
+            </h3>
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              <div>
+                <label className="block text-xs text-ink/60 mb-1">Nama Mitra</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.nama_mitra}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, nama_mitra: e.target.value })
+                  }
+                  className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">NIK / NIB</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.nik_nib}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, nik_nib: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Nomor Telepon</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.telepon}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, telepon: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Provinsi</label>
+                  <input
+                    type="text"
+                    value={editForm.provinsi}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, provinsi: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Kota / Kabupaten</label>
+                  <input
+                    type="text"
+                    value={editForm.kota_kabupaten}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, kota_kabupaten: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-ink/60 mb-1">Alamat Lengkap</label>
+                <textarea
+                  rows={3}
+                  value={editForm.alamat}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, alamat: e.target.value })
+                  }
+                  className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                <button
+                  type="button"
+                  onClick={() => setIsEditOpen(false)}
+                  className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="text-xs font-semibold px-4 py-2.5 bg-forest text-cream rounded-xl hover:bg-forest/90 disabled:opacity-50"
+                >
+                  {editLoading ? "Menyimpan..." : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS AKUN */}
+      {isDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-red-200 rounded-2xl max-w-md w-full p-6 shadow-lg">
+            <h3 className="font-display font-semibold text-xl text-red-900 mb-2">
+              Konfirmasi Hapus Akun
+            </h3>
+            <p className="text-sm text-ink/70 mb-6">
+              Apakah kamu yakin ingin menghapus akun kemitraan ini? Semua data profil akan dihapus dan kamu akan dikembalikan ke halaman awal.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteOpen(false)}
+                className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading}
+                className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteLoading ? "Menghapus..." : "Ya, Hapus Akun"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI Assistant Floating Widget */}
       <AIAssistant />
