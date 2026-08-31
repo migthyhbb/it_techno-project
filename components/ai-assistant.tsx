@@ -34,36 +34,57 @@ export function AIAssistant() {
     if (isOpen) scrollToBottom();
   }, [messages, isTyping, isOpen]);
 
-  // FUNGSI UTAMA KIRIM PESAN TERHUBUNG KE API ROUTE
+  // FUNGSI UTAMA YANG SUDAH DI-UPGRADE JADI STREAMING (NGETIK)
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || inputMessage;
     if (!text.trim() || isTyping) return;
 
-    // 1. Tambah Pesan User
-    const userMsg: Message = { sender: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
+    // 1. Tampilkan pesan user
+    setMessages((prev) => [...prev, { sender: "user", text }]);
     if (!textToSend) setInputMessage("");
     setIsTyping(true);
 
     try {
-      // 2. Panggil Endpoint Backend Next.js (/api/chat)
+      // 2. Tembak API
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
       });
 
-      const data = await res.json();
+      if (!res.ok) throw new Error("Gagal terhubung");
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: "ai",
-          text: data.reply || "Maaf, AI tidak memberikan respons.",
-        },
-      ]);
+      // 3. Matikan animasi loading bola-bola, lalu buat tempat kosong untuk AI ngetik
+      setIsTyping(false);
+      setMessages((prev) => [...prev, { sender: "ai", text: "" }]);
+
+      // 4. Proses membaca stream (per kata) dari backend
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (!reader) return;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunkText = decoder.decode(value, { stream: true });
+        
+        // 5. Tambahkan kata yang baru masuk ke balon chat terakhir (punya AI)
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          updated[lastIndex] = {
+            ...updated[lastIndex],
+            text: updated[lastIndex].text + chunkText,
+          };
+          return updated;
+        });
+      }
+
     } catch (error) {
       console.error("Error sending message:", error);
+      setIsTyping(false);
       setMessages((prev) => [
         ...prev,
         {
@@ -71,8 +92,6 @@ export function AIAssistant() {
           text: "Gagal terhubung ke server AI. Pastikan koneksi internet kamu stabil.",
         },
       ]);
-    } finally {
-      setIsTyping(false);
     }
   };
 
