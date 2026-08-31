@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-export const runtime = "edge"; // Tetap pakai Edge biar instan nyala
-export const maxDuration = 60;
+export const runtime = "edge";
+export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
@@ -10,6 +10,11 @@ export async function POST(req: Request) {
 
     if (!apiKey) {
       return new Response("API Key Gemini belum dipasang!", { status: 500 });
+    }
+
+    const trimmedMessage = typeof message === "string" ? message.trim() : "";
+    if (!trimmedMessage) {
+      return new Response("Pesan tidak boleh kosong.", { status: 400 });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -30,24 +35,13 @@ Restriksi / Batasan:
 - Jangan memberikan informasi harga yang tidak ada di platform, arahkan untuk cek langsung di halaman produk/dashboard.`
     });
 
-    // 🚀 INI KUNCINYA: Pakai Stream biar AI ngirim per kata
-    const result = await model.generateContentStream(message);
+    const result = await model.generateContent(trimmedMessage);
+    const text = result.response.text();
 
-    // Bikin jembatan penyalur kata-kata ke frontend
-    const stream = new ReadableStream({
-      async start(controller) {
-        for await (const chunk of result.stream) {
-          const chunkText = chunk.text();
-          controller.enqueue(new TextEncoder().encode(chunkText));
-        }
-        controller.close();
-      }
+    return new Response(text, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      status: 200,
     });
-
-    return new Response(stream, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" }
-    });
-
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Terjadi kesalahan pada AI";
     console.error("Gemini SDK Error:", msg);
