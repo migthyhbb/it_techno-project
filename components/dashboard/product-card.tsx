@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-// 👇 TARUH KODE INI DI SINI (Di luar komponen, setelah import) 👇
+// 👇 IMPORT SUPABASE DITAMBAHKAN DI SINI 👇
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser"; 
+
 declare global {
   interface Window {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     snap: any;
   }
 }
+
 interface ProductCardProps {
   product: {
     id: string;
@@ -35,8 +38,6 @@ export function ProductCard({ product }: ProductCardProps) {
   const handleDecrease = () => quantity > 1 && setQuantity(quantity - 1);
   const handleIncrease = () => quantity < currentStock && setQuantity(quantity + 1);
 
-  // Tambahkan ini di luar fungsi agar TypeScript tidak marah
-
   async function handleOrder() {
     setStatus("loading");
     try {
@@ -55,11 +56,38 @@ export function ProductCard({ product }: ProductCardProps) {
       // MUNCULKAN MIDTRANS SNAP POP-UP
       if (window.snap && data.token) {
         window.snap.pay(data.token, {
-          onSuccess: function() {
-            alert("Pembayaran Berhasil! Stok akan segera diperbarui.");
-            setStatus("sent");
-            window.location.reload(); // Refresh layar setelah lunas
+          // 👇 👇 UBAH JADI ASYNC FUNCTION DI SINI 👇 👇
+          onSuccess: async function() {
+            try {
+              // 1. Panggil Supabase
+              const supabase = createSupabaseBrowserClient();
+              
+              // 2. Hitung sisa stok setelah dibeli
+              const sisaStok = currentStock - quantity;
+
+              // 3. Update stok di tabel regional_product_prices
+              await supabase
+                .from("regional_product_prices")
+                .update({ stok: sisaStok })
+                .eq("product_id", product.id);
+
+              // 4. Update juga di tabel products (biar database sinkron 100%)
+              await supabase
+                .from("products")
+                .update({ stok_dummy: sisaStok, stok: sisaStok })
+                .eq("id", product.id);
+
+              alert("Pembayaran Berhasil! Stok telah diperbarui.");
+              setStatus("sent");
+              window.location.reload(); // Refresh layar biar angka stok baru muncul
+
+            } catch (err) {
+              console.error("Gagal update stok:", err);
+              alert("Pembayaran sukses, tapi gagal sinkronisasi stok.");
+              window.location.reload();
+            }
           },
+          // 👆 👆 BATAS KODINGAN UPDATE STOK 👆 👆
           onPending: function() {
             alert("Menunggu pembayaran diselesaikan...");
             setStatus("idle");
