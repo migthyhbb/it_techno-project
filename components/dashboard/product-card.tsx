@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-// 👇 IMPORT SUPABASE DITAMBAHKAN DI SINI 👇
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser"; 
 
 declare global {
   interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    snap: any;
+    snap?: {
+      pay: (token: string, callbacks: Record<string, unknown>) => void;
+    };
   }
 }
 
@@ -56,8 +55,8 @@ export function ProductCard({ product }: ProductCardProps) {
       // MUNCULKAN MIDTRANS SNAP POP-UP
       if (window.snap && data.token) {
         window.snap.pay(data.token, {
-      onSuccess: async function(result: any) {
-            console.log("CCTV 1: MIDTRANS BERHASIL!", result); // Laporan 1
+          onSuccess: async function (result: unknown) {
+            console.log("CCTV 1: MIDTRANS BERHASIL!", result);
             try {
               setStatus("loading");
               console.log("CCTV 2: Persiapan ngetuk pintu API update_stock...");
@@ -83,7 +82,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
               alert("Pembayaran Berhasil! Stok telah dikurangi.");
               setStatus("sent");
-              // window.location.reload(); <-- Biarin mati dulu buat ngetes
+               window.location.reload(); 
 
             } catch (err) {
               console.error("🚨 CCTV ERROR DI FRONTEND:", err);

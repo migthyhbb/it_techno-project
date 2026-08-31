@@ -11,15 +11,29 @@ const redis = new Redis({
 
 export async function POST(request: Request) {
   try {
-    // 1. KEAMANAN MUTLAK: Ambil ID langsung dari Sesi Login, JANGAN dari Front-End!
+    // 1. Ambil Token Autentikasi dari Header
+    const authHeader = request.headers.get("Authorization");
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    
+    let userId: string | null = null;
 
-    if (!user) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) userId = user.id;
+    }
+
+    // Fallback jika token dikirim via Cookie Sesi Server
+    if (!userId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) userId = user.id;
+    }
+
+    if (!userId) {
       return NextResponse.json({ error: "Sesi tidak valid / Belum login." }, { status: 401 });
     }
-    const userId = user.id;
 
+    // Rate Limiting via Redis
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
       || request.headers.get("x-real-ip")
       || "unknown";
@@ -33,24 +47,56 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Tangkap Payload (Hanya deskripsi dan berat)
-    const { deskripsi_input, berat_kg, lokasi, foto_url } = await request.json();
+    // 2. Tangkap Payload Lengkap (Biasa & B3)
+    const {
+      deskripsi_input,
+      berat_kg,
+      lokasi,
+      foto_url,
+      is_b3,
+      kategori_b3,
+      biaya_pengolahan,
+      status
+    } = await request.json();
 
     if (!deskripsi_input || !berat_kg || !lokasi) {
       return NextResponse.json({ error: "Data limbah tidak lengkap." }, { status: 400 });
     }
 
-    // 3. HEURISTIC FILTER (Jalur Cepat Non-B3)
+    const supabaseAdmin = createAdminClient();
+
+    // 3. JIKA PERMINTAAN LIMBAH B3: LANGSUNG CATAT DENGAN STATUS "Menunggu Pembayaran"
+    if (is_b3) {
+      const { data, error } = await supabaseAdmin.from('waste_shipments').insert([{
+        user_id: userId,
+        nama_limbah: deskripsi_input,
+        perkiraan_berat: berat_kg,
+        lokasi_penjemputan: lokasi,
+        kategori: 'B3',
+        kategori_b3: kategori_b3 || null,
+        biaya_pengolahan: biaya_pengolahan || null,
+        is_b3: true,
+        foto_url: foto_url || "",
+        status: status || 'Menunggu Pembayaran'
+      }]).select().single();
+
+      if (error) throw error;
+
+      return NextResponse.json({
+        message: "Limbah B3 berhasil didaftarkan.",
+        data
+      }, { status: 201 });
+    }
+
+    // 4. HEURISTIC FILTER (Jalur Cepat Non-B3)
     const kataKunciAman = ['kardus', 'kertas', 'plastik', 'botol', 'kayu', 'serbuk', 'daun', 'organik'];
     const inputLowerCase = deskripsi_input.toLowerCase();
     const isOtomatisAman = kataKunciAman.some(kata => inputLowerCase.includes(kata));
 
     if (isOtomatisAman) {
-      // PROSES NON-B3 SECARA INSTAN
       const poin = Math.round(berat_kg * 10);
-      const supabaseAdmin = createAdminClient();
 
-      const { error } = await supabaseAdmin.from('waste_shipments').insert([{
+      const { data, error } = await supabaseAdmin.from('waste_shipments').insert([{
         user_id: userId,
         nama_limbah: deskripsi_input,
         perkiraan_berat: berat_kg,
@@ -58,8 +104,8 @@ export async function POST(request: Request) {
         kategori: 'NON_B3',
         jalur_proses: 'IN_HOUSE',
         poin_didapat: poin,
-        foto_url: foto_url,
-        status: 'menunggu_konfirmasi'
+        foto_url: foto_url || "",
+        status: 'Menunggu Penjemputan'
       }]).select().single();
 
       if (error) throw error;
@@ -67,11 +113,12 @@ export async function POST(request: Request) {
       return NextResponse.json({
         message: "Setoran limbah dicatat. Menunggu penjemputan.",
         kategori: "NON_B3",
-        poin_tambahan: poin
+        poin_tambahan: poin,
+        data
       }, { status: 201 });
 
     } else {
-      // PROSES AMBIGU: Lempar ke AI Pekerja Latar Belakang (QStash)
+      // 5. PROSES AMBIGU: Lempar ke AI Worker (QStash)
       const workerUrl = process.env.NODE_ENV === 'production'
         ? `https://${process.env.VERCEL_URL}/api/limbah/worker`
         : process.env.NGROK_URL + '/api/limbah/worker';
@@ -88,7 +135,7 @@ export async function POST(request: Request) {
       }, { status: 202 });
     }
 
-  }  catch (error: unknown) {
+  } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Kesalahan server internal.";
     console.error("API Setoran Error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });

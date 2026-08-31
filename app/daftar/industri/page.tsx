@@ -1,768 +1,1188 @@
 "use client";
 
-import { useEffect, useState, useId } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "motion/react";
-import { AuthShell } from "@/components/auth/auth-shell";
-import { FormField } from "@/components/auth/form-field";
-import { OtpField } from "@/components/auth/otp-field";
-import { SubmitButton } from "@/components/auth/submit-button";
-import { BackButton } from "@/components/auth/back-button";
-import { ProgressSteps } from "@/components/auth/progress-steps";
-import { TermsCheckbox } from "@/components/auth/terms-checkbox";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { translateAuthError } from "@/lib/auth-errors";
-import {
-  isValidNpwp,
-  isValidAddress,
-  isValidPhone,
-  isValidPassword,
-  validationMessages,
-} from "@/lib/validation";
-import { PasswordRequirements } from "@/components/auth/password-requirements";
+import { AIAssistant } from "@/components/ai-assistant";
 
-// Import Dynamic LocationPickerMap (Client-side Only)
-const LocationPickerMap = dynamic(
-  () => import("@/components/location-picker-map").then((mod) => mod.LocationPickerMap),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-[280px] w-full bg-ink/5 animate-pulse rounded-xl flex items-center justify-center text-sm text-ink/40">
-        Memuat Peta...
-      </div>
-    ),
-  }
-);
-
-const stepLabels = ["Email", "Verifikasi Email", "Kata Sandi", "Detail Profil"];
-
-const variants = {
-  enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
-  center: { opacity: 1, x: 0 },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
-};
-
-type FormState = {
-  email: string;
-  otp: string;
-  password: string;
+interface IndustriProfile {
   nama_perusahaan: string;
   npwp: string;
-  provinsi: string;
-  kota: string;
-  kecamatan: string;
-  kelurahan: string;
-  detail_alamat: string;
+  alamat: string;
   telepon: string;
-  lat: number | null;
-  lng: number | null;
-  foto_npwp: File | null;
-};
-
-type FieldErrors = Partial<
-  Record<
-    | "nama_perusahaan"
-    | "npwp"
-    | "provinsi"
-    | "kota"
-    | "kecamatan"
-    | "kelurahan"
-    | "detail_alamat"
-    | "telepon"
-    | "foto_npwp",
-    string
-  >
->;
-
-// Helper Fungsi Penerjemah Error Umum & Storage/Database
-function formatHumanFriendlyError(err: unknown): string {
-  if (!err) return "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi.";
-
-  const message = typeof err === "string" ? err : (err as { message?: string })?.message || "";
-
-  // Error Storage / Upload
-  if (message.includes("Payload too large") || message.includes("413") || message.includes("exceeds")) {
-    return "Ukuran gambar terlalu besar. Maksimal ukuran berkas adalah 5MB.";
-  }
-  if (message.includes("mime") || message.includes("not allowed") || message.includes("extension")) {
-    return "Format gambar tidak didukung. Harap upload foto berformat JPG, JPEG, atau PNG.";
-  }
-  if (message.includes("bucket") || message.includes("storage")) {
-    return "Gagal mengunggah dokumen. Silakan periksa koneksi internet Anda dan coba lagi.";
-  }
-
-  // Error Database / Auth
-  if (message.includes("duplicate key") || message.includes("already exists")) {
-    return "Data NPWP atau profil industri ini sudah pernah terdaftar.";
-  }
-  if (message.includes("different") || message.includes("same password")) {
-    return "Kata sandi baru tidak boleh sama dengan kata sandi lama.";
-  }
-  if (message === "no-session") {
-    return "Sesi pendaftaran Anda telah berakhir. Silakan lakukan verifikasi ulang.";
-  }
-
-  // Terjemahkan Auth Error Bawaan jika ada
-  const translated = translateAuthError(message);
-  if (translated !== "Terjadi kesalahan, coba lagi.") {
-    return translated;
-  }
-
-  return "Gagal memproses pendaftaran. Silakan periksa kembali data Anda dan coba lagi.";
+  provinsi?: string;
+  kota_kabupaten?: string;
+  created_at: string;
+  status_akun?: string;
+  alasan_ban?: string;
 }
 
-export default function DaftarIndustriPage() {
+interface WasteShipment {
+  id: string;
+  nama_limbah: string;
+  perkiraan_berat: number;
+  lokasi_penjemputan: string;
+  status: string;
+  is_b3?: boolean;
+  kategori_b3?: string;
+  biaya_pengolahan?: number;
+  created_at: string;
+}
+
+function InfoRow({
+  label,
+  value,
+  className = "",
+}: {
+  label: string;
+  value?: string | null;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <p className="text-xs text-ink/45 mb-1">{label}</p>
+      <p className="text-forest font-medium text-sm md:text-base">{value || "-"}</p>
+    </div>
+  );
+}
+
+const KREDIT_PER_KG = 100;
+
+// Daftar Jenis Limbah B3 & Tarif Pengolahan per Kg
+const KATEGORI_B3 = [
+  { id: "cair_kimia", nama: "Limbah Cair & Kimia Industri", tarif: 15000 },
+  { id: "oli_pelumas", nama: "Oli Bekas & Pelumas Sintetis", tarif: 12000 },
+  { id: "baterai_elektronik", nama: "Baterai & E-Waste B3", tarif: 20000 },
+  { id: "medis_farmasi", nama: "Limbah Medis & Farmasi", tarif: 25000 },
+  { id: "sludge_lumpur", nama: "Sludge / Lumpur Berbahaya", tarif: 18000 },
+];
+
+export default function DashboardIndustriPage() {
   const router = useRouter();
-  const npwpFileId = useId();
-  const [step, setStep] = useState(0);
-  const [direction, setDirection] = useState(1);
-  const [form, setForm] = useState<FormState>({
-    email: "",
-    otp: "",
-    password: "",
-    nama_perusahaan: "",
-    npwp: "",
-    provinsi: "",
-    kota: "",
-    kecamatan: "",
-    kelurahan: "",
-    detail_alamat: "",
-    telepon: "",
-    lat: null,
-    lng: null,
-    foto_npwp: null,
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [profile, setProfile] = useState<IndustriProfile | null>(null);
+
+  const [totalTerkirim, setTotalTerkirim] = useState(0);
+  const [totalKredit, setTotalKredit] = useState(0);
+  const [shipments, setShipments] = useState<WasteShipment[]>([]);
+
+  // State Modal Penjemputan Limbah Biasa
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [formLimbah, setFormLimbah] = useState({
+    nama_limbah: "",
+    berat: "",
+    lokasi: "",
+    foto: null as File | null,
   });
 
-  const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [agreed, setAgreed] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
+  // State Modal Penjemputan Limbah B3 (Berbayar)
+  const [isB3ModalOpen, setIsB3ModalOpen] = useState(false);
+  const [formB3, setFormB3] = useState({
+    nama_limbah: "",
+    kategori_id: "cair_kimia",
+    berat: "",
+    lokasi: "",
+    foto: null as File | null,
+  });
 
-  // State Hierarki Wilayah
-  const [provinces, setProvinces] = useState<{ id: string; name: string }[]>([]);
-  const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
-  const [districts, setDistricts] = useState<{ id: string; name: string }[]>([]);
-  const [villages, setVillages] = useState<{ id: string; name: string }[]>([]);
+  // State Modal Pencairan (Withdrawal)
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+  const [formWithdraw, setFormWithdraw] = useState({
+    jumlah_token: "",
+    metode: "Bank Transfer",
+    nomor_rekening: "",
+  });
 
-  // Pengecekan Sesi Aktif (Direct ke Step 3 Jika Email/Password Sudah Terbuat)
+  // State Modal Edit Profil Industri
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nama_perusahaan: "",
+    npwp: "",
+    telepon: "",
+    provinsi: "",
+    kota_kabupaten: "",
+    alamat: "",
+  });
+
+  // State Modal Hapus Akun Industri
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   useEffect(() => {
-    const checkExistingSession = async () => {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    let intervalId: NodeJS.Timeout;
+    const supabase = createSupabaseBrowserClient();
 
-      if (user) {
-        // Cek apakah profil industri sudah lengkap di DB
-        const { data: profile } = await supabase
-          .from("industri_profiles")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
+    const fetchTrackingData = async (uid: string) => {
+      // 1. Ambil data pengiriman limbah
+      const { data: shipmentData } = await supabase
+        .from("waste_shipments")
+        .select("*")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false });
 
-        if (profile) {
-          router.replace("/dashboard-industri");
-          return;
-        }
+      // 2. Ambil riwayat pencairan dana
+      const { data: withdrawData } = await supabase
+        .from("pencairan_dana")
+        .select("jumlah_tarik_tunai")
+        .eq("id_agen", uid);
 
-        // Jika user terautentikasi TAPI profil belum ada, langsung lompat ke Step 3 (Detail Profil)
-        setForm((prev) => ({ ...prev, email: user.email || "" }));
-        setStep(3);
+      if (shipmentData) {
+        setShipments(shipmentData);
+        const totalKg = shipmentData
+          .filter((s) => s.status.toLowerCase() === "selesai")
+          .reduce((sum, s) => sum + Number(s.perkiraan_berat), 0);
+
+        setTotalTerkirim(totalKg);
+
+        const grossToken = totalKg * KREDIT_PER_KG;
+        const totalDicairkan = withdrawData
+          ? withdrawData.reduce((sum, w) => sum + Number(w.jumlah_tarik_tunai), 0)
+          : 0;
+
+        const netKredit = grossToken - totalDicairkan;
+        setTotalKredit(netKredit > 0 ? netKredit : 0);
       }
     };
 
-    checkExistingSession();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) {
+        router.replace("/masuk");
+        return;
+      }
+      setUserId(data.user.id);
+      setEmail(data.user.email ?? null);
+
+      // Cek data profil industri
+      const { data: profileData } = await supabase
+        .from("industri_profiles")
+        .select("nama_perusahaan, npwp, alamat, telepon, provinsi, kota_kabupaten, created_at, status_akun, alasan_ban")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+
+      if (!profileData) {
+        router.replace("/daftar/industri");
+        return;
+      }
+
+      if (profileData.status_akun === "banned") {
+        alert(
+          `Akun Anda telah di-ban oleh Administrator!\nAlasan: ${
+            profileData.alasan_ban || "Pelanggaran ketentuan layanan."
+          }`
+        );
+        await supabase.auth.signOut();
+        router.replace("/masuk");
+        return;
+      }
+
+      setProfile(profileData);
+      setEditForm({
+        nama_perusahaan: profileData.nama_perusahaan || "",
+        npwp: profileData.npwp || "",
+        telepon: profileData.telepon || "",
+        provinsi: profileData.provinsi || "",
+        kota_kabupaten: profileData.kota_kabupaten || "",
+        alamat: profileData.alamat || "",
+      });
+
+      fetchTrackingData(data.user.id);
+      setLoading(false);
+
+      intervalId = setInterval(() => {
+        fetchTrackingData(data.user.id);
+      }, 300000);
+    });
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [router]);
 
-  // Load Provinsi saat mount
-  useEffect(() => {
-    fetch("https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json")
-      .then((res) => res.json())
-      .then((data) => setProvinces(data))
-      .catch(() => console.error("Gagal memuat data provinsi"));
-  }, []);
-
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const id = setInterval(() => setResendCooldown((c) => Math.max(0, c - 1)), 1000);
-    return () => clearInterval(id);
-  }, [resendCooldown]);
-
-  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  // Handler Perubahan Dropdown Wilayah Berjenjang
-  const handleProvinsiChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const provId = e.target.value;
-    const provName = e.target.options[e.target.selectedIndex].text;
-
-    update("provinsi", provId ? provName : "");
-    update("kota", "");
-    update("kecamatan", "");
-    update("kelurahan", "");
-    setCities([]);
-    setDistricts([]);
-    setVillages([]);
-
-    if (provId) {
-      fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`)
-        .then((res) => res.json())
-        .then((data) => setCities(data))
-        .catch(() => console.error("Gagal memuat data kota"));
-    }
-  };
-
-  const handleKotaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const regencyId = e.target.value;
-    const regencyName = e.target.options[e.target.selectedIndex].text;
-
-    update("kota", regencyId ? regencyName : "");
-    update("kecamatan", "");
-    update("kelurahan", "");
-    setDistricts([]);
-    setVillages([]);
-
-    if (regencyId) {
-      fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/districts/${regencyId}.json`)
-        .then((res) => res.json())
-        .then((data) => setDistricts(data))
-        .catch(() => console.error("Gagal memuat data kecamatan"));
-    }
-  };
-
-  const handleKecamatanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const districtId = e.target.value;
-    const districtName = e.target.options[e.target.selectedIndex].text;
-
-    update("kecamatan", districtId ? districtName : "");
-    update("kelurahan", "");
-    setVillages([]);
-
-    if (districtId) {
-      fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/villages/${districtId}.json`)
-        .then((res) => res.json())
-        .then((data) => setVillages(data))
-        .catch(() => console.error("Gagal memuat data kelurahan"));
-    }
-  };
-
-  // Handler saat titik pada Map di-klik
-  const handleLocationSelect = (loc: {
-    lat: number;
-    lng: number;
-    alamat: string;
-    kelurahan: string;
-    kecamatan: string;
-    kota_kabupaten: string;
-    provinsi: string;
-  }) => {
-    setForm((prev) => ({
-      ...prev,
-      lat: Number(loc.lat),
-      lng: Number(loc.lng),
-      detail_alamat: prev.detail_alamat || loc.alamat.toUpperCase(),
-      provinsi: prev.provinsi || loc.provinsi,
-      kota: prev.kota || loc.kota_kabupaten,
-      kecamatan: prev.kecamatan || loc.kecamatan,
-      kelurahan: prev.kelurahan || loc.kelurahan,
-    }));
-  };
-
-  function goNext() {
-    setDirection(1);
-    setStep((s) => Math.min(s + 1, stepLabels.length - 1));
-  }
-
-  function goBack() {
-    setDirection(-1);
-    setError(null);
-    setStep((s) => Math.max(s - 1, 0));
-  }
-
-  async function sendOtp() {
-    const supabase = createSupabaseBrowserClient();
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: form.email,
-      options: { shouldCreateUser: true },
-    });
-    if (otpError) throw otpError;
-    setResendCooldown(30);
-  }
-
-  async function handleResend() {
-    if (resendCooldown > 0) return;
-    setError(null);
-    setStatus("loading");
-    try {
-      await sendOtp();
-    } catch (err) {
-      setError(formatHumanFriendlyError(err));
-    } finally {
-      setStatus("idle");
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  // Handler Simpan Perubahan Profil Industri
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    if (!userId) return;
+    setEditLoading(true);
 
-    if (step === 0) {
-      setStatus("loading");
-      try {
-        await sendOtp();
-        setStatus("idle");
-        goNext();
-      } catch (err) {
-        setStatus("idle");
-        setError(formatHumanFriendlyError(err));
-      }
-      return;
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase
+      .from("industri_profiles")
+      .update({
+        nama_perusahaan: editForm.nama_perusahaan,
+        npwp: editForm.npwp,
+        telepon: editForm.telepon,
+        provinsi: editForm.provinsi,
+        kota_kabupaten: editForm.kota_kabupaten,
+        alamat: editForm.alamat,
+      })
+      .eq("user_id", userId);
+
+    setEditLoading(false);
+
+    if (!error) {
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...editForm,
+            }
+          : null
+      );
+      setIsEditOpen(false);
+      alert("Profil industri berhasil diperbarui!");
+    } else {
+      alert("Gagal memperbarui profil: " + error.message);
     }
+  };
 
-    if (step === 1) {
-      if (form.otp.length !== 6) {
-        setError("Masukkan 6 digit kode verifikasi yang benar.");
+  // Handler Hapus Akun Industri
+  const handleDeleteAccount = async () => {
+    if (!userId) return;
+    setDeleteLoading(true);
+
+    try {
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert("Gagal menghapus akun: " + data.error);
+        setDeleteLoading(false);
         return;
       }
-      setStatus("loading");
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          email: form.email,
-          token: form.otp,
-          type: "email",
-        });
-        if (verifyError) throw verifyError;
-        setStatus("idle");
-        goNext();
-      } catch {
-        setStatus("idle");
-        setError("Kode verifikasi salah atau sudah kedaluwarsa. Silakan minta kode baru.");
-      }
-      return;
+
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+
+      alert("Akun industri berhasil dihapus permanen.");
+      router.push("/masuk");
+    } catch {
+      alert("Terjadi kesalahan jaringan saat menghapus akun.");
+      setDeleteLoading(false);
     }
+  };
 
-    if (step === 2) {
-      if (!isValidPassword(form.password)) {
-        setError(validationMessages.password);
-        return;
-      }
-      setStatus("loading");
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const { error: updateError } = await supabase.auth.updateUser({
-          password: form.password,
-          data: { role: "perusahaan" },
-        });
+  // Handler Pengiriman Limbah Biasa (Langsung ke Supabase)
+  async function handleKirimLimbah(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setErrorMsg(null);
 
-        // Jika error terjadi karena password baru sama dengan password lama, abaikan error tersebut
-        if (
-          updateError &&
-          !updateError.message.toLowerCase().includes("different") &&
-          !updateError.message.toLowerCase().includes("same")
-        ) {
-          throw updateError;
-        }
-
-        setStatus("idle");
-        goNext();
-      } catch (err) {
-        setStatus("idle");
-        setError(formatHumanFriendlyError(err));
-      }
-      return;
-    }
-
-    // Step 3: Validasi Form Profil
-    const errors: FieldErrors = {};
-    if (!form.nama_perusahaan.trim()) errors.nama_perusahaan = "Nama perusahaan wajib diisi.";
-    if (!isValidNpwp(form.npwp)) errors.npwp = validationMessages.npwp;
-
-    if (!form.foto_npwp) {
-      errors.foto_npwp = "Foto bukti NPWP wajib diupload.";
-    } else if (form.foto_npwp.size > 5 * 1024 * 1024) {
-      // Validasi Ukuran File Sisi Klien (Maksimal 5MB)
-      errors.foto_npwp = "Ukuran gambar terlalu besar. Maksimal 5MB.";
-    }
-
-    if (!form.provinsi) errors.provinsi = "Provinsi wajib dipilih.";
-    if (!form.kota) errors.kota = "Kota/Kabupaten wajib dipilih.";
-    if (!form.kecamatan) errors.kecamatan = "Kecamatan wajib dipilih.";
-    if (!form.kelurahan) errors.kelurahan = "Kelurahan wajib dipilih.";
-    if (!form.detail_alamat.trim()) errors.detail_alamat = "Detail alamat wajib diisi.";
-
-    const alamatLengkap = `${form.detail_alamat}, Kel. ${form.kelurahan}, Kec. ${form.kecamatan}, ${form.kota}, ${form.provinsi}`;
-    if (form.provinsi && form.kota && form.detail_alamat && !isValidAddress(alamatLengkap)) {
-      errors.detail_alamat = validationMessages.address;
-    }
-
-    if (!isValidPhone(form.telepon)) errors.telepon = validationMessages.phone;
-
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
-
-    if (!agreed) {
-      setError("Anda harus menyetujui Syarat & Ketentuan dan Kebijakan Privasi LENTERA.");
-      return;
-    }
-
-    setStatus("loading");
     try {
       const supabase = createSupabaseBrowserClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user ?? (await supabase.auth.getUser()).data.user;
+      const { data: { user } } = await supabase.auth.getUser();
 
-      if (!user) throw new Error("no-session");
+      if (!user) throw new Error("Sesi Anda telah berakhir, silakan login kembali.");
 
       let fotoUrl = "";
-      if (form.foto_npwp) {
-        const fileExt = form.foto_npwp.name.split(".").pop();
+      if (formLimbah.foto) {
+        const fileExt = formLimbah.foto.name.split('.').pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
-          .from("industri_documents")
-          .upload(`npwp/${fileName}`, form.foto_npwp);
+          .from('waste_images')
+          .upload(`limbah/${fileName}`, formLimbah.foto);
 
-        if (uploadError) throw uploadError;
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage
+            .from('waste_images')
+            .getPublicUrl(`limbah/${fileName}`);
 
-        const { data: publicUrlData } = supabase.storage
-          .from("industri_documents")
-          .getPublicUrl(`npwp/${fileName}`);
-
-        fotoUrl = publicUrlData.publicUrl;
+          fotoUrl = publicUrlData.publicUrl;
+        }
       }
 
-      const { error: profileError } = await supabase.from("industri_profiles").upsert(
-        {
+      // Insert Langsung ke Supabase Database
+      const { error: insertError } = await supabase
+        .from("waste_shipments")
+        .insert({
           user_id: user.id,
-          nama_perusahaan: form.nama_perusahaan,
-          npwp: form.npwp,
-          provinsi: form.provinsi,
-          kota_kabupaten: form.kota,
-          kecamatan: form.kecamatan,
-          kelurahan: form.kelurahan,
-          alamat: alamatLengkap,
-          telepon: form.telepon,
-          lat: form.lat !== null ? Number(form.lat) : null,
-          lng: form.lng !== null ? Number(form.lng) : null,
-          foto_npwp_url: fotoUrl,
-        },
-        { onConflict: "user_id" }
-      );
+          nama_limbah: formLimbah.nama_limbah,
+          perkiraan_berat: Number(formLimbah.berat),
+          lokasi_penjemputan: formLimbah.lokasi.toUpperCase(),
+          foto_url: fotoUrl,
+          is_b3: false,
+          status: "Menunggu Penjemputan",
+        });
 
-      if (profileError) throw profileError;
+      if (insertError) throw new Error(insertError.message);
 
-      await supabase.auth.refreshSession();
-      setStatus("submitted");
-      router.refresh();
-      router.push("/dashboard-industri");
+      setFormLimbah({ nama_limbah: "", berat: "", lokasi: "", foto: null });
+      setIsModalOpen(false);
+
+      const { data: newData } = await supabase
+        .from("waste_shipments")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (newData) setShipments(newData);
+
     } catch (err) {
-      setStatus("idle");
-      setError(formatHumanFriendlyError(err));
+      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan data.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
-  const searchQuery = `${form.kelurahan} ${form.kecamatan} ${form.kota} ${form.provinsi}`.trim();
+  // Handler Pengiriman Limbah B3 Berbayar (Langsung ke Supabase)
+  async function handleKirimLimbahB3(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setErrorMsg(null);
+
+    const katSelected = KATEGORI_B3.find((k) => k.id === formB3.kategori_id);
+    const tarifPerKg = katSelected ? katSelected.tarif : 15000;
+    const totalBiaya = Number(formB3.berat || 0) * tarifPerKg;
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) throw new Error("Sesi Anda telah berakhir, silakan login kembali.");
+
+      let fotoUrl = "";
+      if (formB3.foto) {
+        const fileExt = formB3.foto.name.split('.').pop();
+        const fileName = `b3-${user.id}-${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('waste_images')
+          .upload(`limbah_b3/${fileName}`, formB3.foto);
+
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage
+            .from('waste_images')
+            .getPublicUrl(`limbah_b3/${fileName}`);
+
+          fotoUrl = publicUrlData.publicUrl;
+        }
+      }
+
+      // Insert Langsung ke Supabase Database
+      const { error: insertError } = await supabase
+        .from("waste_shipments")
+        .insert({
+          user_id: user.id,
+          nama_limbah: `[B3] ${formB3.nama_limbah}`,
+          perkiraan_berat: Number(formB3.berat),
+          lokasi_penjemputan: formB3.lokasi.toUpperCase(),
+          foto_url: fotoUrl,
+          is_b3: true,
+          kategori_b3: katSelected?.nama,
+          biaya_pengolahan: totalBiaya,
+          status: "Menunggu Pembayaran",
+        });
+
+      if (insertError) throw new Error(insertError.message);
+
+      alert(`Pengajuan Limbah B3 Berhasil Didaftarkan!\nTotal Biaya: Rp ${totalBiaya.toLocaleString("id-ID")}\nSilakan lakukan pembayaran agar pesanan dapat diproses.`);
+      setFormB3({ nama_limbah: "", kategori_id: "cair_kimia", berat: "", lokasi: "", foto: null });
+      setIsB3ModalOpen(false);
+
+      const { data: newData } = await supabase
+        .from("waste_shipments")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (newData) setShipments(newData);
+
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan data.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  // Handler Trigger Pembayaran
+  const handleBayarLimbahB3 = (shipment: WasteShipment) => {
+    alert(`Membuka portal pembayaran untuk Shipment ID: ${shipment.id}\nBiaya: Rp ${(shipment.biaya_pengolahan || 0).toLocaleString("id-ID")}`);
+  };
+
+  const handlePencairan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const jumlahCair = Number(formWithdraw.jumlah_token);
+
+    if (jumlahCair > totalKredit) {
+      alert("Token yang ingin dicairkan melebihi saldo tersedia!");
+      return;
+    }
+
+    setIsWithdrawing(true);
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) throw new Error("Sesi tidak ditemukan");
+
+      // Catat transaksi pencairan
+      const { error: withdrawError } = await supabase
+        .from("pencairan_dana")
+        .insert({
+          id_agen: user.id,
+          jumlah_tarik_tunai: jumlahCair,
+          metode: `${formWithdraw.metode} - ${formWithdraw.nomor_rekening}`,
+          status: "diproses",
+        });
+
+      if (withdrawError) throw withdrawError;
+
+      setTotalKredit((prev) => prev - jumlahCair);
+      setWithdrawSuccess(true);
+
+      setTimeout(() => {
+        setWithdrawSuccess(false);
+        setIsWithdrawModalOpen(false);
+        setFormWithdraw({ jumlah_token: "", metode: "Bank Transfer", nomor_rekening: "" });
+      }, 3000);
+
+    } catch (error: unknown) {
+      console.error("Gagal melakukan pencairan:", error);
+      const message = error instanceof Error ? error.message : "Terjadi kesalahan pada database.";
+      alert(`Gagal pencairan: ${message}`);
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-cream">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-forest border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-forest font-medium text-sm">Memuat portal...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const joinedLabel = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "-";
+
+  const estimasiKredit = Number(formLimbah.berat || 0) * KREDIT_PER_KG;
+  const selectedKatB3 = KATEGORI_B3.find((k) => k.id === formB3.kategori_id);
+  const estimasiBiayaB3 = Number(formB3.berat || 0) * (selectedKatB3?.tarif || 0);
+  const estimasiRupiah = Number(formWithdraw.jumlah_token || 0) * 500;
 
   return (
-    <AuthShell
-      eyebrow="Pendaftaran industri"
-      title="Daftar sebagai Industri"
-      subtitle="Untuk pabrik dan industri sumber limbah."
-      footer={
-        <p className="text-sm text-ink/60 space-y-1.5">
-          <span className="block">
-            Sudah punya akun?{" "}
-            <Link href="/masuk" className="text-green font-medium hover:underline">
-              Masuk
-            </Link>
-          </span>
-          <span className="block">
-            Mau daftar sebagai mitra?{" "}
-            <Link href="/daftar/mitra" className="text-green font-medium hover:underline">
-              Klik di sini
-            </Link>
-          </span>
+    <div className="px-4 sm:px-8 md:px-12 py-6 md:py-10 max-w-6xl mx-auto w-full relative">
+      {/* Ringkasan */}
+      <section id="ringkasan" className="scroll-mt-8 mb-10">
+        <p className="font-mono text-[11px] tracking-widest uppercase text-green mb-2">
+          Ringkasan
         </p>
-      }
-    >
-      {status === "submitted" ? (
-        <div className="text-center py-4">
-          <p className="text-forest font-medium mb-1">Pendaftaran industri berhasil.</p>
-          <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
-        </div>
-      ) : (
-        <>
-          <ProgressSteps steps={stepLabels} current={step} />
-          <form onSubmit={handleSubmit}>
-            <AnimatePresence mode="wait" custom={direction} initial={false}>
-              <motion.div
-                key={step}
-                custom={direction}
-                variants={variants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest mb-1.5">
+          Selamat datang, {profile?.nama_perusahaan ?? "Industri"}
+        </h1>
+        <p className="text-ink/60 mb-6 text-sm">
+          Pantau ringkasan kemitraan industri kamu dengan LENTERA di sini.
+        </p>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
+            <p className="text-xs text-ink/45 mb-1">Status akun</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
+              <p className="font-display font-semibold text-forest text-lg">Aktif</p>
+            </div>
+          </div>
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
+            <p className="text-xs text-ink/45 mb-1">Total limbah terkirim</p>
+            <p className="font-display font-semibold text-forest text-lg mt-2">
+              {totalTerkirim.toLocaleString("id-ID")} <span className="text-sm font-normal text-ink/60">kg</span>
+            </p>
+          </div>
+
+          {/* KARTU KREDIT DENGAN TOMBOL CAIRKAN */}
+          <div className="bg-gradient-to-br from-forest to-forest/90 rounded-2xl border border-forest p-5 shadow-sm flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
+            <div className="flex justify-between items-start relative z-10">
+              <p className="text-xs text-cream/70 mb-1">Kredit Tersedia</p>
+              <button
+                onClick={() => setIsWithdrawModalOpen(true)}
+                disabled={totalKredit <= 0}
+                className="bg-gold/20 hover:bg-gold/40 disabled:bg-gold/10 text-gold disabled:text-gold/50 text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-full transition-colors cursor-pointer"
               >
-                {step === 0 && (
-                  <FormField
-                    label="Email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
-                    placeholder="nama@perusahaan.com"
-                    required
-                    autoFocus
-                  />
-                )}
+                Cairkan
+              </button>
+            </div>
+            <div className="flex items-end gap-1.5 mt-2 relative z-10">
+              <span className="text-gold font-display font-bold text-2xl">
+                {totalKredit.toLocaleString("id-ID")}
+              </span>
+              <span className="text-xs text-cream/70 font-medium mb-1.5 uppercase tracking-wider">Token</span>
+            </div>
+          </div>
 
-                {step === 1 && (
-                  <>
-                    <p className="text-sm text-ink/55 mb-4">
-                      Kode dikirim ke <span className="text-forest font-medium">{form.email}</span> ·{" "}
-                      <button type="button" onClick={goBack} className="text-green hover:underline">
-                        ganti
-                      </button>
-                    </p>
-                    <OtpField value={form.otp} onChange={(v) => update("otp", v)} />
-                    <button
-                      type="button"
-                      onClick={handleResend}
-                      disabled={resendCooldown > 0 || status === "loading"}
-                      className="text-xs text-green hover:underline disabled:text-ink/35 mb-2"
-                    >
-                      {resendCooldown > 0
-                        ? `Kirim ulang kode (${resendCooldown}s)`
-                        : "Kirim ulang kode"}
-                    </button>
-                  </>
-                )}
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
+            <p className="text-xs text-ink/45 mb-1">Bergabung sejak</p>
+            <p className="font-display font-semibold text-forest text-lg mt-2">{joinedLabel}</p>
+          </div>
+        </div>
+      </section>
 
-                {step === 2 && (
-                  <>
-                    <FormField
-                      label="Kata sandi"
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => update("password", e.target.value)}
-                      placeholder="••••••••"
-                      required
-                      autoFocus
-                    />
-                    <PasswordRequirements value={form.password} />
-                  </>
-                )}
+      {/* Profil Industri */}
+      <section id="profil-industri" className="scroll-mt-8 mb-10">
+        <div className="flex justify-between items-end mb-4">
+          <div>
+            <p className="font-mono text-xs tracking-widest uppercase text-clay mb-1">
+              Profil industri
+            </p>
+            <h2 className="font-display font-semibold text-xl text-forest">
+              Informasi Industri
+            </h2>
+          </div>
+          <button
+            onClick={() => setIsEditOpen(true)}
+            className="text-xs font-semibold px-4 py-2 bg-forest text-cream rounded-xl hover:bg-forest/90 transition-colors cursor-pointer"
+          >
+            Ubah Profil
+          </button>
+        </div>
 
-                {step === 3 && (
-                  <>
-                    <FormField
-                      label="Nama perusahaan"
-                      type="text"
-                      value={form.nama_perusahaan}
-                      onChange={(e) => update("nama_perusahaan", e.target.value)}
-                      placeholder="PT / CV ..."
-                      required
-                      autoFocus
-                    />
-                    {fieldErrors.nama_perusahaan && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">
-                        {fieldErrors.nama_perusahaan}
-                      </p>
-                    )}
+        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6 shadow-xs">
+          <InfoRow label="Nama Perusahaan" value={profile?.nama_perusahaan} />
+          <InfoRow label="Email Kontak" value={email} />
+          <InfoRow label="NPWP" value={profile?.npwp} />
+          <InfoRow label="Nomor Telepon" value={profile?.telepon} />
+          <InfoRow
+            label="Wilayah Operasional"
+            value={
+              profile?.kota_kabupaten
+                ? `${profile.kota_kabupaten}, ${profile.provinsi}`
+                : "BELUM DISET"
+            }
+          />
+          <InfoRow label="Alamat Lengkap" value={profile?.alamat} className="sm:col-span-2" />
+        </div>
+      </section>
 
-                    <FormField
-                      label="NPWP"
-                      type="text"
-                      value={form.npwp}
-                      onChange={(e) => update("npwp", e.target.value)}
-                      placeholder="15 atau 16 digit NPWP"
-                      required
-                    />
-                    {fieldErrors.npwp && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.npwp}</p>
-                    )}
+      {/* Lacak Pengiriman */}
+      <section id="lacak-pengiriman" className="scroll-mt-8 mb-10">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <div>
+            <h2 className="font-display font-semibold text-xl text-forest mb-0.5">Status Pengiriman</h2>
+            <p className="text-xs text-ink/60">Sistem diperbarui otomatis (Auto-update: Aktif)</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
+            <button
+              onClick={() => {
+                setErrorMsg(null);
+                setIsModalOpen(true);
+              }}
+              className="bg-forest text-paper px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium hover:bg-forest/90 transition-colors shadow-xs text-center flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>+</span> Penjemputan Limbah Biasa
+            </button>
 
-                    <div className="mb-4 text-left">
-                      <label htmlFor={npwpFileId} className="block text-sm font-medium mb-1.5 text-ink">
-                        Upload Foto Bukti NPWP
-                      </label>
-                      <input
-                        id={npwpFileId}
-                        type="file"
-                        accept="image/png, image/jpeg, image/jpg"
-                        onChange={(e) => setForm((f) => ({ ...f, foto_npwp: e.target.files?.[0] || null }))}
-                        className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2 bg-white"
-                        required
-                      />
-                      <p className="text-[11px] text-ink/50 mt-1">Maksimal ukuran berkas: 5MB (JPG, JPEG, PNG)</p>
-                      {fieldErrors.foto_npwp && (
-                        <p className="text-xs text-red-600 mt-1.5">{fieldErrors.foto_npwp}</p>
+            <button
+              onClick={() => {
+                setErrorMsg(null);
+                setIsB3ModalOpen(true);
+              }}
+              className="bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold hover:bg-amber-700 transition-colors shadow-xs text-center flex items-center justify-center gap-1.5 cursor-pointer border border-amber-700"
+            >
+              <span>⚠️</span> Pengolahan Limbah B3
+            </button>
+          </div>
+        </div>
+
+        {shipments.length === 0 ? (
+          <div className="bg-paper rounded-2xl border border-forest/10 p-10 text-center">
+            <p className="text-ink/60 text-sm">Belum ada riwayat pengiriman limbah.</p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {shipments.map((shipment) => {
+              const isPendingPayment = shipment.status.toLowerCase() === "menunggu pembayaran";
+
+              return (
+                <div key={shipment.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col justify-between shadow-xs hover:border-forest/20 transition-colors">
+                  <div>
+                    <div className="flex justify-between items-start mb-3 gap-2">
+                      <div>
+                        <h3 className="font-semibold text-forest text-base leading-snug">{shipment.nama_limbah}</h3>
+                        {shipment.is_b3 && (
+                          <span className="inline-block mt-0.5 text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
+                            Kategori B3 Berbayar
+                          </span>
+                        )}
+                      </div>
+                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 ${
+                        shipment.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
+                        : isPendingPayment ? 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
+                        : shipment.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
+                        : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {shipment.status}
+                      </span>
+                    </div>
+
+                    <div className="text-sm text-ink/70 space-y-1.5 mb-4">
+                      <p><strong className="font-medium text-ink">Berat:</strong> {shipment.perkiraan_berat} kg</p>
+                      <p className="line-clamp-2"><strong className="font-medium text-ink">Lokasi:</strong> {shipment.lokasi_penjemputan}</p>
+
+                      {shipment.is_b3 && shipment.biaya_pengolahan && (
+                        <p className="text-xs font-semibold text-amber-900 pt-1">
+                          Biaya Pengolahan: Rp {shipment.biaya_pengolahan.toLocaleString("id-ID")}
+                        </p>
                       )}
                     </div>
+                  </div>
 
-                    {/* SELECT WILAYAH BERJENJANG */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                      {/* Provinsi */}
-                      <div className="text-left">
-                        <label className="block text-sm font-medium mb-1.5 text-ink">Provinsi</label>
-                        <select
-                          className={`block w-full text-sm text-ink/80 border ${
-                            fieldErrors.provinsi ? "border-red-500" : "border-ink/20"
-                          } rounded-md p-2.5 bg-white`}
-                          onChange={handleProvinsiChange}
-                          required
-                        >
-                          <option value="">Pilih Provinsi...</option>
-                          {provinces.map((prov) => (
-                            <option key={prov.id} value={prov.id}>
-                              {prov.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                  <div className="flex justify-between items-center border-t border-forest/10 pt-3 mt-auto">
+                    <p className="text-xs text-ink/40">
+                      Dibuat: {new Date(shipment.created_at).toLocaleDateString("id-ID")}
+                    </p>
 
-                      {/* Kota/Kabupaten */}
-                      <div className="text-left">
-                        <label className="block text-sm font-medium mb-1.5 text-ink">Kota / Kabupaten</label>
-                        <select
-                          className={`block w-full text-sm text-ink/80 border ${
-                            fieldErrors.kota ? "border-red-500" : "border-ink/20"
-                          } rounded-md p-2.5 bg-white disabled:bg-ink/5`}
-                          onChange={handleKotaChange}
-                          disabled={cities.length === 0}
-                          required
-                        >
-                          <option value="">Pilih Kota/Kabupaten...</option>
-                          {cities.map((city) => (
-                            <option key={city.id} value={city.id}>
-                              {city.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    {isPendingPayment ? (
+                      <button
+                        onClick={() => handleBayarLimbahB3(shipment)}
+                        className="text-xs font-bold px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors cursor-pointer"
+                      >
+                        Bayar Sekarang
+                      </button>
+                    ) : (
+                      !shipment.is_b3 && shipment.status.toLowerCase() === 'selesai' && (
+                        <p className="text-[10px] font-medium text-gold bg-gold/10 px-2 py-0.5 rounded-md">
+                          +{Number(shipment.perkiraan_berat) * KREDIT_PER_KG} Token
+                        </p>
+                      )
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-                      {/* Kecamatan */}
-                      <div className="text-left">
-                        <label className="block text-sm font-medium mb-1.5 text-ink">Kecamatan</label>
-                        <select
-                          className={`block w-full text-sm text-ink/80 border ${
-                            fieldErrors.kecamatan ? "border-red-500" : "border-ink/20"
-                          } rounded-md p-2.5 bg-white disabled:bg-ink/5`}
-                          onChange={handleKecamatanChange}
-                          disabled={districts.length === 0}
-                          required
-                        >
-                          <option value="">Pilih Kecamatan...</option>
-                          {districts.map((dist) => (
-                            <option key={dist.id} value={dist.id}>
-                              {dist.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+      {/* Danger Zone: Hapus Akun */}
+      <section className="bg-red-50/50 border border-red-200/60 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h3 className="font-display font-semibold text-red-900 text-base sm:text-lg">
+            Hapus Akun Industri
+          </h3>
+          <p className="text-xs sm:text-sm text-red-700/80 mt-0.5">
+            Tindakan ini permanen. Seluruh profil perusahaan dan riwayat pengiriman kamu akan dihapus.
+          </p>
+        </div>
+        <button
+          onClick={() => setIsDeleteOpen(true)}
+          className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors shrink-0 cursor-pointer"
+        >
+          Hapus Akun
+        </button>
+      </section>
 
-                      {/* Kelurahan */}
-                      <div className="text-left">
-                        <label className="block text-sm font-medium mb-1.5 text-ink">
-                          Kelurahan / Desa
-                        </label>
-                        <select
-                          className={`block w-full text-sm text-ink/80 border ${
-                            fieldErrors.kelurahan ? "border-red-500" : "border-ink/20"
-                          } rounded-md p-2.5 bg-white disabled:bg-ink/5`}
-                          onChange={(e) =>
-                            update("kelurahan", e.target.options[e.target.selectedIndex].text)
-                          }
-                          disabled={villages.length === 0}
-                          required
-                        >
-                          <option value="">Pilih Kelurahan...</option>
-                          {villages.map((vill) => (
-                            <option key={vill.id} value={vill.id}>
-                              {vill.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
+      {/* MODAL UBAH PROFIL INDUSTRI */}
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-forest/10 rounded-2xl max-w-lg w-full p-6 shadow-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="font-display font-semibold text-xl text-forest mb-4">
+              Ubah Data Industri
+            </h3>
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              <div>
+                <label className="block text-xs text-ink/60 mb-1">Nama Perusahaan</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.nama_perusahaan}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, nama_perusahaan: e.target.value })
+                  }
+                  className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                />
+              </div>
 
-                    {/* INTERAKSI PETA */}
-                    <div className="mb-4 text-left">
-                      <label className="block text-sm font-medium mb-1.5 text-ink">
-                        Pilih Titik Lokasi Pabrik / Industri
-                      </label>
-                      <LocationPickerMap
-                        searchQuery={searchQuery}
-                        onLocationSelect={handleLocationSelect}
-                      />
-                    </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">NPWP</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.npwp}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, npwp: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Nomor Telepon</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.telepon}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, telepon: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+              </div>
 
-                    <FormField
-                      label="Detail Alamat"
-                      type="text"
-                      value={form.detail_alamat}
-                      onChange={(e) => update("detail_alamat", e.target.value.toUpperCase())}
-                      placeholder="Jalan, RT/RW, no. gedung / pabrik, patokan"
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Provinsi</label>
+                  <input
+                    type="text"
+                    value={editForm.provinsi}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, provinsi: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Kota / Kabupaten</label>
+                  <input
+                    type="text"
+                    value={editForm.kota_kabupaten}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, kota_kabupaten: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-ink/60 mb-1">Alamat Lengkap</label>
+                <textarea
+                  rows={3}
+                  value={editForm.alamat}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, alamat: e.target.value })
+                  }
+                  className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                <button
+                  type="button"
+                  onClick={() => setIsEditOpen(false)}
+                  className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="text-xs font-semibold px-4 py-2.5 bg-forest text-cream rounded-xl hover:bg-forest/90 disabled:opacity-50 cursor-pointer"
+                >
+                  {editLoading ? "Menyimpan..." : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS AKUN */}
+      {isDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-red-200 rounded-2xl max-w-md w-full p-6 shadow-lg">
+            <h3 className="font-display font-semibold text-xl text-red-900 mb-2">
+              Konfirmasi Hapus Akun
+            </h3>
+            <p className="text-sm text-ink/70 mb-6">
+              Apakah kamu yakin ingin menghapus akun industri ini? Semua data profil dan riwayat penjemputan limbah kamu akan dihapus permanen.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteOpen(false)}
+                className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading}
+                className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+              >
+                {deleteLoading ? "Menghapus..." : "Ya, Hapus Akun"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PENCAIRAN KREDIT */}
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col transform transition-all">
+
+            {!withdrawSuccess ? (
+              <>
+                <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center bg-forest text-cream">
+                  <h3 className="font-display font-semibold text-lg">Pencairan Token</h3>
+                  <button onClick={() => setIsWithdrawModalOpen(false)} className="hover:text-gold transition-colors cursor-pointer">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                <form onSubmit={handlePencairan} className="p-6 space-y-4">
+                  <div className="bg-gold/10 border border-gold/20 rounded-xl p-3 text-center mb-2">
+                    <p className="text-xs text-ink/60 mb-0.5">Saldo Tersedia</p>
+                    <p className="text-lg font-bold text-gold-dark">{totalKredit.toLocaleString("id-ID")} Token</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-ink">Jumlah Token</label>
+                    <input
+                      type="number"
+                      className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
+                      placeholder="Masukkan jumlah"
+                      value={formWithdraw.jumlah_token}
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, jumlah_token: e.target.value })}
                       required
+                      min="100"
+                      max={totalKredit}
                     />
-                    {fieldErrors.detail_alamat && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">
-                        {fieldErrors.detail_alamat}
+                    <div className="flex justify-between mt-1 px-1">
+                      <p className="text-[10px] text-ink/50">Min. 100 Token</p>
+                      <p className="text-[10px] font-medium text-green">
+                        Est: Rp {estimasiRupiah.toLocaleString("id-ID")}
                       </p>
-                    )}
+                    </div>
+                  </div>
 
-                    <FormField
-                      label="Nomor telepon"
-                      type="tel"
-                      value={form.telepon}
-                      onChange={(e) => update("telepon", e.target.value)}
-                      placeholder="08123456789"
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-ink">Pilih Tujuan Pencairan</label>
+                    <select
+                      className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
+                      value={formWithdraw.metode}
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, metode: e.target.value })}
+                    >
+                      <option value="Bank Transfer">Bank Transfer (BCA, BNI, BRI)</option>
+                      <option value="GoPay">GoPay</option>
+                      <option value="DANA">DANA</option>
+                      <option value="OVO">OVO</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-ink">Nomor Rekening / E-Wallet</label>
+                    <input
+                      type="text"
+                      className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
+                      placeholder="Contoh: 081234567890"
+                      value={formWithdraw.nomor_rekening}
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, nomor_rekening: e.target.value })}
                       required
                     />
-                    {fieldErrors.telepon && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.telepon}</p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isWithdrawing || !formWithdraw.jumlah_token || !formWithdraw.nomor_rekening}
+                    className="w-full bg-gold text-forest mt-2 py-2.5 rounded-xl text-sm font-bold hover:bg-gold/90 transition-colors disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isWithdrawing ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-forest border-t-transparent rounded-full animate-spin"></span>
+                        Memproses...
+                      </>
+                    ) : (
+                      "Cairkan Sekarang"
                     )}
-
-                    <TermsCheckbox checked={agreed} onChange={setAgreed} />
-                  </>
-                )}
-              </motion.div>
-            </AnimatePresence>
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">
-                {error}
-              </p>
+                  </button>
+                </form>
+              </>
+            ) : (
+              <div className="p-8 flex flex-col items-center justify-center text-center space-y-3">
+                <div className="w-16 h-16 bg-green/10 text-green rounded-full flex items-center justify-center mb-2">
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="font-display font-bold text-xl text-forest">Pencairan Berhasil!</h3>
+                <p className="text-sm text-ink/60">
+                  Dana sebesar <strong className="text-ink">Rp {(Number(formWithdraw.jumlah_token) * 500).toLocaleString("id-ID")}</strong> sedang diproses ke {formWithdraw.metode} kamu.
+                </p>
+              </div>
             )}
 
-            <div className="flex gap-3">
-              {step > 0 && <BackButton onClick={goBack} />}
-              <SubmitButton
-                type="submit"
-                disabled={status === "loading"}
-                isSubmitting={status === "loading"}
-              >
-                {status === "loading"
-                  ? "Memproses..."
-                  : step === 0
-                  ? "Kirim Kode"
-                  : step === 1
-                  ? "Verifikasi"
-                  : step < stepLabels.length - 1
-                  ? "Lanjut"
-                  : "Daftar sebagai Industri"}
-              </SubmitButton>
-            </div>
-          </form>
-        </>
+          </div>
+        </div>
       )}
-    </AuthShell>
+
+      {/* POP-UP MODAL KIRIM LIMBAH BIASA */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+
+            <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center shrink-0">
+              <h3 className="font-display font-semibold text-forest text-lg">Formulir Penjemputan Limbah Biasa</h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-forest/5 text-ink/40 hover:text-ink transition-colors cursor-pointer"
+                aria-label="Tutup"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleKirimLimbah} className="p-6 space-y-4 overflow-y-auto">
+              {errorMsg && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs leading-relaxed">
+                  {errorMsg}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Nama Limbah</label>
+                <input
+                  type="text"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white"
+                  placeholder="Contoh: Limbah Plastik Cair"
+                  value={formLimbah.nama_limbah}
+                  onChange={(e) => setFormLimbah({ ...formLimbah, nama_limbah: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Perkiraan Berat (kg)</label>
+                <input
+                  type="number"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white"
+                  placeholder="0"
+                  value={formLimbah.berat}
+                  onChange={(e) => setFormLimbah({ ...formLimbah, berat: e.target.value })}
+                  required
+                  min="1"
+                />
+
+                <div className={`mt-2 p-3 rounded-xl border flex items-center justify-between transition-colors ${
+                  estimasiKredit > 0 ? 'bg-gold/10 border-gold/30' : 'bg-forest/5 border-forest/10'
+                }`}>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-ink/50 mb-0.5">Potensi Pendapatan</p>
+                    <p className="text-xs text-ink/70">Estimasi token yang didapat</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-display font-bold text-lg ${estimasiKredit > 0 ? 'text-gold-dark' : 'text-ink/40'}`}>
+                      +{estimasiKredit.toLocaleString("id-ID")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Detail Lokasi Penjemputan</label>
+                <textarea
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white resize-none"
+                  rows={3}
+                  placeholder="Jalan, No. Gedung, Patokan (Otomatis Kapital)"
+                  value={formLimbah.lokasi}
+                  onChange={(e) => setFormLimbah({ ...formLimbah, lokasi: e.target.value.toUpperCase() })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Limbah</label>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg"
+                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-green bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green/10 file:text-green hover:file:bg-green/20"
+                  onChange={(e) => setFormLimbah({ ...formLimbah, foto: e.target.files?.[0] || null })}
+                  required
+                />
+                <p className="text-[11px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
+              </div>
+
+              <div className="pt-4 mt-2 border-t border-forest/10 flex justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-forest text-cream px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-cream border-t-transparent rounded-full animate-spin"></span>
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    "Kirim Jadwal"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP MODAL PENGOLAHAN LIMBAH B3 (BERBAYAR) */}
+      {isB3ModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+
+            <div className="px-6 py-4 border-b border-amber-200 bg-amber-50 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-display font-semibold text-amber-900 text-lg">Pengolahan Limbah B3 Berbahaya</h3>
+                <p className="text-xs text-amber-700">Penanganan limbah B3 memerlukan biaya pengolahan khusus.</p>
+              </div>
+              <button
+                onClick={() => setIsB3ModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-amber-100 text-amber-700 transition-colors cursor-pointer"
+                aria-label="Tutup"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleKirimLimbahB3} className="p-6 space-y-4 overflow-y-auto">
+              {errorMsg && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs leading-relaxed">
+                  {errorMsg}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Pilih Kategori Limbah B3</label>
+                <select
+                  value={formB3.kategori_id}
+                  onChange={(e) => setFormB3({ ...formB3, kategori_id: e.target.value })}
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                >
+                  {KATEGORI_B3.map((kat) => (
+                    <option key={kat.id} value={kat.id}>
+                      {kat.nama} (Rp {kat.tarif.toLocaleString("id-ID")}/kg)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Nama / Deskripsi Spesifik Limbah</label>
+                <input
+                  type="text"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                  placeholder="Contoh: Sludge Hasil Filtrasi Pabrik"
+                  value={formB3.nama_limbah}
+                  onChange={(e) => setFormB3({ ...formB3, nama_limbah: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Perkiraan Berat Total (kg)</label>
+                <input
+                  type="number"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                  placeholder="0"
+                  value={formB3.berat}
+                  onChange={(e) => setFormB3({ ...formB3, berat: e.target.value })}
+                  required
+                  min="1"
+                />
+
+                <div className="mt-2 p-3 rounded-xl border bg-amber-50/80 border-amber-200 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-800 mb-0.5">Estimasi Biaya Pengolahan</p>
+                    <p className="text-xs text-amber-900/70">Wajib dibayar industri sebelum penjemputan</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-display font-bold text-lg text-amber-900">
+                      Rp {estimasiBiayaB3.toLocaleString("id-ID")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Detail Lokasi Penjemputan</label>
+                <textarea
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white resize-none"
+                  rows={3}
+                  placeholder="Jalan, No. Gedung, Patokan (Otomatis Kapital)"
+                  value={formB3.lokasi}
+                  onChange={(e) => setFormB3({ ...formB3, lokasi: e.target.value.toUpperCase() })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Dokumentasi Limbah B3</label>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg"
+                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200"
+                  onChange={(e) => setFormB3({ ...formB3, foto: e.target.files?.[0] || null })}
+                  required
+                />
+                <p className="text-[11px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
+              </div>
+
+              <div className="pt-4 mt-2 border-t border-forest/10 flex justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsB3ModalOpen(false)}
+                  className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-amber-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    "Daftarkan & Bayar"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* AI Assistant Floating Widget */}
+      <AIAssistant />
+    </div>
   );
 }

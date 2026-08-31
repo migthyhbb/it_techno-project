@@ -23,7 +23,6 @@ import {
 } from "@/lib/validation";
 import { PasswordRequirements } from "@/components/auth/password-requirements";
 
-// Import Map secara Dynamic (Client-side Only) untuk menghindari SSR Error pada Leaflet
 const LocationPickerMap = dynamic(
   () => import("@/components/location-picker-map").then((mod) => mod.LocationPickerMap),
   {
@@ -76,13 +75,11 @@ type FieldErrors = Partial<
   >
 >;
 
-// Helper Fungsi Penerjemah Error Umum & Storage/Database
 function formatHumanFriendlyError(err: unknown): string {
   if (!err) return "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi.";
 
   const message = typeof err === "string" ? err : (err as { message?: string })?.message || "";
 
-  // Error Storage / Upload
   if (message.includes("Payload too large") || message.includes("413") || message.includes("exceeds")) {
     return "Ukuran gambar terlalu besar. Maksimal ukuran berkas adalah 5MB.";
   }
@@ -93,9 +90,8 @@ function formatHumanFriendlyError(err: unknown): string {
     return "Gagal mengunggah dokumen. Silakan periksa koneksi internet Anda dan coba lagi.";
   }
 
-  // Error Database / Auth
   if (message.includes("duplicate key") || message.includes("already exists")) {
-    return "Data NIK/NIB atau profil mitra ini sudah pernah terdaftar.";
+    return "Data NIK/NIB, nomor telepon, atau profil mitra ini sudah pernah terdaftar.";
   }
   if (message.includes("different") || message.includes("same password")) {
     return "Kata sandi baru tidak boleh sama dengan kata sandi lama.";
@@ -104,7 +100,6 @@ function formatHumanFriendlyError(err: unknown): string {
     return "Sesi pendaftaran Anda telah berakhir. Silakan lakukan verifikasi ulang.";
   }
 
-  // Terjemahkan Auth Error Bawaan jika ada
   const translated = translateAuthError(message);
   if (translated !== "Terjadi kesalahan, coba lagi.") {
     return translated;
@@ -140,13 +135,11 @@ export default function DaftarMitraPage() {
   const [agreed, setAgreed] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // State Hierarki Wilayah
   const [provinces, setProvinces] = useState<{ id: string; name: string }[]>([]);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [districts, setDistricts] = useState<{ id: string; name: string }[]>([]);
   const [villages, setVillages] = useState<{ id: string; name: string }[]>([]);
 
-  // Pengecekan Sesi Aktif (Langsung ke Step 3 jika user gantung setelah verifikasi OTP)
   useEffect(() => {
     const checkExistingSession = async () => {
       const supabase = createSupabaseBrowserClient();
@@ -155,11 +148,25 @@ export default function DaftarMitraPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        const { data: profile } = await supabase
-          .from("mitra_profiles")
-          .select("id")
+        const { data: blacklisted } = await supabase
+          .from("blacklists")
+          .select("alasan")
           .eq("user_id", user.id)
           .maybeSingle();
+
+        const { data: profile } = await supabase
+          .from("mitra_profiles")
+          .select("id, status_akun, alasan_ban")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (blacklisted || profile?.status_akun === "banned") {
+          const alasan = blacklisted?.alasan || profile?.alasan_ban || "Pelanggaran ketentuan layanan.";
+          alert(`Akun Anda telah diblokir/di-ban!\nAlasan: ${alasan}`);
+          await supabase.auth.signOut();
+          router.replace("/masuk");
+          return;
+        }
 
         if (profile) {
           router.replace("/dashboard");
@@ -174,11 +181,10 @@ export default function DaftarMitraPage() {
     checkExistingSession();
   }, [router]);
 
-  // Load Provinsi saat mount
   useEffect(() => {
     fetch("https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json")
       .then((res) => res.json())
-      .then((data) => setProvinces(data))
+      .then((data) => setProvinces(Array.isArray(data) ? data : []))
       .catch(() => console.error("Gagal memuat data provinsi"));
   }, []);
 
@@ -192,10 +198,9 @@ export default function DaftarMitraPage() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  // Handler Perubahan Dropdown Wilayah Berjenjang
   const handleProvinsiChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const provId = e.target.value;
-    const provName = e.target.options[e.target.selectedIndex].text;
+    const provName = e.target.options[e.target.selectedIndex]?.text || "";
 
     update("provinsi", provId ? provName : "");
     update("kota", "");
@@ -207,15 +212,21 @@ export default function DaftarMitraPage() {
 
     if (provId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`)
-        .then((res) => res.json())
-        .then((data) => setCities(data))
-        .catch(() => console.error("Gagal memuat data kota"));
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data kota");
+          return res.json();
+        })
+        .then((data) => setCities(Array.isArray(data) ? data : []))
+        .catch(() => {
+          console.error("Gagal memuat data kota");
+          setCities([]);
+        });
     }
   };
 
   const handleKotaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const regencyId = e.target.value;
-    const regencyName = e.target.options[e.target.selectedIndex].text;
+    const regencyName = e.target.options[e.target.selectedIndex]?.text || "";
 
     update("kota", regencyId ? regencyName : "");
     update("kecamatan", "");
@@ -225,15 +236,21 @@ export default function DaftarMitraPage() {
 
     if (regencyId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/districts/${regencyId}.json`)
-        .then((res) => res.json())
-        .then((data) => setDistricts(data))
-        .catch(() => console.error("Gagal memuat data kecamatan"));
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data kecamatan");
+          return res.json();
+        })
+        .then((data) => setDistricts(Array.isArray(data) ? data : []))
+        .catch(() => {
+          console.error("Gagal memuat data kecamatan");
+          setDistricts([]);
+        });
     }
   };
 
   const handleKecamatanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const districtId = e.target.value;
-    const districtName = e.target.options[e.target.selectedIndex].text;
+    const districtName = e.target.options[e.target.selectedIndex]?.text || "";
 
     update("kecamatan", districtId ? districtName : "");
     update("kelurahan", "");
@@ -241,13 +258,18 @@ export default function DaftarMitraPage() {
 
     if (districtId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/villages/${districtId}.json`)
-        .then((res) => res.json())
-        .then((data) => setVillages(data))
-        .catch(() => console.error("Gagal memuat data kelurahan"));
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data kelurahan");
+          return res.json();
+        })
+        .then((data) => setVillages(Array.isArray(data) ? data : []))
+        .catch(() => {
+          console.error("Gagal memuat data kelurahan");
+          setVillages([]);
+        });
     }
   };
 
-  // Handler saat titik pada Map di-klik
   const handleLocationSelect = (loc: {
     lat: number;
     lng: number;
@@ -261,11 +283,11 @@ export default function DaftarMitraPage() {
       ...prev,
       lat: Number(loc.lat),
       lng: Number(loc.lng),
-      detail_alamat: prev.detail_alamat || loc.alamat.toUpperCase(),
-      provinsi: prev.provinsi || loc.provinsi,
-      kota: prev.kota || loc.kota_kabupaten,
-      kecamatan: prev.kecamatan || loc.kecamatan,
-      kelurahan: prev.kelurahan || loc.kelurahan,
+      detail_alamat: loc.alamat ? loc.alamat.toUpperCase() : prev.detail_alamat,
+      provinsi: loc.provinsi || prev.provinsi,
+      kota: loc.kota_kabupaten || prev.kota,
+      kecamatan: loc.kecamatan || prev.kecamatan,
+      kelurahan: loc.kelurahan || prev.kelurahan,
     }));
   };
 
@@ -372,7 +394,7 @@ export default function DaftarMitraPage() {
       return;
     }
 
-    // Step 3: Validasi Form Profil
+    // Step 3: Validasi Form Profil Mitra
     const errors: FieldErrors = {};
     if (!form.nama_mitra.trim()) errors.nama_mitra = "Nama mitra wajib diisi.";
     if (!isValidNikNib(form.nik_nib)) errors.nik_nib = validationMessages.nikNib;
@@ -380,7 +402,6 @@ export default function DaftarMitraPage() {
     if (!form.foto_nik) {
       errors.foto_nik = "Foto NIK/NPWP wajib diupload.";
     } else if (form.foto_nik.size > 5 * 1024 * 1024) {
-      // Validasi Ukuran File Sisi Klien (Maksimal 5MB)
       errors.foto_nik = "Ukuran gambar terlalu besar. Maksimal 5MB.";
     }
 
@@ -408,12 +429,66 @@ export default function DaftarMitraPage() {
     setStatus("loading");
     try {
       const supabase = createSupabaseBrowserClient();
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
       const user = session?.user ?? (await supabase.auth.getUser()).data.user;
 
       if (!user) throw new Error("no-session");
+
+      // === PENGECEKAN KETAT HARUS DARI IDENTITAS DETAIL (NIK/NIB, TELEPON, USER_ID) ===
+
+      // 1. Cek di tabel blacklists
+      const { data: blacklisted } = await supabase
+        .from("blacklists")
+        .select("nik_nib, telepon, alasan")
+        .or(`nik_nib.eq.${form.nik_nib},telepon.eq.${form.telepon},user_id.eq.${user.id}`)
+        .maybeSingle();
+
+      if (blacklisted) {
+        const reason = blacklisted.alasan || "Terdaftar dalam daftar hitam penangguhan akun.";
+        
+        // Daftarkan user_id & email ini ke blacklists agar tidak bisa login lagi
+        await supabase.from("blacklists").upsert({
+          user_id: user.id,
+          email: user.email,
+          nik_nib: form.nik_nib,
+          telepon: form.telepon,
+          alasan: `Pendaftaran ditolak otomatis: ${reason}`
+        });
+
+        setStatus("idle");
+        setError(`Pendaftaran ditolak: NIK/NIB (${form.nik_nib}) atau Nomor Telepon (${form.telepon}) Anda terdaftar dalam daftar hitam penangguhan akun. Alasan: ${reason}`);
+        await supabase.auth.signOut();
+        return;
+      }
+
+      // 2. Cek apakah ada profil mitra lain berstatus banned yang pakai NIK/NIB atau Telepon sama
+      const { data: bannedProfile } = await supabase
+        .from("mitra_profiles")
+        .select("nik_nib, telepon, alasan_ban")
+        .eq("status_akun", "banned")
+        .or(`nik_nib.eq.${form.nik_nib},telepon.eq.${form.telepon}`)
+        .maybeSingle();
+
+      if (bannedProfile) {
+        const reason = bannedProfile.alasan_ban || "Pelanggaran ketentuan layanan.";
+
+        // Daftarkan user_id & email ini ke blacklists agar tidak bisa login lagi
+        await supabase.from("blacklists").upsert({
+          user_id: user.id,
+          email: user.email,
+          nik_nib: form.nik_nib,
+          telepon: form.telepon,
+          alasan: `Pendaftaran ditolak otomatis: ${reason}`
+        });
+
+        setStatus("idle");
+        setError(`Pendaftaran ditolak: NIK/NIB atau Nomor Telepon ini terhubung dengan akun mitra yang telah di-ban! Alasan: ${reason}`);
+        await supabase.auth.signOut();
+        return;
+      }
 
       let fotoUrl = "";
       if (form.foto_nik) {
@@ -446,6 +521,7 @@ export default function DaftarMitraPage() {
           lat: form.lat !== null ? Number(form.lat) : null,
           lng: form.lng !== null ? Number(form.lng) : null,
           foto_nik_url: fotoUrl,
+          status_akun: "aktif",
         },
         { onConflict: "user_id" }
       );
@@ -600,9 +676,7 @@ export default function DaftarMitraPage() {
                       )}
                     </div>
 
-                    {/* SELECT WILAYAH BERJENJANG */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                      {/* Provinsi */}
                       <div className="text-left">
                         <label className="block text-sm font-medium mb-1.5 text-ink">Provinsi</label>
                         <select
@@ -621,7 +695,6 @@ export default function DaftarMitraPage() {
                         </select>
                       </div>
 
-                      {/* Kota/Kabupaten */}
                       <div className="text-left">
                         <label className="block text-sm font-medium mb-1.5 text-ink">
                           Kota / Kabupaten
@@ -643,7 +716,6 @@ export default function DaftarMitraPage() {
                         </select>
                       </div>
 
-                      {/* Kecamatan */}
                       <div className="text-left">
                         <label className="block text-sm font-medium mb-1.5 text-ink">Kecamatan</label>
                         <select
@@ -663,7 +735,6 @@ export default function DaftarMitraPage() {
                         </select>
                       </div>
 
-                      {/* Kelurahan */}
                       <div className="text-left">
                         <label className="block text-sm font-medium mb-1.5 text-ink">
                           Kelurahan / Desa
@@ -673,7 +744,7 @@ export default function DaftarMitraPage() {
                             fieldErrors.kelurahan ? "border-red-500" : "border-ink/20"
                           } rounded-md p-2.5 bg-white disabled:bg-ink/5`}
                           onChange={(e) =>
-                            update("kelurahan", e.target.options[e.target.selectedIndex].text)
+                            update("kelurahan", e.target.options[e.target.selectedIndex]?.text || "")
                           }
                           disabled={villages.length === 0}
                           required
@@ -688,7 +759,6 @@ export default function DaftarMitraPage() {
                       </div>
                     </div>
 
-                    {/* INTERAKSI PETA */}
                     <div className="mb-4 text-left">
                       <label className="block text-sm font-medium mb-1.5 text-ink">
                         Pilih Titik Lokasi Usaha/Bangunan

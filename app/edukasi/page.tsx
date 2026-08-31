@@ -1,11 +1,26 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { motion } from "motion/react";
 import { Navbar } from "@/components/navbar";
 import Link from "next/link";
 
+interface BeritaItem {
+  id: number;
+  kategori: string;
+  tanggal: string;
+  baca: string;
+  judul: string;
+  ringkasan: string;
+  kontenLengkap: string;
+  icon: string;
+  tagColor: string;
+}
+
 export default function EdukasiPage() {
+  const [selectedBerita, setSelectedBerita] = useState<BeritaItem | null>(null);
+
   const fadeUp = {
     hidden: { opacity: 0, y: 30 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
@@ -19,13 +34,49 @@ export default function EdukasiPage() {
     },
   };
 
+  const artikelBerita: BeritaItem[] = [
+    {
+      id: 1,
+      kategori: "Inovasi Bioenergi",
+      tanggal: "28 Agustus 2026",
+      baca: "3 min baca",
+      judul: "Pemanfaatan Biomassa Kelapa Sawit untuk Co-Firing PLTU Nasional",
+      ringkasan: "Cangkang dan janjang kosong kelapa sawit terbukti memiliki nilai kalor hingga 4.000 kcal/kg, menjadi substitusi efektif batu bara.",
+      kontenLengkap: "Berdasarkan data Kementerian ESDM, substitusi batu bara dengan biomassa (co-firing) pada PLTU mampu menurunkan emisi karbon secara signifikan tanpa mengubah struktur dasar boiler. Cangkang sawit dan pelet kayu memiliki kadar abu (ash content) yang jauh lebih rendah dibanding batu bara mentah, sehingga mereduksi akumulasi kerak pada mesin pembakaran industri.",
+      icon: "⚡",
+      tagColor: "bg-green/10 text-green",
+    },
+    {
+      id: 2,
+      kategori: "Regulasi Lingkungan",
+      tanggal: "20 Agustus 2026",
+      baca: "4 min baca",
+      judul: "Digitalisasi Manifes Limbah B3 Sesuai Standar Permen LHK No. 6/2021",
+      ringkasan: "Pengawasan pengolahan limbah industri kini berbasis digital melalui pelaporan integratif guna memastikan transparansi audit lingkungan.",
+      kontenLengkap: "Penerapan Permen LHK No. 6 Tahun 2021 mewajibkan setiap penghasil dan pengolah limbah Bahan Berbahaya dan Beracun (B3) mencatat alur limbah secara akurat dari titik asal hingga pemusnahan akhir. Platform LENTERA menyelaraskan pencatatan internal industri dengan standar manifes elektronik untuk mempermudah kesiapan sertifikasi dan audit ESG.",
+      icon: "📜",
+      tagColor: "bg-amber-100 text-amber-800",
+    },
+    {
+      id: 3,
+      kategori: "Ekonomi Sirkular",
+      tanggal: "12 Agustus 2026",
+      baca: "5 min baca",
+      judul: "Peluang Nilai Ekonomi Karbon (NEK) Bagi Industri Pengolah Residu",
+      ringkasan: "Implementasi Perpres No. 98/2021 membuka peluang bagi manufaktur untuk mengubah pengurangan emisi menjadi aset kredit karbon.",
+      kontenLengkap: "Melalui skema Ekonomi Sirkular, limbah kayu dan residu organik tidak lagi dianggap sebagai beban biaya operasional (cost center). Pengolahan limbah menjadi bahan bakar alternatif memungkinkan perusahaan mengklaim reduksi emisi gas rumah kaca (GRK) yang terekam dalam Sistem Registri Nasional (SRN-PPI), meningkatkan pemeringkatan sertifikasi hijau industri.",
+      icon: "🌱",
+      tagColor: "bg-gold/15 text-gold-dark",
+    },
+  ];
+
   return (
     <>
       <Navbar />
 
       <main className="min-h-screen bg-cream pt-28 md:pt-36 pb-20 overflow-hidden">
         {/* HERO SECTION */}
-        <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-28">
+        <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-24">
           <div className="flex flex-col md:flex-row items-center gap-10 md:gap-16">
 
             {/* Teks Hero */}
@@ -36,18 +87,21 @@ export default function EdukasiPage() {
               className="flex-1 text-center md:text-left z-10"
             >
               <motion.div variants={fadeUp} className="inline-flex items-center gap-2 bg-green/10 text-green font-mono text-xs px-4 py-2 rounded-full uppercase tracking-wider mb-5">
-                <span>📚</span> Pusat Edukasi
+                <span>📚</span> Pusat Edukasi & Literasi
               </motion.div>
               <motion.h1 variants={fadeUp} className="font-display font-semibold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-forest mb-5 leading-tight">
                 Pahami Limbah, <br className="hidden md:block" />
                 <span className="text-green">Ciptakan Energi.</span>
               </motion.h1>
               <motion.p variants={fadeUp} className="text-ink/70 text-sm sm:text-base md:text-lg max-w-xl mx-auto md:mx-0 leading-relaxed mb-8">
-                Tidak semua limbah industri harus berakhir di pembuangan. Pelajari bagaimana LENTERA memproses sisa produksi menjadi sumber energi terbarukan yang aman dan bermanfaat.
+                Tidak semua limbah industri harus berakhir di pembuangan. Pelajari bagaimana LENTERA memproses sisa produksi menjadi sumber energi terbarukan yang aman, efisien, dan bermanfaat bagi masyarakat.
               </motion.p>
               <motion.div variants={fadeUp} className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-4">
                 <a href="#materi" className="bg-forest text-cream font-medium px-8 py-3.5 rounded-full hover:bg-forest/90 transition-colors w-full sm:w-auto text-center shadow-sm">
                   Mulai Belajar
+                </a>
+                <a href="#wawasan" className="bg-transparent border border-forest/20 text-forest font-medium px-8 py-3.5 rounded-full hover:bg-forest/5 transition-colors w-full sm:w-auto text-center">
+                  Baca Berita
                 </a>
               </motion.div>
             </motion.div>
@@ -59,10 +113,8 @@ export default function EdukasiPage() {
               transition={{ duration: 0.8, ease: "easeOut" }}
               className="flex-1 relative flex flex-col items-center justify-center w-full max-w-[320px] sm:max-w-[380px] md:max-w-full mx-auto"
             >
-              {/* Efek Glow */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[260px] h-[260px] md:w-[400px] md:h-[400px] bg-gold/20 blur-[70px] rounded-full z-0"></div>
 
-              {/* Container Gambar Karakter */}
               <motion.div
                 animate={{ y: [0, -12, 0] }}
                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
@@ -78,19 +130,63 @@ export default function EdukasiPage() {
                 />
               </motion.div>
 
-              {/* Float Card Hiasan (Diposisikan aman di bawah karakter pada mobile, absolute di desktop) */}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4, duration: 0.5 }}
                 className="mt-4 md:mt-0 md:absolute md:bottom-2 md:right-4 bg-paper/95 backdrop-blur-md p-3.5 rounded-2xl border border-forest/10 shadow-lg z-20 w-full max-w-[240px] md:max-w-[150px] text-center md:text-left"
               >
-                <p className="font-display font-bold text-forest text-xs">Fakta Menarik 💡</p>
-                <p className="text-[11px] text-ink/60 mt-0.5 leading-tight">1 ton limbah sawit bisa terangi 50 rumah.</p>
+                <p className="font-display font-bold text-forest text-xs">Fakta Kalori 💡</p>
+                <p className="text-[11px] text-ink/60 mt-0.5 leading-tight">Biomassa sawit memiliki nilai kalor ~4.000 kcal/kg.</p>
               </motion.div>
             </motion.div>
 
           </div>
+        </section>
+
+        {/* SECTION PARAGRAF EDUKASI TAMBAHAN */}
+        <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-28">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-50px" }}
+            variants={staggerContainer}
+            className="grid md:grid-cols-2 gap-8 items-center bg-paper rounded-3xl p-8 md:p-12 border border-forest/10 shadow-xs"
+          >
+            <motion.div variants={fadeUp} className="space-y-4">
+              <span className="font-mono text-xs uppercase tracking-widest text-green font-semibold">
+                Mengapa Harus Bio-Energi?
+              </span>
+              <h2 className="font-display font-semibold text-2xl sm:text-3xl text-forest leading-snug">
+                Solusi Berkelanjutan untuk Mengatasi Krisis Energi & Residu Industri
+              </h2>
+              <p className="text-ink/70 text-sm md:text-base leading-relaxed">
+                Setiap tahunnya, jutaan ton limbah industri organik dan limbah kayu dibuang begitu saja tanpa pengolahan optimal. Padahal, residu ini menyimpan potensi energi panas dan listrik yang sangat tinggi jika diproses dengan teknologi konversi yang tepat.
+              </p>
+              <p className="text-ink/70 text-sm md:text-base leading-relaxed">
+                Melalui rantai **Ekonomi Sirkular**, LENTERA membantu manufaktur mengubah biaya pembuangan limbah menjadi nilai tambah ekonomi. Kami tidak hanya mengurangi ketergantungan pada batu bara, tetapi juga menciptakan ekosistem energi alternatif yang terjangkau bagi para mitra agen di daerah.
+              </p>
+            </motion.div>
+
+            <motion.div variants={fadeUp} className="grid grid-cols-2 gap-4">
+              <div className="bg-cream p-5 rounded-2xl border border-forest/10">
+                <p className="font-display font-bold text-3xl text-forest mb-1">~4.000</p>
+                <p className="text-xs text-ink/60 leading-relaxed">kcal/kg estimasi nilai kalor pelet biomassa sawit terstandardisasi.</p>
+              </div>
+              <div className="bg-cream p-5 rounded-2xl border border-forest/10">
+                <p className="font-display font-bold text-3xl text-green mb-1">Low-Ash</p>
+                <p className="text-xs text-ink/60 leading-relaxed">Residu abu pembakaran lebih rendah dibanding batu bara mentah.</p>
+              </div>
+              <div className="bg-cream p-5 rounded-2xl border border-forest/10">
+                <p className="font-display font-bold text-3xl text-gold-dark mb-1">SRN-PPI</p>
+                <p className="text-xs text-ink/60 leading-relaxed">Kesesuaian skema pencatatan reduksi emisi karbon nasional.</p>
+              </div>
+              <div className="bg-cream p-5 rounded-2xl border border-forest/10">
+                <p className="font-display font-bold text-3xl text-clay-dark mb-1">100%</p>
+                <p className="text-xs text-ink/60 leading-relaxed">Alur pengolahan terverifikasi pada sistem digital LENTERA.</p>
+              </div>
+            </motion.div>
+          </motion.div>
         </section>
 
         {/* SECTION MATERI: JENIS LIMBAH */}
@@ -188,6 +284,75 @@ export default function EdukasiPage() {
           </motion.div>
         </section>
 
+        {/* SECTION BERITA & ARTIKEL EDUKASI */}
+        <section id="wawasan" className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-28 scroll-mt-28">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-50px" }}
+            variants={fadeUp}
+            className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 md:mb-12 gap-4"
+          >
+            <div>
+              <p className="font-mono text-xs uppercase tracking-widest text-green mb-1">Artikel & Berita</p>
+              <h2 className="font-display font-semibold text-2xl sm:text-3xl md:text-4xl text-forest">
+                Kabar Terkini seputar Energi & Lingkungan
+              </h2>
+            </div>
+            <p className="text-xs text-ink/50 max-w-xs">
+              Rangkuman informasi dan wawasan terkini industri bio-energi yang dikemas secara terpercaya.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={staggerContainer}
+            className="grid md:grid-cols-3 gap-6"
+          >
+            {artikelBerita.map((art) => (
+              <motion.article
+                key={art.id}
+                variants={fadeUp}
+                onClick={() => setSelectedBerita(art)}
+                className="bg-paper rounded-3xl p-6 border border-forest/10 shadow-xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group"
+              >
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${art.tagColor}`}>
+                      {art.kategori}
+                    </span>
+                    <span className="text-[11px] text-ink/40 font-mono">{art.baca}</span>
+                  </div>
+
+                  <h3 className="font-display font-semibold text-base md:text-lg text-forest mb-2.5 leading-snug group-hover:text-green transition-colors">
+                    {art.judul}
+                  </h3>
+
+                  <p className="text-xs text-ink/70 leading-relaxed line-clamp-3 mb-6">
+                    {art.ringkasan}
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-forest/10 flex justify-between items-center text-xs text-ink/50">
+                  <span>{art.tanggal}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedBerita(art);
+                    }}
+                    className="text-forest font-semibold hover:text-green transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    Baca Selengkapnya <span>→</span>
+                  </button>
+                </div>
+              </motion.article>
+            ))}
+          </motion.div>
+        </section>
+
         {/* CTA SECTION */}
         <section className="px-6 max-w-3xl mx-auto text-center">
           <motion.div
@@ -212,6 +377,57 @@ export default function EdukasiPage() {
             </div>
           </motion.div>
         </section>
+
+        {/* POP-UP MODAL DETAIL BERITA */}
+        {selectedBerita && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-paper border border-forest/10 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative max-h-[85vh] overflow-y-auto"
+            >
+              <button
+                onClick={() => setSelectedBerita(null)}
+                className="absolute top-6 right-6 p-2 rounded-full hover:bg-forest/5 text-ink/40 hover:text-ink transition-colors cursor-pointer"
+                aria-label="Tutup Modal"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${selectedBerita.tagColor}`}>
+                  {selectedBerita.kategori}
+                </span>
+                <span className="text-xs text-ink/40 font-mono">• {selectedBerita.tanggal}</span>
+                <span className="text-xs text-ink/40 font-mono">• {selectedBerita.baca}</span>
+              </div>
+
+              <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest mb-4 leading-snug">
+                {selectedBerita.judul}
+              </h2>
+
+              <div className="space-y-4 text-ink/80 text-sm leading-relaxed border-t border-forest/10 pt-4">
+                <p className="font-medium text-forest italic">
+                  &quot;{selectedBerita.ringkasan}&quot;
+                </p>
+                <p>{selectedBerita.kontenLengkap}</p>
+              </div>
+
+              <div className="mt-8 pt-4 border-t border-forest/10 flex justify-between items-center">
+                <span className="text-xs text-ink/40">Sumber: Data Kementerian LHK & ESDM</span>
+                <button
+                  onClick={() => setSelectedBerita(null)}
+                  className="bg-forest text-cream px-6 py-2.5 rounded-full text-xs font-medium hover:bg-forest/90 transition-colors cursor-pointer"
+                >
+                  Tutup Artikel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
 
       </main>
     </>

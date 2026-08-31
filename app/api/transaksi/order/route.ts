@@ -4,11 +4,6 @@ import midtransClient from 'midtrans-client';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
-
 const ratelimit = new Ratelimit({
   redis: Redis.fromEnv(),
   // Mode Galak: Maksimal cuma boleh 2 kali klik dalam 1 Menit per IP!
