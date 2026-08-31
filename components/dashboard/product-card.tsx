@@ -56,13 +56,14 @@ export function ProductCard({ product }: ProductCardProps) {
       // MUNCULKAN MIDTRANS SNAP POP-UP
       if (window.snap && data.token) {
         window.snap.pay(data.token, {
-          // 👇 👇 UBAH JADI ASYNC FUNCTION DI SINI 👇 👇
-        onSuccess: async function() {
+      onSuccess: async function(result: any) {
+            console.log("CCTV 1: MIDTRANS BERHASIL!", result); // Laporan 1
             try {
               setStatus("loading");
+              console.log("CCTV 2: Persiapan ngetuk pintu API update_stock...");
+              console.log("Data yang mau dikirim:", { id: product.id, qty: quantity });
               
-              // Frontend menelepon Backend untuk ngurangin stok secara rahasia
-              const res = await fetch("/api/transaksi/update-stok", {
+              const res = await fetch("/api/transaksi/update_stock", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -71,20 +72,22 @@ export function ProductCard({ product }: ProductCardProps) {
                 })
               });
 
+              console.log("CCTV 3: Pintu API udah diketuk. Status HTTP:", res.status);
+              
               const data = await res.json();
+              console.log("CCTV 4: Balasan dari server API:", data);
 
               if (!res.ok) {
-                throw new Error(data.error);
+                throw new Error(data.error || "Server ngasih respon error");
               }
 
               alert("Pembayaran Berhasil! Stok telah dikurangi.");
               setStatus("sent");
-              window.location.reload(); 
+              // window.location.reload(); <-- Biarin mati dulu buat ngetes
 
             } catch (err) {
-              console.error("Gagal update stok:", err);
-              alert("Pembayaran sukses, tapi gagal sinkronisasi stok.");
-              window.location.reload();
+              console.error("🚨 CCTV ERROR DI FRONTEND:", err);
+              alert("Gagal nyambung ke API Update Stok!");
             }
           },
           onPending: function() {
