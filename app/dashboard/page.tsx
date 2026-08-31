@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { ProductCard } from "@/components/dashboard/product-card";
 import { AIAssistant } from "@/components/ai-assistant";
+import Script from "next/script";
 
 interface MitraProfile {
   nama_mitra: string;
@@ -200,30 +201,42 @@ export default function DashboardMitraPage() {
       })
     : "-";
 
-  return (
-    <div className="px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-5xl w-full mx-auto relative">
-      {/* Ringkasan */}
-      <section id="ringkasan" className="scroll-mt-8 mb-10 md:mb-16">
-        <p className="font-mono text-xs tracking-widest uppercase text-green mb-2 sm:mb-3">
-          Ringkasan
-        </p>
-        <h1 className="font-display font-semibold text-xl sm:text-2xl md:text-3xl text-forest mb-2">
-          Selamat datang, {profile?.nama_mitra ?? "Mitra"}
-        </h1>
-        <p className="text-ink/60 text-sm sm:text-base mb-6 md:mb-8">
-          Pantau stok dan kelola profil kemitraan kamu di sini.
-        </p>
+ return (
+    <>
+      {/* MESIN KASIR MIDTRANS (DIPANGGIL SANTAI) */}
+      <Script
+        src="https://app.sandbox.midtrans.com/snap/snap.js"
+        data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
+        strategy="lazyOnload"
+      />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
-            <p className="text-xs text-ink/45 mb-1">Status akun</p>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
-              <p className="font-display font-semibold text-forest text-base sm:text-lg">
-                Aktif
-              </p>
+      {/* INI KODINGAN ASLI TAMPILAN ABANG */}
+      <div className="px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-5xl w-full mx-auto relative">
+        
+        {/* Ringkasan */}
+        <section id="ringkasan" className="scroll-mt-8 mb-10 md:mb-16">
+          <p className="font-mono text-xs tracking-widest uppercase text-green mb-2 sm:mb-3">
+            Ringkasan
+          </p>
+          <h1 className="font-display font-semibold text-xl sm:text-2xl md:text-3xl text-forest mb-2">
+            Selamat datang, {profile?.nama_mitra ?? "Mitra"}
+          </h1>
+          <p className="text-ink/60 text-sm sm:text-base mb-6 md:mb-8">
+            Pantau stok dan kelola profil kemitraan kamu di sini.
+          </p>
+
+          {/* ... Lanjut kodingan Abang ke bawah biarin aja persis kayak aslinya ... */}
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
+              <p className="text-xs text-ink/45 mb-1">Status akun</p>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
+                <p className="font-display font-semibold text-forest text-base sm:text-lg">
+                  Aktif
+                </p>
+              </div>
             </div>
-          </div>
           <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
             <p className="text-xs text-ink/45 mb-1">Bergabung sejak</p>
             <p className="font-display font-semibold text-forest text-base sm:text-lg">
@@ -303,5 +316,6 @@ export default function DashboardMitraPage() {
       {/* AI Assistant Floating Widget */}
       <AIAssistant />
     </div>
+    </> 
   );
 }
