@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const runtime = "edge"; // Tetap pakai Edge biar instan nyala
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
