@@ -375,11 +375,10 @@ export default function DashboardMitraPage() {
 
   return (
     <>
-      {/* MESIN KASIR MIDTRANS */}
-      <Script
-        src="https://app.sandbox.midtrans.com/snap/snap.js"
+    <Script
+        src="https://app.sandbox.midtrans.com/snap/snap.js" // (Atau URL live kalau udah pakai live)
         data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
-        strategy="lazyOnload"
+        strategy="afterInteractive" 
       />
 
       <div className="px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-5xl w-full mx-auto relative">
