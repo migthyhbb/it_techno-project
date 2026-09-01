@@ -48,7 +48,6 @@ interface RawProduct {
   regional_product_prices?: RegionalPrice[];
 }
 
-// 🚀 UPDATE: Tambah tempat buat nampung link gambar bukti
 interface Order {
   id: string;
   status: string;
@@ -100,6 +99,10 @@ export default function DashboardMitraPage() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // 🚀 STATE BARU BUAT MODAL FOTO BUKTI
+  const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
+
   // Fungsi pengambil data pesanan bersih
   const fetchOrdersOnly = async (currentUserId: string) => {
     const supabase = createSupabaseBrowserClient();
@@ -119,7 +122,7 @@ export default function DashboardMitraPage() {
             status: String(o.status || "diproses").toLowerCase(),
             total_harga: Number(o.total_harga || o.total || 0),
             created_at: o.created_at || new Date().toISOString(),
-            bukti_pengiriman_url: o.bukti_pengiriman_url || null, // 🚀 UPDATE: Tarik URL Bukti
+            bukti_pengiriman_url: o.bukti_pengiriman_url || null, 
           });
         }
       });
@@ -135,7 +138,7 @@ export default function DashboardMitraPage() {
               status: String(pm.status || "diproses").toLowerCase(),
               total_harga: Number(pm.total_harga || pm.jumlah * 15000 || 0),
               created_at: pm.created_at || new Date().toISOString(),
-              bukti_pengiriman_url: pm.bukti_pengiriman_url || null, // 🚀 UPDATE: Tarik URL Bukti
+              bukti_pengiriman_url: pm.bukti_pengiriman_url || null, 
             });
           }
         }
@@ -485,19 +488,19 @@ export default function DashboardMitraPage() {
                     </p>
                   </div>
 
-                  {/* 🚀 UPDATE: Area Tombol (Bukti & Konfirmasi) */}
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-3 sm:mt-0">
                     
-                    {/* Tombol Lihat Bukti kalau Admin udah nge-upload */}
+                    {/* 🚀 UPDATE: Tombol pop-up modal foto */}
                     {order.bukti_pengiriman_url && (
-                      <a
-                        href={order.bukti_pengiriman_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs font-semibold px-4 py-2.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors text-center shrink-0"
+                      <button
+                        onClick={() => {
+                          setSelectedProofUrl(order.bukti_pengiriman_url!);
+                          setProofModalOpen(true);
+                        }}
+                        className="text-xs font-semibold px-4 py-2.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors text-center shrink-0 cursor-pointer"
                       >
                         📎 Lihat Bukti
-                      </a>
+                      </button>
                     )}
 
                     {order.status === "dikirim" && (
@@ -606,6 +609,47 @@ export default function DashboardMitraPage() {
                 <button type="button" onClick={handleDeleteAccount} disabled={deleteLoading} className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 cursor-pointer">
                   {deleteLoading ? "Menghapus..." : "Ya, Hapus Akun"}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🚀 MODAL BARU: TAMPILKAN BUKTI PENGIRIMAN */}
+        {proofModalOpen && selectedProofUrl && (
+          <div 
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"
+            onClick={() => setProofModalOpen(false)}
+          >
+            <div 
+              className="relative bg-paper rounded-2xl shadow-2xl max-w-2xl w-full p-2 animate-in zoom-in-95 duration-200" 
+              onClick={(e) => e.stopPropagation()} 
+            >
+              <div className="flex justify-between items-center p-3 border-b border-forest/10 mb-2">
+                <h3 className="font-display font-semibold text-forest text-sm">Foto Bukti Pengiriman</h3>
+                <button 
+                  onClick={() => setProofModalOpen(false)} 
+                  className="text-ink/50 hover:text-ink font-bold w-8 h-8 flex items-center justify-center rounded-full bg-forest/5 hover:bg-forest/10 transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
+                {/* Pakai tag img standar biar aman baca URL external Supabase tanpa edit next.config.js */}
+                <img 
+                  src={selectedProofUrl} 
+                  alt="Bukti Pengiriman Barang" 
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                />
+              </div>
+              <div className="p-3 text-center">
+                <a 
+                  href={selectedProofUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-[11px] font-medium text-blue-600 hover:underline"
+                >
+                  Buka gambar resolusi penuh di tab baru
+                </a>
               </div>
             </div>
           </div>

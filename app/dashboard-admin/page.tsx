@@ -35,7 +35,6 @@ interface RegionalProductPrice {
   products?: { nama_produk: string; satuan: string };
 }
 
-// 🚀 UPDATE: Tambah field bukti_pengiriman_url
 interface Order {
   id: string;
   created_at: string;
@@ -86,11 +85,14 @@ export default function DashboardAdminPage() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [newQuota, setNewQuota] = useState<number>(30);
 
-  // 🚀 UPDATE: State khusus Modal Update Status + Bukti Pesanan
   const [orderStatusModalOpen, setOrderStatusModalOpen] = useState(false);
   const [selectedOrderUpdate, setSelectedOrderUpdate] = useState<Order | null>(null);
   const [newOrderStatus, setNewOrderStatus] = useState("");
   const [proofFile, setProofFile] = useState<File | null>(null);
+
+  // 🚀 STATE BARU BUAT MODAL FOTO BUKTI DI ADMIN
+  const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
   const [banModalOpen, setBanModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
@@ -242,7 +244,6 @@ export default function DashboardAdminPage() {
     setLoadingOrders(false);
   };
 
-  // 🚀 UPDATE: Fungsi Simpan Status + Bukti Pesanan
   const handleSaveOrderStatus = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrderUpdate) return;
@@ -252,19 +253,16 @@ export default function DashboardAdminPage() {
     let finalProofUrl = selectedOrderUpdate.bukti_pengiriman_url;
 
     try {
-      // 1. Jika Admin melampirkan file foto bukti
       if (proofFile) {
         const fileExt = proofFile.name.split('.').pop();
         const fileName = `bukti-${selectedOrderUpdate.id}-${Date.now()}.${fileExt}`;
 
-        // Upload ke bucket Supabase bernama 'bukti_pengiriman'
         const { error: uploadError } = await supabase.storage
           .from("bukti_pengiriman")
           .upload(fileName, proofFile);
 
         if (uploadError) throw new Error("Gagal upload gambar: " + uploadError.message);
 
-        // Ambil URL public dari gambar yang baru diupload
         const { data: publicUrlData } = supabase.storage
           .from("bukti_pengiriman")
           .getPublicUrl(fileName);
@@ -272,18 +270,16 @@ export default function DashboardAdminPage() {
         finalProofUrl = publicUrlData.publicUrl;
       }
 
-      // 2. Update Database Orders
       const { error: updateError } = await supabase
         .from("orders")
         .update({
           status: newOrderStatus,
-          ...(finalProofUrl ? { bukti_pengiriman_url: finalProofUrl } : {}) // Update URL kalau ada
+          ...(finalProofUrl ? { bukti_pengiriman_url: finalProofUrl } : {})
         })
         .eq("id", selectedOrderUpdate.id);
 
       if (updateError) throw new Error("Gagal update status: " + updateError.message);
 
-      // 3. Update UI
       setUserOrders((prev) =>
         prev.map((o) =>
           o.id === selectedOrderUpdate.id
@@ -842,7 +838,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL PESANAN MITRA */}
         {ordersModalOpen && selectedUserDetail && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
@@ -897,20 +892,28 @@ export default function DashboardAdminPage() {
                                 }`}>
                                   {ord.status}
                                 </span>
+                                {/* 🚀 UPDATE: Tombol Lihat Bukti berubah jadi modal */}
                                 {ord.bukti_pengiriman_url && (
-                                  <a href={ord.bukti_pengiriman_url} target="_blank" rel="noopener noreferrer" className="text-[9px] text-blue-600 hover:underline flex items-center gap-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setSelectedProofUrl(ord.bukti_pengiriman_url!);
+                                      setProofModalOpen(true);
+                                    }}
+                                    className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-1 cursor-pointer font-medium"
+                                  >
                                     📎 Lihat Bukti
-                                  </a>
+                                  </button>
                                 )}
                               </div>
                             </td>
-                            {/* 🚀 UPDATE: Tombol baru buat buka modal upload bukti */}
                             <td className="p-3 text-center">
                               <button
                                 onClick={() => {
                                   setSelectedOrderUpdate(ord);
                                   setNewOrderStatus(ord.status);
-                                  setProofFile(null); // Kosongin input file lama
+                                  setProofFile(null); 
                                   setOrderStatusModalOpen(true);
                                 }}
                                 className="text-green hover:underline text-xs font-medium cursor-pointer"
@@ -935,7 +938,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* 🚀 MODAL BARU: UPDATE STATUS PESANAN + UPLOAD BUKTI (UNTUK MITRA) */}
         {orderStatusModalOpen && selectedOrderUpdate && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -1079,7 +1081,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL UBAH STATUS PENGIRIMAN INDUSTRI */}
         {statusModalOpen && selectedShipment && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -1101,6 +1102,47 @@ export default function DashboardAdminPage() {
             </div>
           </div>
         )}
+
+        {/* 🚀 MODAL BARU: TAMPILKAN BUKTI PENGIRIMAN DI ADMIN */}
+        {proofModalOpen && selectedProofUrl && (
+          <div 
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"
+            onClick={() => setProofModalOpen(false)}
+          >
+            <div 
+              className="relative bg-paper rounded-2xl shadow-2xl max-w-2xl w-full p-2 animate-in zoom-in-95 duration-200" 
+              onClick={(e) => e.stopPropagation()} 
+            >
+              <div className="flex justify-between items-center p-3 border-b border-forest/10 mb-2">
+                <h3 className="font-display font-semibold text-forest text-sm">Foto Bukti Pengiriman</h3>
+                <button 
+                  onClick={() => setProofModalOpen(false)} 
+                  className="text-ink/50 hover:text-ink font-bold w-8 h-8 flex items-center justify-center rounded-full bg-forest/5 hover:bg-forest/10 transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
+                <img 
+                  src={selectedProofUrl} 
+                  alt="Bukti Pengiriman Barang" 
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                />
+              </div>
+              <div className="p-3 text-center">
+                <a 
+                  href={selectedProofUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-[11px] font-medium text-blue-600 hover:underline"
+                >
+                  Buka gambar resolusi penuh di tab baru
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );
