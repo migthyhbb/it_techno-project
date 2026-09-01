@@ -16,34 +16,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Data tidak lengkap" }, { status: 400 });
     }
 
-    // 1. Cek stok lama
-    const { data: regionalData, error: errCek } = await supabaseAdmin
+    // 1. Ambil stok dari tabel MASTER (products) dulu biar aman
+    const { data: masterData, error: errMaster } = await supabaseAdmin
+      .from("products")
+      .select("stok, stok_dummy")
+      .eq("id", product_id)
+      .single();
+
+    if (errMaster || !masterData) {
+      return NextResponse.json({ error: "Produk tidak ditemukan di database master" }, { status: 404 });
+    }
+
+    const sisaStokMaster = (masterData.stok || 0) - quantity;
+
+    // 2. Update stok di tabel master (products) - INI YANG PALING PENTING
+    await supabaseAdmin
+      .from("products")
+      .update({ stok: sisaStokMaster, stok_dummy: sisaStokMaster })
+      .eq("id", product_id);
+
+    // 3. Coba update di tabel regional (Pakai maybeSingle biar kalau kosong NGGAK ERROR)
+    const { data: regionalData } = await supabaseAdmin
       .from("regional_product_prices")
       .select("stok")
       .eq("product_id", product_id)
-      .single();
+      .maybeSingle(); 
 
-    if (errCek || !regionalData) {
-      return NextResponse.json({ error: "Produk tidak ditemukan" }, { status: 404 });
+    // Kalau datanya ada di tabel regional, baru kita kurangi
+    if (regionalData && regionalData.stok !== null) {
+        const sisaStokRegional = regionalData.stok - quantity;
+        await supabaseAdmin
+          .from("regional_product_prices")
+          .update({ stok: sisaStokRegional })
+          .eq("product_id", product_id);
     }
 
-    // 2. Kurangi stok
-    const sisaStok = regionalData.stok - quantity;
-
-    const { error: updateError } = await supabaseAdmin
-      .from("regional_product_prices")
-      .update({ stok: sisaStok })
-      .eq("product_id", product_id);
-
-    if (updateError) throw new Error("Gagal update stok regional");
-
-    // 3. Sinkronkan dengan master produk
-    await supabaseAdmin
-      .from("products")
-      .update({ stok_dummy: sisaStok, stok: sisaStok })
-      .eq("id", product_id);
-
-    return NextResponse.json({ success: true, sisaStok });
+    // 4. Kasih laporan sukses ke Frontend!
+    return NextResponse.json({ success: true, sisaStok: sisaStokMaster });
 
   } catch (error) {
     console.error("API Update Stock Error:", error);
