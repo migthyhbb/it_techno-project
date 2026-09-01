@@ -9,54 +9,50 @@ const navItems = [
     href: "#ringkasan",
     label: "Ringkasan",
     icon: (
-      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <>
         <path d="M3 12 12 3l9 9" />
         <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
-      </svg>
+      </>
     ),
   },
   {
     href: "#pesan-stok",
     label: "Pesan Stok",
     icon: (
-      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <>
         <path d="M21 8 12 3 3 8l9 5 9-5Z" />
         <path d="M3 8v8l9 5 9-5V8" />
         <path d="M12 13v8" />
-      </svg>
+      </>
     ),
   },
   {
     href: "#status-pesanan",
     label: "Status Pesanan",
     icon: (
-      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <>
         <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
         <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
         <line x1="12" y1="22.08" x2="12" y2="12" />
-      </svg>
+      </>
     ),
   },
   {
     href: "#profil-mitra",
     label: "Profil Mitra",
     icon: (
-      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <>
         <circle cx="12" cy="8" r="4" />
         <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
-      </svg>
+      </>
     ),
   },
 ];
 
-interface SidebarProps {
-  isOpen?: boolean;
-  onClose?: () => void;
-}
-
-export function DashboardSidebar({ isOpen = false, onClose }: SidebarProps) {
+export function DashboardSidebar() {
   const router = useRouter();
   const [mitraName, setMitraName] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -99,79 +95,147 @@ export function DashboardSidebar({ isOpen = false, onClose }: SidebarProps) {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
     router.push("/masuk");
-    router.refresh();
   }
 
   return (
     <>
-      {/* Backdrop Gelap saat Mobile Sidebar Terbuka */}
-      {isOpen && (
-        <div
-          onClick={onClose}
-          className="md:hidden fixed inset-0 bg-ink/60 z-40 backdrop-blur-xs transition-opacity"
-        />
-      )}
-
-      {/* Drawer Sidebar: Nempel rata dari ujung atas sampai ujung bawah */}
-      <aside
-        className={`fixed md:sticky top-0 left-0 bottom-0 z-50 h-screen w-72 bg-forest text-cream flex flex-col justify-between p-6 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
-          isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
-        }`}
-      >
+      {/* 1. MOBILE TOP BAR (Tampil hanya di HP < md) */}
+      <div className="md:hidden sticky top-0 z-40 bg-forest text-cream flex items-center justify-between px-4 py-3 border-b border-cream/10 w-full">
         <div>
-          {/* Header Mobile Drawer */}
-          <div className="flex items-center justify-between pb-6 mb-6 border-b border-cream/10">
-            <div>
-              <span className="font-display font-semibold text-lg tracking-tight text-cream">
-                LENTERA
-              </span>
-              <p className="text-xs text-cream/45 mt-0.5">Portal Mitra</p>
-            </div>
+          <span className="font-display font-semibold text-base tracking-tight block leading-none">
+            LENTERA
+          </span>
+          <span className="text-[10px] text-cream/45">Portal Mitra</span>
+        </div>
 
-            {/* Tombol Close (X) */}
-            <button
-              onClick={onClose}
-              className="md:hidden p-1.5 rounded-lg hover:bg-cream/10 text-cream/70 hover:text-cream transition-colors"
-              aria-label="Tutup Menu"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          aria-label="Toggle menu"
+          className="p-2 text-cream/80 hover:text-cream rounded-lg focus:outline-none"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {isOpen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+            )}
+          </svg>
+        </button>
+      </div>
 
-          {/* Menu Navigasi */}
-          <nav className="space-y-1">
+      {/* 2. MOBILE MENU DROPDOWN (Tampil saat Hamburger di-klik) */}
+      {isOpen && (
+        <div className="md:hidden fixed top-[53px] left-0 right-0 bottom-0 z-30 bg-forest/95 backdrop-blur-sm text-cream px-4 py-4 space-y-3 w-full shadow-lg h-[calc(100vh-53px)] overflow-y-auto">
+          <nav className="space-y-1 bg-forest p-2 rounded-xl border border-cream/10">
             {navItems.map((item) => (
               <a
                 key={item.href}
                 href={item.href}
-                onClick={onClose}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-colors"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-cream/80 hover:text-cream hover:bg-cream/10 transition-colors"
               >
-                {item.icon}
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-5 h-5 shrink-0"
+                >
+                  {item.icon}
+                </svg>
                 {item.label}
               </a>
             ))}
           </nav>
+
+          <div className="pt-4 px-2">
+            {mitraName && (
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
+                  {mitraName.charAt(0).toUpperCase()}
+                </div>
+                <p className="text-sm text-cream/90 truncate font-medium">{mitraName}</p>
+              </div>
+            )}
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-red-100 bg-red-500/20 hover:bg-red-500/30 transition-colors w-full border border-red-500/20"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-4 h-4 shrink-0"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="M16 17 21 12 16 7" />
+                <path d="M21 12H9" />
+              </svg>
+              Keluar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. DESKTOP SIDEBAR (Tampil di Layar Desktop >= md) */}
+      <aside className="hidden md:flex w-64 shrink-0 bg-forest text-cream flex-col h-screen sticky top-0">
+        <div className="p-6 border-b border-cream/10">
+          <span className="font-display font-semibold text-lg tracking-tight">
+            LENTERA
+          </span>
+          <p className="text-xs text-cream/45 mt-1">Portal Mitra</p>
         </div>
 
-        {/* User Info & Logout Button */}
-        <div className="pt-6 border-t border-cream/10 space-y-2">
+        <nav className="flex-1 p-4 space-y-1">
+          {navItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/10 transition-colors"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-4 h-4 shrink-0"
+              >
+                {item.icon}
+              </svg>
+              {item.label}
+            </a>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-cream/10">
           {mitraName && (
-            <div className="flex items-center gap-3 px-3 py-2">
+            <div className="flex items-center gap-3 px-2 mb-2 pb-3 border-b border-cream/10">
               <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
                 {mitraName.charAt(0).toUpperCase()}
               </div>
-              <p className="text-sm font-medium text-cream/90 truncate">{mitraName}</p>
+              <p className="text-sm text-cream/80 truncate">{mitraName}</p>
             </div>
           )}
-
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-colors w-full text-left cursor-pointer"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-red-300 hover:bg-cream/10 transition-colors w-full"
           >
-            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-4 h-4 shrink-0"
+            >
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <path d="M16 17 21 12 16 7" />
               <path d="M21 12H9" />
