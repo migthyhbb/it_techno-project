@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Menggunakan Service Role Key biar punya izin update database
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.SUPABASE_SERVICE_ROLE_KEY || ""
@@ -10,49 +9,49 @@ const supabaseAdmin = createClient(
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { product_id, quantity } = body;
+    const { product_id, quantity, user_id, total_harga } = body;
 
     if (!product_id || !quantity) {
       return NextResponse.json({ error: "Data tidak lengkap" }, { status: 400 });
     }
 
-    // 1. Ambil stok dari tabel MASTER (products) dulu biar aman
-    const { data: masterData, error: errMaster } = await supabaseAdmin
+    // 1. Kurangi Stok di Master Products
+    const { data: masterData } = await supabaseAdmin
       .from("products")
-      .select("stok, stok_dummy")
+      .select("stok")
       .eq("id", product_id)
       .single();
 
-    if (errMaster || !masterData) {
-      return NextResponse.json({ error: "Produk tidak ditemukan di database master" }, { status: 404 });
+    if (masterData) {
+      const sisa = (masterData.stok || 0) - quantity;
+      await supabaseAdmin.from("products").update({ stok: sisa, stok_dummy: sisa }).eq("id", product_id);
     }
 
-    const sisaStokMaster = (masterData.stok || 0) - quantity;
-
-    // 2. Update stok di tabel master (products) - INI YANG PALING PENTING
-    await supabaseAdmin
-      .from("products")
-      .update({ stok: sisaStokMaster, stok_dummy: sisaStokMaster })
-      .eq("id", product_id);
-
-    // 3. Coba update di tabel regional (Pakai maybeSingle biar kalau kosong NGGAK ERROR)
-    const { data: regionalData } = await supabaseAdmin
+    // 2. Kurangi Stok di Regional (kalau ada)
+    const { data: regData } = await supabaseAdmin
       .from("regional_product_prices")
       .select("stok")
       .eq("product_id", product_id)
-      .maybeSingle(); 
+      .maybeSingle();
 
-    // Kalau datanya ada di tabel regional, baru kita kurangi
-    if (regionalData && regionalData.stok !== null) {
-        const sisaStokRegional = regionalData.stok - quantity;
-        await supabaseAdmin
-          .from("regional_product_prices")
-          .update({ stok: sisaStokRegional })
-          .eq("product_id", product_id);
+    if (regData && regData.stok !== null) {
+      const sisaReg = regData.stok - quantity;
+      await supabaseAdmin.from("regional_product_prices").update({ stok: sisaReg }).eq("product_id", product_id);
     }
 
-    // 4. Kasih laporan sukses ke Frontend!
-    return NextResponse.json({ success: true, sisaStok: sisaStokMaster });
+    // 3. 🚀 CATAT PESANAN KE TABEL ORDERS BIAR MUNCUL DI LAYAR!
+    if (user_id && total_harga) {
+      const { error: insertError } = await supabaseAdmin.from("orders").insert({
+        user_id: user_id,
+        status: "diproses",
+        total_harga: total_harga,
+        items: { product_id, quantity }
+      });
+      
+      if (insertError) console.error("Gagal nyatet order:", insertError);
+    }
+
+    return NextResponse.json({ success: true });
 
   } catch (error) {
     console.error("API Update Stock Error:", error);
