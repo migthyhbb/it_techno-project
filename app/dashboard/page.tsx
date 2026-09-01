@@ -48,11 +48,13 @@ interface RawProduct {
   regional_product_prices?: RegionalPrice[];
 }
 
+// 🚀 UPDATE: Tambah tempat buat nampung link gambar bukti
 interface Order {
   id: string;
   status: string;
   total_harga: number;
   created_at: string;
+  bukti_pengiriman_url?: string | null; 
 }
 
 function InfoRow({
@@ -117,6 +119,7 @@ export default function DashboardMitraPage() {
             status: String(o.status || "diproses").toLowerCase(),
             total_harga: Number(o.total_harga || o.total || 0),
             created_at: o.created_at || new Date().toISOString(),
+            bukti_pengiriman_url: o.bukti_pengiriman_url || null, // 🚀 UPDATE: Tarik URL Bukti
           });
         }
       });
@@ -132,6 +135,7 @@ export default function DashboardMitraPage() {
               status: String(pm.status || "diproses").toLowerCase(),
               total_harga: Number(pm.total_harga || pm.jumlah * 15000 || 0),
               created_at: pm.created_at || new Date().toISOString(),
+              bukti_pengiriman_url: pm.bukti_pengiriman_url || null, // 🚀 UPDATE: Tarik URL Bukti
             });
           }
         }
@@ -142,7 +146,6 @@ export default function DashboardMitraPage() {
     setOrders(combinedOrders);
   };
 
-  // Efek 1: Inisialisasi awal profil & produk
   useEffect(() => {
     const fetchDashboardData = async () => {
       const supabase = createSupabaseBrowserClient();
@@ -204,7 +207,6 @@ export default function DashboardMitraPage() {
         alamat: profileData.alamat || "",
       });
 
-      // Ambil Data Produk
       const { data: rawProducts } = await supabase
         .from("products")
         .select(`id, nama_produk, deskripsi, satuan, harga_default, stok_dummy, regional_product_prices(*)`)
@@ -256,7 +258,6 @@ export default function DashboardMitraPage() {
     fetchDashboardData();
   }, [router]);
 
-  // Efek 2: Menggunakan Supabase Realtime (WebSockets) instan tanpa polling
   useEffect(() => {
     if (!userId) return;
 
@@ -455,7 +456,7 @@ export default function DashboardMitraPage() {
             <div className="space-y-4">
               {orders.map((order) => (
                 <div key={order.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xs">
-                  <div>
+                  <div className="w-full sm:w-auto">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-mono text-xs text-ink/50">ID: {order.id.slice(0, 16)}...</span>
                       <span
@@ -484,15 +485,32 @@ export default function DashboardMitraPage() {
                     </p>
                   </div>
 
-                  {order.status === "dikirim" && (
-                    <button
-                      onClick={() => handleConfirmOrder(order.id)}
-                      disabled={confirmingOrderId === order.id}
-                      className="text-xs font-semibold px-4 py-2.5 bg-green text-white rounded-xl hover:bg-forest transition-colors shadow-xs shrink-0 disabled:opacity-50 cursor-pointer"
-                    >
-                      {confirmingOrderId === order.id ? "Memproses..." : "Konfirmasi Barang Diterima"}
-                    </button>
-                  )}
+                  {/* 🚀 UPDATE: Area Tombol (Bukti & Konfirmasi) */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-3 sm:mt-0">
+                    
+                    {/* Tombol Lihat Bukti kalau Admin udah nge-upload */}
+                    {order.bukti_pengiriman_url && (
+                      <a
+                        href={order.bukti_pengiriman_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold px-4 py-2.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors text-center shrink-0"
+                      >
+                        📎 Lihat Bukti
+                      </a>
+                    )}
+
+                    {order.status === "dikirim" && (
+                      <button
+                        onClick={() => handleConfirmOrder(order.id)}
+                        disabled={confirmingOrderId === order.id}
+                        className="text-xs font-semibold px-4 py-2.5 bg-green text-white rounded-xl hover:bg-forest transition-colors shadow-xs shrink-0 disabled:opacity-50 cursor-pointer text-center"
+                      >
+                        {confirmingOrderId === order.id ? "Memproses..." : "Konfirmasi Barang Diterima"}
+                      </button>
+                    )}
+                  </div>
+
                 </div>
               ))}
             </div>
@@ -598,5 +616,3 @@ export default function DashboardMitraPage() {
     </>
   );
 }
-
-
