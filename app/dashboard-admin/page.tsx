@@ -246,7 +246,6 @@ export default function DashboardAdminPage() {
 
     setUpdatingOrderId(null);
 
-    // 🚀 PENANGKAP ERROR JIKA DATABASE NOLAK UBAH STATUS
     if (error) {
       alert("Gagal memperbarui status pesanan: " + error.message);
       return;
@@ -366,7 +365,6 @@ export default function DashboardAdminPage() {
     setIsSubmitting(true);
     
     const supabase = createSupabaseBrowserClient();
-    // 🚀 PENANGKAP ERROR JIKA DATABASE NOLAK UBAH PENGIRIMAN
     const { error } = await supabase.from("waste_shipments").update({ status: newStatus }).eq("id", selectedShipment.id);
     
     setIsSubmitting(false);
@@ -988,6 +986,10 @@ export default function DashboardAdminPage() {
               <h3 className="font-display font-semibold text-forest mb-4">Ubah Status Pengiriman Limbah</h3>
               <form onSubmit={handleUpdateStatus} className="space-y-4">
                 <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer">
+                  {/* 🚀 OBAT ANTI ILUSI: Pastikan status lama terbaca dulu */}
+                  <option value={newStatus} className="hidden">{newStatus}</option>
+                  
+                  <option value="MENUNGGU PEMBAYARAN">Menunggu Pembayaran</option>
                   <option value="Menunggu Penjemputan">Menunggu Penjemputan</option>
                   <option value="Diperjalanan">Diperjalanan</option>
                   <option value="Selesai">Selesai</option>
