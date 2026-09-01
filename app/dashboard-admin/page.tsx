@@ -68,7 +68,6 @@ export default function DashboardAdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
 
-  // State Tab & Mobile Sidebar
   const [activeTab, setActiveTab] = useState("ringkasan");
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -77,18 +76,15 @@ export default function DashboardAdminPage() {
   const [regionalPrices, setRegionalPrices] = useState<RegionalProductPrice[]>([]);
   const [usersList, setUsersList] = useState<UserAccount[]>([]);
 
-  // Modal Detail Profil
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedUserDetail, setSelectedUserDetail] = useState<UserAccount | null>(null);
 
-  // Modal Riwayat & Kuota Pemesanan (Mitra)
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
   const [userOrders, setUserOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [newQuota, setNewQuota] = useState<number>(30);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
-  // Modal Banned
   const [banModalOpen, setBanModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
   const [banReason, setBanReason] = useState("");
@@ -147,7 +143,6 @@ export default function DashboardAdminPage() {
         return;
       }
 
-      // Fetch Data
       const { data: shipData } = await supabase
         .from("waste_shipments")
         .select(`*, industri_profiles(nama_perusahaan, telepon)`)
@@ -251,14 +246,16 @@ export default function DashboardAdminPage() {
 
     setUpdatingOrderId(null);
 
-    if (!error) {
-      setUserOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status } : o))
-      );
-      alert(`Status pesanan berhasil diubah menjadi: ${status}`);
-    } else {
+    // 🚀 PENANGKAP ERROR JIKA DATABASE NOLAK UBAH STATUS
+    if (error) {
       alert("Gagal memperbarui status pesanan: " + error.message);
+      return;
     }
+
+    setUserOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status } : o))
+    );
+    alert(`Status pesanan berhasil diubah menjadi: ${status}`);
   };
 
   const handleUpdateQuota = async (e: React.FormEvent) => {
@@ -321,17 +318,14 @@ export default function DashboardAdminPage() {
     setIsSubmitting(false);
   };
 
-  // HANDLER UNBAN AKUN
   const handleUnbanUser = async (user: UserAccount) => {
     if (!confirm(`Apakah Anda yakin ingin melepas ban untuk akun ${user.nama}?`)) return;
 
     const supabase = createSupabaseBrowserClient();
     const table = user.tipe === "mitra" ? "mitra_profiles" : "industri_profiles";
 
-    // 1. Hapus dari daftar blacklist
     await supabase.from("blacklists").delete().eq("user_id", user.user_id);
 
-    // 2. Kembalikan status akun ke aktif & hapus alasan_ban
     const { error } = await supabase
       .from(table)
       .update({ status_akun: "aktif", alasan_ban: null })
@@ -370,11 +364,21 @@ export default function DashboardAdminPage() {
     e.preventDefault();
     if (!selectedShipment) return;
     setIsSubmitting(true);
+    
     const supabase = createSupabaseBrowserClient();
-    await supabase.from("waste_shipments").update({ status: newStatus }).eq("id", selectedShipment.id);
+    // 🚀 PENANGKAP ERROR JIKA DATABASE NOLAK UBAH PENGIRIMAN
+    const { error } = await supabase.from("waste_shipments").update({ status: newStatus }).eq("id", selectedShipment.id);
+    
+    setIsSubmitting(false);
+
+    if (error) {
+      alert("Gagal mengubah status pengiriman: " + error.message);
+      return;
+    }
+
     setShipments(shipments.map((s) => (s.id === selectedShipment.id ? { ...s, status: newStatus } : s)));
     setStatusModalOpen(false);
-    setIsSubmitting(false);
+    alert("Status pengiriman berhasil diubah!");
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -454,7 +458,6 @@ export default function DashboardAdminPage() {
 
   return (
     <div className="flex min-h-screen bg-cream relative">
-      {/* Top Header Mobile */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10">
         <div className="flex flex-col">
           <span className="font-display font-bold tracking-tight text-base">LENTERA</span>
@@ -470,7 +473,6 @@ export default function DashboardAdminPage() {
         </button>
       </div>
 
-      {/* SINGLE SIDEBAR ADMIN */}
       <AdminSidebar
         isOpen={isMobileOpen}
         onClose={() => setIsMobileOpen(false)}
@@ -478,7 +480,6 @@ export default function DashboardAdminPage() {
         setActiveTab={setActiveTab}
       />
 
-      {/* AREA KONTEN UTAMA */}
       <main className="flex-1 min-w-0 px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-20 md:pt-12">
         <div className="mb-8">
           <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">Administrator Portal</p>
@@ -487,7 +488,6 @@ export default function DashboardAdminPage() {
           </h1>
         </div>
 
-        {/* TAB 1: RINGKASAN */}
         {activeTab === "ringkasan" && (
           <div className="space-y-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -522,7 +522,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* TAB 2: MANAJEMEN PENGGUNA */}
         {(activeTab === "manajemen-pengguna" || activeTab === "manajemen-akun") && (
           <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-forest/10 bg-forest/5 flex justify-between items-center">
@@ -593,7 +592,6 @@ export default function DashboardAdminPage() {
                             </button>
                           )}
 
-                          {/* DUA KONDISI: BAN ATAU UNBAN */}
                           {usr.status_akun === "banned" ? (
                             <button
                               onClick={() => handleUnbanUser(usr)}
@@ -622,7 +620,6 @@ export default function DashboardAdminPage() {
           </section>
         )}
 
-        {/* TAB 3: KATALOG PRODUK UTAMA */}
         {activeTab === "katalog-produk" && (
           <section className="space-y-4">
             <div className="flex justify-between items-center mb-2">
@@ -658,7 +655,6 @@ export default function DashboardAdminPage() {
           </section>
         )}
 
-        {/* TAB 4: HARGA & STOK WILAYAH */}
         {activeTab === "harga-wilayah" && (
           <section className="space-y-4">
             <div className="flex justify-between items-center mb-2">
@@ -698,7 +694,6 @@ export default function DashboardAdminPage() {
           </section>
         )}
 
-        {/* TAB 5: SEMUA PENGIRIMAN */}
         {activeTab === "pengiriman" && (
           <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
@@ -743,7 +738,6 @@ export default function DashboardAdminPage() {
           </section>
         )}
 
-        {/* MODAL DETAIL PROFIL */}
         {detailModalOpen && selectedUserDetail && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
@@ -806,7 +800,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL RIWAYAT, KUOTA, & STATUS PESANAN (MITRA) */}
         {ordersModalOpen && selectedUserDetail && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
@@ -892,7 +885,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL BAN AKUN */}
         {banModalOpen && selectedUser && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -914,7 +906,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL SET HARGA & STOK */}
         {priceModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -970,7 +961,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL TAMBAH PRODUK */}
         {productModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-lg p-6">
@@ -992,7 +982,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL UBAH STATUS SHIPMENT */}
         {statusModalOpen && selectedShipment && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">

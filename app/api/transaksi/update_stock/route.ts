@@ -11,9 +11,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { product_id, quantity, user_id, total_harga } = body;
 
-    // 🚀 CEK KETAT: Pastikan user_id nyampe ke server!
-    if (!user_id) {
-      return NextResponse.json({ error: "Data User ID hilang di jalan!" }, { status: 400 });
+    if (!product_id || !quantity) {
+      return NextResponse.json({ error: "Data tidak lengkap" }, { status: 400 });
     }
 
     // 1. Kurangi Stok Master
@@ -23,25 +22,24 @@ export async function POST(req: Request) {
       await supabaseAdmin.from("products").update({ stok: sisa, stok_dummy: sisa }).eq("id", product_id);
     }
 
-    // 2. Kurangi Stok Regional
-    const { data: regData } = await supabaseAdmin.from("regional_product_prices").select("stok").eq("product_id", product_id).maybeSingle();
-    if (regData && regData.stok !== null) {
-      const sisaReg = regData.stok - quantity;
-      await supabaseAdmin.from("regional_product_prices").update({ stok: sisaReg }).eq("product_id", product_id);
+    // 2. 🚀 JURUS BARU: Kurangi Stok Regional (Looping Semua Wilayah)
+    const { data: regData } = await supabaseAdmin.from("regional_product_prices").select("id, stok").eq("product_id", product_id);
+    if (regData && regData.length > 0) {
+      for (const reg of regData) {
+        const sisaReg = (reg.stok || 0) - quantity;
+        await supabaseAdmin.from("regional_product_prices").update({ stok: sisaReg }).eq("id", reg.id);
+      }
     }
 
-    // 3. 🚀 CATAT PESANAN (Paksa bikin ID sendiri pakai crypto.randomUUID biar aman)
-    const { error: insertError } = await supabaseAdmin.from("orders").insert({
-      id: crypto.randomUUID(), 
-      user_id: user_id,
-      status: "diproses",
-      total_harga: total_harga,
-      items: { product_id, quantity }
-    });
-    
-    // 🚨 KALAU DATABASE NOLAK, KITA LEMPAR KE LAYAR BIAR KETAHUAN!
-    if (insertError) {
-      return NextResponse.json({ error: "Database Nolak: " + insertError.message }, { status: 500 });
+    // 3. Catat Pesanan
+    if (user_id && total_harga) {
+      await supabaseAdmin.from("orders").insert({
+        id: crypto.randomUUID(), 
+        user_id: user_id,
+        status: "diproses",
+        total_harga: total_harga,
+        items: { product_id, quantity }
+      });
     }
 
     return NextResponse.json({ success: true });
