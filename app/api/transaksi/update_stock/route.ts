@@ -11,50 +11,42 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { product_id, quantity, user_id, total_harga } = body;
 
-    if (!product_id || !quantity) {
-      return NextResponse.json({ error: "Data tidak lengkap" }, { status: 400 });
+    // 🚀 CEK KETAT: Pastikan user_id nyampe ke server!
+    if (!user_id) {
+      return NextResponse.json({ error: "Data User ID hilang di jalan!" }, { status: 400 });
     }
 
-    // 1. Kurangi Stok di Master Products
-    const { data: masterData } = await supabaseAdmin
-      .from("products")
-      .select("stok")
-      .eq("id", product_id)
-      .single();
-
+    // 1. Kurangi Stok Master
+    const { data: masterData } = await supabaseAdmin.from("products").select("stok").eq("id", product_id).single();
     if (masterData) {
       const sisa = (masterData.stok || 0) - quantity;
       await supabaseAdmin.from("products").update({ stok: sisa, stok_dummy: sisa }).eq("id", product_id);
     }
 
-    // 2. Kurangi Stok di Regional (kalau ada)
-    const { data: regData } = await supabaseAdmin
-      .from("regional_product_prices")
-      .select("stok")
-      .eq("product_id", product_id)
-      .maybeSingle();
-
+    // 2. Kurangi Stok Regional
+    const { data: regData } = await supabaseAdmin.from("regional_product_prices").select("stok").eq("product_id", product_id).maybeSingle();
     if (regData && regData.stok !== null) {
       const sisaReg = regData.stok - quantity;
       await supabaseAdmin.from("regional_product_prices").update({ stok: sisaReg }).eq("product_id", product_id);
     }
 
-    // 3. 🚀 CATAT PESANAN KE TABEL ORDERS BIAR MUNCUL DI LAYAR!
-    if (user_id && total_harga) {
-      const { error: insertError } = await supabaseAdmin.from("orders").insert({
-        user_id: user_id,
-        status: "diproses",
-        total_harga: total_harga,
-        items: { product_id, quantity }
-      });
-      
-      if (insertError) console.error("Gagal nyatet order:", insertError);
+    // 3. 🚀 CATAT PESANAN (Paksa bikin ID sendiri pakai crypto.randomUUID biar aman)
+    const { error: insertError } = await supabaseAdmin.from("orders").insert({
+      id: crypto.randomUUID(), 
+      user_id: user_id,
+      status: "diproses",
+      total_harga: total_harga,
+      items: { product_id, quantity }
+    });
+    
+    // 🚨 KALAU DATABASE NOLAK, KITA LEMPAR KE LAYAR BIAR KETAHUAN!
+    if (insertError) {
+      return NextResponse.json({ error: "Database Nolak: " + insertError.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
 
-  } catch (error) {
-    console.error("API Update Stock Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: "Server Error: " + error.message }, { status: 500 });
   }
 }
