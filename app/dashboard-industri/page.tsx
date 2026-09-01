@@ -207,7 +207,6 @@ export default function DashboardIndustriPage() {
     };
   }, [router]);
 
-  // Handler Simpan Perubahan Profil Industri
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
@@ -239,7 +238,6 @@ export default function DashboardIndustriPage() {
     }
   };
 
-  // Handler Hapus Akun Industri
   const handleDeleteAccount = async () => {
     if (!userId) return;
     setDeleteLoading(true);
@@ -270,7 +268,6 @@ export default function DashboardIndustriPage() {
     }
   };
 
-  // Handler Pengiriman Limbah Biasa
   async function handleKirimLimbah(e: React.FormEvent) {
     e.preventDefault();
     setIsSubmitting(true);
@@ -336,7 +333,6 @@ export default function DashboardIndustriPage() {
     }
   }
 
-  // Handler Pendaftaran Limbah B3
   async function handleKirimLimbahB3(e: React.FormEvent) {
     e.preventDefault();
     setIsSubmitting(true);
@@ -411,7 +407,6 @@ export default function DashboardIndustriPage() {
     }
   }
 
-  // Handler Konfirmasi / Upload Bukti Pembayaran Limbah B3
   const handleKonfirmasiPembayaran = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPayShipment || !buktiBayarFile) return;
@@ -534,8 +529,10 @@ export default function DashboardIndustriPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
             <p className="text-xs text-ink/45 mb-1">Status akun</p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
+            <div className="flex items-center gap-1.5 mt-2">
+              <svg className="w-4 h-4 text-forest opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
               <p className="font-display font-semibold text-forest text-lg">Aktif</p>
             </div>
           </div>
@@ -573,50 +570,22 @@ export default function DashboardIndustriPage() {
         </div>
       </section>
 
-      {/* Profil Industri */}
-      <section id="profil-industri" className="scroll-mt-8 mb-10">
-        <div className="flex justify-between items-end mb-4">
-          <div>
-            <p className="font-mono text-xs tracking-widest uppercase text-clay mb-1">
-              Profil industri
-            </p>
-            <h2 className="font-display font-semibold text-xl text-forest">
-              Informasi Industri
-            </h2>
-          </div>
-          <button
-            onClick={() => setIsEditOpen(true)}
-            className="text-xs font-semibold px-4 py-2 bg-forest text-cream rounded-xl hover:bg-forest/90 transition-colors cursor-pointer"
-          >
-            Ubah Profil
-          </button>
-        </div>
-
-        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6 shadow-xs">
-          <InfoRow label="Nama Perusahaan" value={profile?.nama_perusahaan} />
-          <InfoRow label="Email Kontak" value={email} />
-          <InfoRow label="NPWP" value={profile?.npwp} />
-          <InfoRow label="Nomor Telepon" value={profile?.telepon} />
-          <InfoRow
-            label="Wilayah Operasional"
-            value={
-              profile?.kota_kabupaten
-                ? `${profile.kota_kabupaten}, ${profile.provinsi}`
-                : "BELUM DISET"
-            }
-          />
-          <InfoRow label="Alamat Lengkap" value={profile?.alamat} className="sm:col-span-2" />
-        </div>
-      </section>
-
       {/* Lacak Pengiriman */}
       <section id="lacak-pengiriman" className="scroll-mt-8 mb-10">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
-            <h2 className="font-display font-semibold text-xl text-forest mb-0.5">Status Pengiriman</h2>
-            <p className="text-xs text-ink/60">Sistem diperbarui otomatis (Auto-update: Aktif)</p>
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="font-display font-semibold text-xl text-forest">Status Pengiriman</h2>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-forest/5 border border-forest/10 text-[10px] text-forest/70 font-semibold tracking-wide uppercase">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Sistem tersinkronisasi
+              </div>
+            </div>
+            <p className="text-xs text-ink/60">Pantau pergerakan limbah yang sedang diproses secara real-time.</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto">
             <button
               onClick={() => {
                 setErrorMsg(null);
@@ -624,7 +593,8 @@ export default function DashboardIndustriPage() {
               }}
               className="bg-forest text-paper px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium hover:bg-forest/90 transition-colors shadow-xs text-center flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <span>+</span> Penjemputan Limbah Biasa
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
+              Penjemputan Limbah Biasa
             </button>
 
             <button
@@ -634,7 +604,8 @@ export default function DashboardIndustriPage() {
               }}
               className="bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold hover:bg-amber-700 transition-colors shadow-xs text-center flex items-center justify-center gap-1.5 cursor-pointer border border-amber-700"
             >
-              <span>⚠️</span> Daftar Pengolahan B3
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              Daftar Pengolahan B3
             </button>
           </div>
         </div>
@@ -768,6 +739,42 @@ export default function DashboardIndustriPage() {
           </div>
         </section>
       )}
+
+      {/* Profil Industri */}
+      <section id="profil-industri" className="scroll-mt-8 mb-10">
+        <div className="flex justify-between items-end mb-4">
+          <div>
+            <p className="font-mono text-xs tracking-widest uppercase text-clay mb-1">
+              Profil industri
+            </p>
+            <h2 className="font-display font-semibold text-xl text-forest">
+              Informasi Industri
+            </h2>
+          </div>
+          <button
+            onClick={() => setIsEditOpen(true)}
+            className="text-xs font-semibold px-4 py-2 bg-forest text-cream rounded-xl hover:bg-forest/90 transition-colors cursor-pointer"
+          >
+            Ubah Profil
+          </button>
+        </div>
+
+        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6 shadow-xs">
+          <InfoRow label="Nama Perusahaan" value={profile?.nama_perusahaan} />
+          <InfoRow label="Email Kontak" value={email} />
+          <InfoRow label="NPWP" value={profile?.npwp} />
+          <InfoRow label="Nomor Telepon" value={profile?.telepon} />
+          <InfoRow
+            label="Wilayah Operasional"
+            value={
+              profile?.kota_kabupaten
+                ? `${profile.kota_kabupaten}, ${profile.provinsi}`
+                : "BELUM DISET"
+            }
+          />
+          <InfoRow label="Alamat Lengkap" value={profile?.alamat} className="sm:col-span-2" />
+        </div>
+      </section>
 
       {/* Danger Zone: Hapus Akun */}
       <section className="bg-red-50/50 border border-red-200/60 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
