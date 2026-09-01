@@ -54,9 +54,33 @@ export function ProductCard({ product }: { product: Product }) {
       // 1. Jika token Midtrans tersedia -> Buka Pop-up Midtrans
       if (data.token && windowSnap) {
         windowSnap.pay(data.token, {
-          onSuccess: function () {
-            alert("Pembayaran berhasil!");
-            window.location.reload();
+          onSuccess: async function (result: any) {
+            try {
+              // 🚀 INI YANG HILANG BANG! KITA MASUKIN LAGI!
+              // Tembak API update stok secara diam-diam di belakang layar
+              const updateRes = await fetch("/api/transaksi/update_stock", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  product_id: product.id,
+                  quantity: jumlah
+                })
+              });
+
+              const updateData = await updateRes.json();
+
+              if (!updateRes.ok) {
+                throw new Error(updateData.error || "Gagal update database.");
+              }
+
+              alert("Pembayaran Berhasil! Pesanan diproses & Stok telah dikurangi.");
+              window.location.reload(); // Refresh layar biar status terupdate
+              
+            } catch (err) {
+              console.error(err);
+              alert("Pembayaran di Midtrans sukses, tapi gagal ngupdate stok ke Database!");
+              window.location.reload();
+            }
           },
           onPending: function () {
             alert("Menunggu pembayaran Anda.");
@@ -64,13 +88,14 @@ export function ProductCard({ product }: { product: Product }) {
           },
           onError: function () {
             alert("Pembayaran gagal!");
+            window.location.reload();
           },
           onClose: function () {
             alert("Kamu menutup pop-up pembayaran sebelum selesai.");
+            window.location.reload();
           },
         });
       } else {
-        // 2. Jika token null / Mode Simulasi -> Langsung tampilkan pesan sukses dari API
         alert(data.message || "Pesanan berhasil dibuat!");
         window.location.reload();
       }
