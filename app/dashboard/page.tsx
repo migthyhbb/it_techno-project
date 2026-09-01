@@ -416,8 +416,10 @@ export default function DashboardMitraPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
               <p className="text-xs text-ink/45 mb-1">Status akun</p>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <svg className="w-4 h-4 text-forest opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 <p className="font-display font-semibold text-forest text-base sm:text-lg">Aktif</p>
               </div>
             </div>
@@ -465,9 +467,11 @@ export default function DashboardMitraPage() {
             <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest">
               Status Pengiriman & Penerimaan
             </h2>
-            <div className="flex items-center gap-2 text-[10px] text-green font-medium">
-              <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
-              Realtime Sync Aktif
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-forest/5 border border-forest/10 text-[10px] text-forest/70 font-semibold tracking-wide uppercase">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Sistem tersinkronisasi
             </div>
           </div>
 
@@ -493,7 +497,7 @@ export default function DashboardMitraPage() {
                     <span
                       className={`text-[10px] font-bold px-2.5 py-1 rounded-full capitalize text-center whitespace-nowrap ${
                         order.status === "dikirim"
-                          ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
+                          ? "bg-amber-100 text-amber-800 border border-amber-300"
                           : order.status === "selesai"
                           ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                           : "bg-blue-100 text-blue-800 border border-blue-300"
@@ -528,9 +532,12 @@ export default function DashboardMitraPage() {
                             setSelectedProofUrl(order.bukti_pengiriman_url!);
                             setProofModalOpen(true);
                           }}
-                          className="flex-1 text-xs font-semibold py-2.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors text-center cursor-pointer"
+                          className="flex-1 flex items-center justify-center text-xs font-semibold py-2.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
                         >
-                          📎 Lihat Bukti
+                          <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                          </svg>
+                          Lihat Bukti
                         </button>
                       )}
 
@@ -662,7 +669,9 @@ export default function DashboardMitraPage() {
                   onClick={() => setProofModalOpen(false)} 
                   className="text-ink/50 hover:text-ink font-bold w-8 h-8 flex items-center justify-center rounded-full bg-forest/5 hover:bg-forest/10 transition-colors cursor-pointer"
                 >
-                  ✕
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
               <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
