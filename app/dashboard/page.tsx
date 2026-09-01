@@ -54,7 +54,7 @@ interface Order {
   total_harga: number;
   created_at: string;
   bukti_pengiriman_url?: string | null; 
-  nama_produk?: string; // 🚀 UPDATE: Tambah tempat buat nama produk
+  nama_produk?: string; 
 }
 
 function InfoRow({
@@ -103,18 +103,15 @@ export default function DashboardMitraPage() {
   const [proofModalOpen, setProofModalOpen] = useState(false);
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
-  // 🚀 UPDATE: Fungsi diperbarui biar narik nama produk juga
   const fetchOrdersOnly = async (currentUserId: string) => {
     const supabase = createSupabaseBrowserClient();
     
-    // Ambil pesanan dan master data produk sekaligus
     const [ordersRes, pmRes, productsRes] = await Promise.all([
       supabase.from("orders").select("*").order("created_at", { ascending: false }),
       supabase.from("pesanan_mitra").select("*").order("created_at", { ascending: false }),
       supabase.from("products").select("id, nama_produk") 
     ]);
 
-    // Bikin kamus produk biar gampang dicari namanya
     const productMap = new Map<string, string>();
     if (productsRes.data) {
       productsRes.data.forEach((p: any) => productMap.set(p.id, p.nama_produk));
@@ -127,7 +124,6 @@ export default function DashboardMitraPage() {
         const oUser = o.user_id || o.mitra_id;
         if (!oUser || oUser === currentUserId) {
           
-          // Cari nama produk dari items jsonb
           let prodName = "Produk Energi";
           let prodId = null;
           if (o.items) {
@@ -141,7 +137,7 @@ export default function DashboardMitraPage() {
             total_harga: Number(o.total_harga || o.total || 0),
             created_at: o.created_at || new Date().toISOString(),
             bukti_pengiriman_url: o.bukti_pengiriman_url || null, 
-            nama_produk: prodName, // 🚀 Masukin nama produknya
+            nama_produk: prodName, 
           });
         }
       });
@@ -153,7 +149,6 @@ export default function DashboardMitraPage() {
         if (!pmUser || pmUser === currentUserId) {
           if (!combinedOrders.some((o) => o.id === String(pm.id))) {
             
-            // Cari nama produk untuk tabel pesanan_mitra
             let prodName = "Produk Energi";
             if (pm.produk_id) prodName = productMap.get(pm.produk_id) || prodName;
 
@@ -163,7 +158,7 @@ export default function DashboardMitraPage() {
               total_harga: Number(pm.total_harga || pm.jumlah * 15000 || 0),
               created_at: pm.created_at || new Date().toISOString(),
               bukti_pengiriman_url: pm.bukti_pengiriman_url || null, 
-              nama_produk: prodName, // 🚀 Masukin nama produknya
+              nama_produk: prodName, 
             });
           }
         }
@@ -463,7 +458,7 @@ export default function DashboardMitraPage() {
           )}
         </section>
 
-        {/* Status Pengiriman */}
+        {/* Status Pengiriman (GRID 2 KOLOM) */}
         <section id="pesanan-saya" className="scroll-mt-8 mb-10 md:mb-16">
           <p className="font-mono text-xs tracking-widest uppercase text-forest mb-1">Daftar Pesanan</p>
           <div className="flex justify-between items-center mb-4">
@@ -481,71 +476,75 @@ export default function DashboardMitraPage() {
               <p className="text-ink/60 text-sm">Belum ada pesanan aktif saat ini.</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
               {orders.map((order) => (
-                <div key={order.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xs">
-                  <div className="w-full sm:w-auto">
-                    {/* 🚀 UPDATE: Tampilan Nama Produk dibikin jadi Highlight Utama */}
-                    <div className="flex items-center gap-3 mb-1">
+                <div key={order.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all">
+                  
+                  {/* Header Card: Nama Produk & Status */}
+                  <div className="flex justify-between items-start border-b border-forest/10 pb-3 mb-3">
+                    <div>
                       <h3 className="font-display font-bold text-forest text-lg">
-                        {order.nama_produk}
+                        {order.nama_produk || "Produk Energi"}
                       </h3>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
-                          order.status === "dikirim"
-                            ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
-                            : order.status === "selesai"
-                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                            : "bg-blue-100 text-blue-800 border border-blue-300"
-                        }`}
-                      >
-                        {order.status === "dikirim"
-                          ? "Dalam Pengiriman"
+                      <p className="font-mono text-[10px] text-ink/40 uppercase tracking-widest mt-0.5">
+                        ID: {order.id.split('-')[0]}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full capitalize text-center whitespace-nowrap ${
+                        order.status === "dikirim"
+                          ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
                           : order.status === "selesai"
-                          ? "Selesai"
-                          : order.status === "pending" || order.status === "menunggu_pembayaran"
-                          ? "Menunggu Pembayaran"
-                          : "Diproses"}
-                      </span>
-                    </div>
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                          : "bg-blue-100 text-blue-800 border border-blue-300"
+                      }`}
+                    >
+                      {order.status === "dikirim" ? "Pengiriman" : order.status === "selesai" ? "Selesai" : "Diproses"}
+                    </span>
+                  </div>
 
-                    <div className="flex flex-col mt-2 space-y-0.5">
-                      <p className="font-mono text-[10px] text-ink/40 uppercase tracking-widest">
-                        ID: {order.id.split('-')[0]}...
+                  {/* Info Tengah: Harga & Tanggal */}
+                  <div className="flex justify-between items-end mb-4">
+                    <div>
+                      <p className="text-[10px] text-ink/50 uppercase tracking-wider mb-0.5">Total Pembayaran</p>
+                      <p className="font-semibold text-green text-base">
+                        Rp {order.total_harga?.toLocaleString("id-ID")}
                       </p>
-                      <p className="font-semibold text-green text-sm">
-                        Total: Rp {order.total_harga?.toLocaleString("id-ID")}
-                      </p>
-                      <p className="text-[11px] text-ink/50 mt-1">
-                        Tanggal: {new Date(order.created_at).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-ink/50 uppercase tracking-wider mb-0.5">Tanggal</p>
+                      <p className="text-xs font-medium text-forest">
+                        {new Date(order.created_at).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-3 sm:mt-0 border-t border-forest/10 sm:border-t-0 pt-3 sm:pt-0">
-                    
-                    {order.bukti_pengiriman_url && (
-                      <button
-                        onClick={() => {
-                          setSelectedProofUrl(order.bukti_pengiriman_url!);
-                          setProofModalOpen(true);
-                        }}
-                        className="text-xs font-semibold px-4 py-2.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors text-center shrink-0 cursor-pointer"
-                      >
-                        📎 Lihat Bukti
-                      </button>
-                    )}
+                  {/* Area Tombol Aksi */}
+                  {(order.bukti_pengiriman_url || order.status === "dikirim") && (
+                    <div className="flex gap-2 pt-3 border-t border-forest/5 mt-auto">
+                      {order.bukti_pengiriman_url && (
+                        <button
+                          onClick={() => {
+                            setSelectedProofUrl(order.bukti_pengiriman_url!);
+                            setProofModalOpen(true);
+                          }}
+                          className="flex-1 text-xs font-semibold py-2.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors text-center cursor-pointer"
+                        >
+                          📎 Lihat Bukti
+                        </button>
+                      )}
 
-                    {order.status === "dikirim" && (
-                      <button
-                        onClick={() => handleConfirmOrder(order.id)}
-                        disabled={confirmingOrderId === order.id}
-                        className="text-xs font-semibold px-4 py-2.5 bg-green text-white rounded-xl hover:bg-forest transition-colors shadow-xs shrink-0 disabled:opacity-50 cursor-pointer text-center"
-                      >
-                        {confirmingOrderId === order.id ? "Memproses..." : "Konfirmasi Barang Diterima"}
-                      </button>
-                    )}
-                  </div>
+                      {order.status === "dikirim" && (
+                        <button
+                          onClick={() => handleConfirmOrder(order.id)}
+                          disabled={confirmingOrderId === order.id}
+                          className="flex-1 text-xs font-semibold py-2.5 bg-green text-white rounded-xl hover:bg-forest transition-colors shadow-xs disabled:opacity-50 cursor-pointer text-center"
+                        >
+                          {confirmingOrderId === order.id ? "Memproses..." : "Konfirmasi Terima"}
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                 </div>
               ))}
