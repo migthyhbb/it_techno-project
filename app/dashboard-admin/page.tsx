@@ -35,11 +35,13 @@ interface RegionalProductPrice {
   products?: { nama_produk: string; satuan: string };
 }
 
+// 🚀 UPDATE: Tambah field bukti_pengiriman_url
 interface Order {
   id: string;
   created_at: string;
   total_harga: number;
   status: string;
+  bukti_pengiriman_url?: string | null; 
 }
 
 interface UserAccount {
@@ -83,7 +85,12 @@ export default function DashboardAdminPage() {
   const [userOrders, setUserOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [newQuota, setNewQuota] = useState<number>(30);
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+
+  // 🚀 UPDATE: State khusus Modal Update Status + Bukti Pesanan
+  const [orderStatusModalOpen, setOrderStatusModalOpen] = useState(false);
+  const [selectedOrderUpdate, setSelectedOrderUpdate] = useState<Order | null>(null);
+  const [newOrderStatus, setNewOrderStatus] = useState("");
+  const [proofFile, setProofFile] = useState<File | null>(null);
 
   const [banModalOpen, setBanModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
@@ -235,26 +242,63 @@ export default function DashboardAdminPage() {
     setLoadingOrders(false);
   };
 
-  const handleUpdateOrderStatus = async (orderId: string, status: string) => {
-    setUpdatingOrderId(orderId);
+  // 🚀 UPDATE: Fungsi Simpan Status + Bukti Pesanan
+  const handleSaveOrderStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrderUpdate) return;
+    setIsSubmitting(true);
+
     const supabase = createSupabaseBrowserClient();
+    let finalProofUrl = selectedOrderUpdate.bukti_pengiriman_url;
 
-    const { error } = await supabase
-      .from("orders")
-      .update({ status })
-      .eq("id", orderId);
+    try {
+      // 1. Jika Admin melampirkan file foto bukti
+      if (proofFile) {
+        const fileExt = proofFile.name.split('.').pop();
+        const fileName = `bukti-${selectedOrderUpdate.id}-${Date.now()}.${fileExt}`;
 
-    setUpdatingOrderId(null);
+        // Upload ke bucket Supabase bernama 'bukti_pengiriman'
+        const { error: uploadError } = await supabase.storage
+          .from("bukti_pengiriman")
+          .upload(fileName, proofFile);
 
-    if (error) {
-      alert("Gagal memperbarui status pesanan: " + error.message);
-      return;
+        if (uploadError) throw new Error("Gagal upload gambar: " + uploadError.message);
+
+        // Ambil URL public dari gambar yang baru diupload
+        const { data: publicUrlData } = supabase.storage
+          .from("bukti_pengiriman")
+          .getPublicUrl(fileName);
+
+        finalProofUrl = publicUrlData.publicUrl;
+      }
+
+      // 2. Update Database Orders
+      const { error: updateError } = await supabase
+        .from("orders")
+        .update({
+          status: newOrderStatus,
+          ...(finalProofUrl ? { bukti_pengiriman_url: finalProofUrl } : {}) // Update URL kalau ada
+        })
+        .eq("id", selectedOrderUpdate.id);
+
+      if (updateError) throw new Error("Gagal update status: " + updateError.message);
+
+      // 3. Update UI
+      setUserOrders((prev) =>
+        prev.map((o) =>
+          o.id === selectedOrderUpdate.id
+            ? { ...o, status: newOrderStatus, bukti_pengiriman_url: finalProofUrl }
+            : o
+        )
+      );
+
+      alert("Status & Bukti berhasil diperbarui!");
+      setOrderStatusModalOpen(false);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setUserOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status } : o))
-    );
-    alert(`Status pesanan berhasil diubah menjadi: ${status}`);
   };
 
   const handleUpdateQuota = async (e: React.FormEvent) => {
@@ -798,6 +842,7 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
+        {/* MODAL PESANAN MITRA */}
         {ordersModalOpen && selectedUserDetail && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
@@ -844,27 +889,34 @@ export default function DashboardAdminPage() {
                             <td className="p-3 text-ink/60">{new Date(ord.created_at).toLocaleDateString("id-ID")}</td>
                             <td className="p-3 font-semibold text-green">Rp {ord.total_harga?.toLocaleString("id-ID")}</td>
                             <td className="p-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
-                                ord.status === 'dikirim' ? 'bg-amber-100 text-amber-800'
-                                : ord.status === 'selesai' ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-gray-100 text-gray-700'
-                              }`}>
-                                {ord.status}
-                              </span>
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                                  ord.status === 'dikirim' ? 'bg-amber-100 text-amber-800'
+                                  : ord.status === 'selesai' ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {ord.status}
+                                </span>
+                                {ord.bukti_pengiriman_url && (
+                                  <a href={ord.bukti_pengiriman_url} target="_blank" rel="noopener noreferrer" className="text-[9px] text-blue-600 hover:underline flex items-center gap-0.5">
+                                    📎 Lihat Bukti
+                                  </a>
+                                )}
+                              </div>
                             </td>
+                            {/* 🚀 UPDATE: Tombol baru buat buka modal upload bukti */}
                             <td className="p-3 text-center">
-                              <select
-                                value={ord.status}
-                                disabled={updatingOrderId === ord.id}
-                                onChange={(e) => handleUpdateOrderStatus(ord.id, e.target.value)}
-                                className="border border-ink/20 rounded-lg p-1 text-xs bg-white outline-none cursor-pointer"
+                              <button
+                                onClick={() => {
+                                  setSelectedOrderUpdate(ord);
+                                  setNewOrderStatus(ord.status);
+                                  setProofFile(null); // Kosongin input file lama
+                                  setOrderStatusModalOpen(true);
+                                }}
+                                className="text-green hover:underline text-xs font-medium cursor-pointer"
                               >
-                                <option value="menunggu_pembayaran">menunggu_pembayaran</option>
-                                <option value="diproses">diproses</option>
-                                <option value="dikirim">dikirim (Dalam Pengiriman)</option>
-                                <option value="selesai">selesai</option>
-                                <option value="dibatalkan">dibatalkan</option>
-                              </select>
+                                Ubah Status & Bukti
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -879,6 +931,53 @@ export default function DashboardAdminPage() {
                   Tutup Modal
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🚀 MODAL BARU: UPDATE STATUS PESANAN + UPLOAD BUKTI (UNTUK MITRA) */}
+        {orderStatusModalOpen && selectedOrderUpdate && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
+              <h3 className="font-display font-semibold text-forest mb-4">Ubah Status & Upload Bukti</h3>
+              <form onSubmit={handleSaveOrderStatus} className="space-y-4">
+                
+                <div>
+                  <label className="block text-xs font-medium text-ink mb-1">Status Pesanan</label>
+                  <select 
+                    value={newOrderStatus} 
+                    onChange={(e) => setNewOrderStatus(e.target.value)} 
+                    className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer"
+                  >
+                    <option value={newOrderStatus} className="hidden">{newOrderStatus}</option>
+                    <option value="menunggu_pembayaran">Menunggu Pembayaran</option>
+                    <option value="diproses">Diproses</option>
+                    <option value="dikirim">Dikirim (Dalam Pengiriman)</option>
+                    <option value="selesai">Selesai</option>
+                    <option value="dibatalkan">Dibatalkan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-ink mb-1">Foto Bukti Pengiriman (Opsional)</label>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-ink/70 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-forest/10 file:text-forest hover:file:bg-forest/20 cursor-pointer border border-ink/20 rounded-xl p-1 bg-white"
+                  />
+                  {selectedOrderUpdate.bukti_pengiriman_url && !proofFile && (
+                    <p className="text-[10px] text-green mt-1">✓ Bukti sudah pernah diupload sebelumnya.</p>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                  <button type="button" onClick={() => setOrderStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                  <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">
+                    {isSubmitting ? "Menyimpan..." : "Simpan Perubahan"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
@@ -980,15 +1079,14 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
+        {/* MODAL UBAH STATUS PENGIRIMAN INDUSTRI */}
         {statusModalOpen && selectedShipment && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
               <h3 className="font-display font-semibold text-forest mb-4">Ubah Status Pengiriman Limbah</h3>
               <form onSubmit={handleUpdateStatus} className="space-y-4">
                 <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer">
-                  {/* 🚀 OBAT ANTI ILUSI: Pastikan status lama terbaca dulu */}
                   <option value={newStatus} className="hidden">{newStatus}</option>
-                  
                   <option value="MENUNGGU PEMBAYARAN">Menunggu Pembayaran</option>
                   <option value="Menunggu Penjemputan">Menunggu Penjemputan</option>
                   <option value="Diperjalanan">Diperjalanan</option>
