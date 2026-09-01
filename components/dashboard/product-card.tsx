@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser"; 
 
 interface Product {
   id: string;
@@ -29,6 +30,16 @@ export function ProductCard({ product }: { product: Product }) {
     setLoading(true);
 
     try {
+      // 🚀 JURUS AMAN: Ambil data user SEKARANG sebelum buka Midtrans
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user?.id) {
+        alert("Gagal: Sesi login kamu tidak terbaca. Silakan refresh halaman.");
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch("/api/transaksi/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -44,41 +55,38 @@ export function ProductCard({ product }: { product: Product }) {
       }
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Gagal membuat pesanan.");
-      }
+      if (!res.ok) throw new Error(data.error || "Gagal membuat pesanan.");
 
       const windowSnap = (window as unknown as { snap?: any }).snap;
 
-      // 1. Jika token Midtrans tersedia -> Buka Pop-up Midtrans
       if (data.token && windowSnap) {
         windowSnap.pay(data.token, {
           onSuccess: async function (result: any) {
             try {
-              // 🚀 INI YANG HILANG BANG! KITA MASUKIN LAGI!
-              // Tembak API update stok secara diam-diam di belakang layar
               const updateRes = await fetch("/api/transaksi/update_stock", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   product_id: product.id,
-                  quantity: jumlah
+                  quantity: jumlah,
+                  user_id: user.id, // PASTI AMAN KARENA DIAMBIL DI AWAL
+                  total_harga: product.price * jumlah
                 })
               });
 
               const updateData = await updateRes.json();
 
               if (!updateRes.ok) {
-                throw new Error(updateData.error || "Gagal update database.");
+                throw new Error(updateData.error || "Gagal nyatet ke database.");
               }
 
-              alert("Pembayaran Berhasil! Pesanan diproses & Stok telah dikurangi.");
-              window.location.reload(); // Refresh layar biar status terupdate
+              alert("Pembayaran Berhasil! Pesanan tercatat & Stok dikurangi.");
+              window.location.reload(); 
               
-            } catch (err) {
+            } catch (err: any) {
               console.error(err);
-              alert("Pembayaran di Midtrans sukses, tapi gagal ngupdate stok ke Database!");
+              // 🚨 MENAMPILKAN ALASAN ASLI KENAPA DATABASE NOLAK
+              alert("ERROR SYSTEM: " + err.message);
               window.location.reload();
             }
           },
@@ -99,7 +107,6 @@ export function ProductCard({ product }: { product: Product }) {
         alert(data.message || "Pesanan berhasil dibuat!");
         window.location.reload();
       }
-
     } catch (err) {
       alert(err instanceof Error ? err.message : "Terjadi kesalahan saat memesan.");
     } finally {
@@ -132,29 +139,12 @@ export function ProductCard({ product }: { product: Product }) {
 
         <div className="flex items-center gap-2">
           <div className="flex items-center border border-forest/20 rounded-xl bg-cream/50 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setJumlah((prev) => Math.max(1, prev - 1))}
-              className="px-3 py-1.5 text-xs text-forest font-bold hover:bg-forest/10 transition-colors cursor-pointer"
-            >
-              -
-            </button>
+            <button type="button" onClick={() => setJumlah((prev) => Math.max(1, prev - 1))} className="px-3 py-1.5 text-xs text-forest font-bold hover:bg-forest/10 transition-colors cursor-pointer">-</button>
             <span className="px-3 text-xs font-semibold text-forest">{jumlah}</span>
-            <button
-              type="button"
-              onClick={() => setJumlah((prev) => prev + 1)}
-              className="px-3 py-1.5 text-xs text-forest font-bold hover:bg-forest/10 transition-colors cursor-pointer"
-            >
-              +
-            </button>
+            <button type="button" onClick={() => setJumlah((prev) => prev + 1)} className="px-3 py-1.5 text-xs text-forest font-bold hover:bg-forest/10 transition-colors cursor-pointer">+</button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleOrder}
-            disabled={loading || stokTersedia <= 0}
-            className="flex-1 bg-forest text-cream py-2 px-4 rounded-xl text-xs font-semibold hover:bg-forest/90 transition-colors disabled:opacity-50 cursor-pointer"
-          >
+          <button type="button" onClick={handleOrder} disabled={loading || stokTersedia <= 0} className="flex-1 bg-forest text-cream py-2 px-4 rounded-xl text-xs font-semibold hover:bg-forest/90 transition-colors disabled:opacity-50 cursor-pointer">
             {loading ? "Memproses..." : "Pesan Stok"}
           </button>
         </div>
