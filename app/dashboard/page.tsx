@@ -54,6 +54,7 @@ interface Order {
   total_harga: number;
   created_at: string;
   bukti_pengiriman_url?: string | null; 
+  nama_produk?: string; // 🚀 UPDATE: Tambah tempat buat nama produk
 }
 
 function InfoRow({
@@ -99,17 +100,25 @@ export default function DashboardMitraPage() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // 🚀 STATE BARU BUAT MODAL FOTO BUKTI
   const [proofModalOpen, setProofModalOpen] = useState(false);
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
-  // Fungsi pengambil data pesanan bersih
+  // 🚀 UPDATE: Fungsi diperbarui biar narik nama produk juga
   const fetchOrdersOnly = async (currentUserId: string) => {
     const supabase = createSupabaseBrowserClient();
-    const [ordersRes, pmRes] = await Promise.all([
+    
+    // Ambil pesanan dan master data produk sekaligus
+    const [ordersRes, pmRes, productsRes] = await Promise.all([
       supabase.from("orders").select("*").order("created_at", { ascending: false }),
-      supabase.from("pesanan_mitra").select("*").order("created_at", { ascending: false })
+      supabase.from("pesanan_mitra").select("*").order("created_at", { ascending: false }),
+      supabase.from("products").select("id, nama_produk") 
     ]);
+
+    // Bikin kamus produk biar gampang dicari namanya
+    const productMap = new Map<string, string>();
+    if (productsRes.data) {
+      productsRes.data.forEach((p: any) => productMap.set(p.id, p.nama_produk));
+    }
 
     const combinedOrders: Order[] = [];
 
@@ -117,12 +126,22 @@ export default function DashboardMitraPage() {
       ordersRes.data.forEach((o) => {
         const oUser = o.user_id || o.mitra_id;
         if (!oUser || oUser === currentUserId) {
+          
+          // Cari nama produk dari items jsonb
+          let prodName = "Produk Energi";
+          let prodId = null;
+          if (o.items) {
+            prodId = Array.isArray(o.items) ? o.items[0]?.product_id : o.items.product_id;
+          }
+          if (prodId) prodName = productMap.get(prodId) || prodName;
+
           combinedOrders.push({
             id: String(o.id),
             status: String(o.status || "diproses").toLowerCase(),
             total_harga: Number(o.total_harga || o.total || 0),
             created_at: o.created_at || new Date().toISOString(),
             bukti_pengiriman_url: o.bukti_pengiriman_url || null, 
+            nama_produk: prodName, // 🚀 Masukin nama produknya
           });
         }
       });
@@ -133,12 +152,18 @@ export default function DashboardMitraPage() {
         const pmUser = pm.user_id || pm.mitra_id;
         if (!pmUser || pmUser === currentUserId) {
           if (!combinedOrders.some((o) => o.id === String(pm.id))) {
+            
+            // Cari nama produk untuk tabel pesanan_mitra
+            let prodName = "Produk Energi";
+            if (pm.produk_id) prodName = productMap.get(pm.produk_id) || prodName;
+
             combinedOrders.push({
               id: String(pm.id),
               status: String(pm.status || "diproses").toLowerCase(),
               total_harga: Number(pm.total_harga || pm.jumlah * 15000 || 0),
               created_at: pm.created_at || new Date().toISOString(),
               bukti_pengiriman_url: pm.bukti_pengiriman_url || null, 
+              nama_produk: prodName, // 🚀 Masukin nama produknya
             });
           }
         }
@@ -460,10 +485,13 @@ export default function DashboardMitraPage() {
               {orders.map((order) => (
                 <div key={order.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xs">
                   <div className="w-full sm:w-auto">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono text-xs text-ink/50">ID: {order.id.slice(0, 16)}...</span>
+                    {/* 🚀 UPDATE: Tampilan Nama Produk dibikin jadi Highlight Utama */}
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="font-display font-bold text-forest text-lg">
+                        {order.nama_produk}
+                      </h3>
                       <span
-                        className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full capitalize ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
                           order.status === "dikirim"
                             ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
                             : order.status === "selesai"
@@ -472,25 +500,30 @@ export default function DashboardMitraPage() {
                         }`}
                       >
                         {order.status === "dikirim"
-                          ? "Barang Dalam Pengiriman"
+                          ? "Dalam Pengiriman"
                           : order.status === "selesai"
-                          ? "Pesanan Selesai"
+                          ? "Selesai"
                           : order.status === "pending" || order.status === "menunggu_pembayaran"
-                          ? "Menunggu Pembayaran / Diproses"
-                          : "Sedang Diproses"}
+                          ? "Menunggu Pembayaran"
+                          : "Diproses"}
                       </span>
                     </div>
-                    <p className="font-display font-semibold text-forest text-base">
-                      Total: Rp {order.total_harga?.toLocaleString("id-ID")}
-                    </p>
-                    <p className="text-xs text-ink/55 mt-0.5">
-                      Tanggal: {new Date(order.created_at).toLocaleDateString("id-ID")}
-                    </p>
+
+                    <div className="flex flex-col mt-2 space-y-0.5">
+                      <p className="font-mono text-[10px] text-ink/40 uppercase tracking-widest">
+                        ID: {order.id.split('-')[0]}...
+                      </p>
+                      <p className="font-semibold text-green text-sm">
+                        Total: Rp {order.total_harga?.toLocaleString("id-ID")}
+                      </p>
+                      <p className="text-[11px] text-ink/50 mt-1">
+                        Tanggal: {new Date(order.created_at).toLocaleDateString("id-ID", { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-3 sm:mt-0">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-3 sm:mt-0 border-t border-forest/10 sm:border-t-0 pt-3 sm:pt-0">
                     
-                    {/* 🚀 UPDATE: Tombol pop-up modal foto */}
                     {order.bukti_pengiriman_url && (
                       <button
                         onClick={() => {
@@ -614,7 +647,7 @@ export default function DashboardMitraPage() {
           </div>
         )}
 
-        {/* 🚀 MODAL BARU: TAMPILKAN BUKTI PENGIRIMAN */}
+        {/* MODAL TAMPILKAN BUKTI PENGIRIMAN */}
         {proofModalOpen && selectedProofUrl && (
           <div 
             className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"
@@ -634,7 +667,6 @@ export default function DashboardMitraPage() {
                 </button>
               </div>
               <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
-                {/* Pakai tag img standar biar aman baca URL external Supabase tanpa edit next.config.js */}
                 <img 
                   src={selectedProofUrl} 
                   alt="Bukti Pengiriman Barang" 
