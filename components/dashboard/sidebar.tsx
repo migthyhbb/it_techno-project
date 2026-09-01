@@ -9,39 +9,54 @@ const navItems = [
     href: "#ringkasan",
     label: "Ringkasan",
     icon: (
-      <>
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 12 12 3l9 9" />
         <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
-      </>
+      </svg>
     ),
   },
   {
     href: "#pesan-stok",
     label: "Pesan Stok",
     icon: (
-      <>
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 8 12 3 3 8l9 5 9-5Z" />
         <path d="M3 8v8l9 5 9-5V8" />
         <path d="M12 13v8" />
-      </>
+      </svg>
+    ),
+  },
+  {
+    href: "#status-pesanan",
+    label: "Status Pesanan",
+    icon: (
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
+      </svg>
     ),
   },
   {
     href: "#profil-mitra",
     label: "Profil Mitra",
     icon: (
-      <>
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="8" r="4" />
         <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
-      </>
+      </svg>
     ),
   },
 ];
 
-export function DashboardSidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export function DashboardSidebar({ isOpen = false, onClose }: SidebarProps) {
   const router = useRouter();
   const [mitraName, setMitraName] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -84,147 +99,79 @@ export function DashboardSidebar() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
     router.push("/masuk");
+    router.refresh();
   }
 
   return (
     <>
-      {/* 1. MOBILE TOP BAR (Tampil hanya di HP < md) */}
-      <div className="md:hidden sticky top-0 z-40 bg-forest text-cream flex items-center justify-between px-4 py-3 border-b border-cream/10 w-full">
-        <div>
-          <span className="font-display font-semibold text-base tracking-tight block leading-none">
-            LENTERA
-          </span>
-          <span className="text-[10px] text-cream/45">Portal Mitra</span>
-        </div>
-
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          aria-label="Toggle menu"
-          className="p-2 text-cream/80 hover:text-cream rounded-lg focus:outline-none"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {isOpen ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-            )}
-          </svg>
-        </button>
-      </div>
-
-      {/* 2. MOBILE MENU DROPDOWN (Tampil saat Hamburger di-klik) */}
+      {/* Backdrop Gelap saat Mobile Sidebar Terbuka */}
       {isOpen && (
-        <div className="md:hidden sticky top-[53px] z-30 bg-forest text-cream border-b border-cream/10 px-4 py-4 space-y-3 w-full shadow-lg">
+        <div
+          onClick={onClose}
+          className="md:hidden fixed inset-0 bg-ink/60 z-40 backdrop-blur-xs transition-opacity"
+        />
+      )}
+
+      {/* Drawer Sidebar: Nempel rata dari ujung atas sampai ujung bawah */}
+      <aside
+        className={`fixed md:sticky top-0 left-0 bottom-0 z-50 h-screen w-72 bg-forest text-cream flex flex-col justify-between p-6 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+          isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+        }`}
+      >
+        <div>
+          {/* Header Mobile Drawer */}
+          <div className="flex items-center justify-between pb-6 mb-6 border-b border-cream/10">
+            <div>
+              <span className="font-display font-semibold text-lg tracking-tight text-cream">
+                LENTERA
+              </span>
+              <p className="text-xs text-cream/45 mt-0.5">Portal Mitra</p>
+            </div>
+
+            {/* Tombol Close (X) */}
+            <button
+              onClick={onClose}
+              className="md:hidden p-1.5 rounded-lg hover:bg-cream/10 text-cream/70 hover:text-cream transition-colors"
+              aria-label="Tutup Menu"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Menu Navigasi */}
           <nav className="space-y-1">
             {navItems.map((item) => (
               <a
                 key={item.href}
                 href={item.href}
-                onClick={() => setIsOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-cream/80 hover:text-cream hover:bg-cream/10"
+                onClick={onClose}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-colors"
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-4 h-4 shrink-0"
-                >
-                  {item.icon}
-                </svg>
+                {item.icon}
                 {item.label}
               </a>
             ))}
           </nav>
-
-          <div className="pt-3 border-t border-cream/10">
-            {mitraName && (
-              <div className="flex items-center gap-2.5 px-2 mb-3">
-                <div className="w-7 h-7 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
-                  {mitraName.charAt(0).toUpperCase()}
-                </div>
-                <p className="text-xs text-cream/80 truncate">{mitraName}</p>
-              </div>
-            )}
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-red-300 hover:bg-cream/10 w-full"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-4 h-4 shrink-0"
-              >
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <path d="M16 17 21 12 16 7" />
-                <path d="M21 12H9" />
-              </svg>
-              Keluar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 3. DESKTOP SIDEBAR (Tampil di Layar Desktop >= md) */}
-      <aside className="hidden md:flex w-64 shrink-0 bg-forest text-cream flex-col h-screen sticky top-0">
-        <div className="p-6 border-b border-cream/10">
-          <span className="font-display font-semibold text-lg tracking-tight">
-            LENTERA
-          </span>
-          <p className="text-xs text-cream/45 mt-1">Portal Mitra</p>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-4 h-4 shrink-0"
-              >
-                {item.icon}
-              </svg>
-              {item.label}
-            </a>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-cream/10">
+        {/* User Info & Logout Button */}
+        <div className="pt-6 border-t border-cream/10 space-y-2">
           {mitraName && (
-            <div className="flex items-center gap-3 px-2 mb-2 pb-3 border-b border-cream/10">
+            <div className="flex items-center gap-3 px-3 py-2">
               <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
                 {mitraName.charAt(0).toUpperCase()}
               </div>
-              <p className="text-sm text-cream/80 truncate">{mitraName}</p>
+              <p className="text-sm font-medium text-cream/90 truncate">{mitraName}</p>
             </div>
           )}
+
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors w-full"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-colors w-full text-left cursor-pointer"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="w-4 h-4 shrink-0"
-            >
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <path d="M16 17 21 12 16 7" />
               <path d="M21 12H9" />
