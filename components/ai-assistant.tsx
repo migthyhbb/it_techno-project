@@ -34,18 +34,15 @@ export function AIAssistant() {
     if (isOpen) scrollToBottom();
   }, [messages, isTyping, isOpen]);
 
-  // FUNGSI UTAMA YANG SUDAH DI-UPGRADE JADI STREAMING (NGETIK)
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || inputMessage;
     if (!text.trim() || isTyping) return;
 
-    // 1. Tampilkan pesan user
     setMessages((prev) => [...prev, { sender: "user", text }]);
     if (!textToSend) setInputMessage("");
     setIsTyping(true);
 
     try {
-      // 2. Tembak API
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -54,11 +51,9 @@ export function AIAssistant() {
 
       if (!res.ok) throw new Error("Gagal terhubung");
 
-      // 3. Matikan animasi loading bola-bola, lalu buat tempat kosong untuk AI ngetik
       setIsTyping(false);
       setMessages((prev) => [...prev, { sender: "ai", text: "" }]);
 
-      // 4. Proses membaca stream (per kata) dari backend
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       
@@ -70,7 +65,6 @@ export function AIAssistant() {
 
         const chunkText = decoder.decode(value, { stream: true });
         
-        // 5. Tambahkan kata yang baru masuk ke balon chat terakhir (punya AI)
         setMessages((prev) => {
           const updated = [...prev];
           const lastIndex = updated.length - 1;
@@ -97,11 +91,9 @@ export function AIAssistant() {
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
-      {/* WINDOW CHAT AI */}
       {isOpen && (
         <div className="mb-4 w-80 sm:w-96 bg-paper rounded-2xl border border-forest/10 shadow-2xl overflow-hidden flex flex-col h-[480px] max-h-[80vh] transition-all animate-in fade-in slide-in-from-bottom-4">
 
-          {/* Header */}
           <div className="bg-forest text-cream p-4 flex justify-between items-center shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center border border-gold/40 text-gold font-bold text-xs">
@@ -124,7 +116,6 @@ export function AIAssistant() {
             </button>
           </div>
 
-          {/* Area Percakapan */}
           <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-cream/30 text-xs">
             {messages.map((msg, idx) => (
               <div
@@ -143,7 +134,6 @@ export function AIAssistant() {
               </div>
             ))}
 
-            {/* Indikator AI Mengetik */}
             {isTyping && (
               <div className="flex justify-start">
                 <div className="bg-white border border-forest/10 p-3 rounded-2xl rounded-tl-none text-ink/50 flex items-center gap-1 shadow-xs">
@@ -156,7 +146,6 @@ export function AIAssistant() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick Questions Chips */}
           <div className="px-3 py-2 bg-white border-t border-forest/5 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
             {QUICK_QUESTIONS.map((q, i) => (
               <button
@@ -170,7 +159,6 @@ export function AIAssistant() {
             ))}
           </div>
 
-          {/* Input Chat */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -199,7 +187,6 @@ export function AIAssistant() {
         </div>
       )}
 
-      {/* TOMBOL FLOATING LOGO AI */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="bg-forest text-gold border border-gold/30 p-3.5 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center cursor-pointer group"

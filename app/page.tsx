@@ -7,6 +7,7 @@ import { Leaderboard } from "@/components/leaderboard";
 import { PartnersMarquee } from "@/components/partners-marquee";
 import { CtaFooter } from "@/components/cta-footer";
 import { getLeaderboardEntries } from "@/lib/get-leaderboard";
+import { CookieConsent } from "@/components/cookie-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen w-full max-w-[100vw] overflow-x-hidden relative bg-cream">
+      <CookieConsent />
       <Navbar />
       <Hero />
       <HowItWorks />

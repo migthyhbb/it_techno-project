@@ -5,18 +5,25 @@ import { Redis } from "@upstash/redis";
 import { createServerClient } from "@supabase/ssr";
 
 // ==========================================
-// 1. SETUP SATPAM REDIS (ANTI-SPAM)
+// 1. SETUP REDIS (SAFE LAZY INITIALIZATION)
 // ==========================================
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL ?? "",
-  token: process.env.UPSTASH_REDIS_REST_TOKEN ?? "",
-});
+let ratelimit: Ratelimit | null = null;
 
-const ratelimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(5, "10 s"),
-  prefix: "middleware-ratelimit",
-});
+try {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (url && token) {
+    const redis = new Redis({ url, token });
+    ratelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "10 s"),
+      prefix: "middleware-ratelimit",
+    });
+  }
+} catch (error) {
+  console.warn("Upstash Redis initialization skipped in Middleware:", error);
+}
 
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl.pathname;
@@ -25,32 +32,45 @@ export async function middleware(request: NextRequest) {
   // 2. LOGIKA RATE LIMITING (Khusus API)
   // ==========================================
   if (url.startsWith("/api/transaksi/") || url.startsWith("/api/daftar/")) {
-    const forwardedFor = request.headers.get("x-forwarded-for");
-    const ip = forwardedFor?.split(",")[0]?.trim() || "127.0.0.1";
+    if (ratelimit) {
+      try {
+        const forwardedFor = request.headers.get("x-forwarded-for");
+        const ip = forwardedFor?.split(",")[0]?.trim() || "127.0.0.1";
+        const { success } = await ratelimit.limit(ip);
 
-    const { success } = await ratelimit.limit(ip);
-
-    if (!success) {
-      return NextResponse.json(
-        { error: "Too Many Requests" },
-        { status: 429 }
-      );
+        if (!success) {
+          return NextResponse.json(
+            { error: "Too Many Requests. Silakan tunggu beberapa detik." },
+            { status: 429 }
+          );
+        }
+      } catch (err) {
+        console.warn("Ratelimit check skipped due to error:", err);
+      }
     }
     return NextResponse.next();
   }
 
+  // Loloskan semua API routes tanpa harus menyentuh Supabase Auth di middleware
   if (url.startsWith("/api/")) {
     return NextResponse.next();
   }
 
   // ==========================================
-  // 3. LOGIKA SUPABASE AUTH (Khusus Halaman Web)
+  // 3. LOGIKA SUPABASE AUTH & ROLE CHECKING
   // ==========================================
   let supabaseResponse = NextResponse.next({ request });
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return supabaseResponse;
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -86,29 +106,34 @@ export async function middleware(request: NextRequest) {
     url.startsWith("/dashboard-admin") ||
     url.startsWith("/dashboard-industri");
 
+  // Jika mencoba ke area proteksi tanpa login -> lempar ke login
   if (isDashboardRoute && !user) return redirectSambilBawaCookie("/masuk");
 
-  // DETEKSI ROLE ASLI DARI TABEL DATABASE
+  // Deteksi Role Hanya Jika Diperlukan (Akses Dashboard / Halaman Auth saat terautentikasi)
   let role = "mitra";
-  if (user) {
-    const { data: adminRow } = await supabase
-      .from("admin_profiles")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (adminRow) {
-      role = "admin";
-    } else {
-      const { data: industriRow } = await supabase
-        .from("industri_profiles")
+  if (user && (isDashboardRoute || url === "/masuk" || url === "/login" || url === "/daftar")) {
+    try {
+      const { data: adminRow } = await supabase
+        .from("admin_profiles")
         .select("user_id")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (industriRow) {
-        role = "industri";
+      if (adminRow) {
+        role = "admin";
+      } else {
+        const { data: industriRow } = await supabase
+          .from("industri_profiles")
+          .select("user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (industriRow) {
+          role = "industri";
+        }
       }
+    } catch (e) {
+      console.error("Middleware DB Role Fetch Error:", e);
     }
   }
 
