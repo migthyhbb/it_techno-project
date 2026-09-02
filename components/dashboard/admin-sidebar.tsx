@@ -77,7 +77,6 @@ export function AdminSidebar({
   const [nama, setNama] = useState<string | null>("Administrator");
   const [internalMobileOpen, setInternalMobileOpen] = useState(false);
 
-  // Sinkronisasi state modal mobile eksternal (dari props) dan internal
   const isMobileVisible = isOpen || internalMobileOpen;
 
   const handleClose = () => {
@@ -110,7 +109,7 @@ export function AdminSidebar({
   return (
     <>
       {/* 1. MOBILE TOP BAR */}
-      <div className="md:hidden sticky top-0 z-50 bg-forest text-cream flex items-center justify-between px-5 py-3.5 border-b border-cream/10 w-full shadow-sm">
+      <div className="md:hidden sticky top-0 z-40 bg-forest text-cream flex items-center justify-between px-5 py-3.5 border-b border-cream/10 w-full shadow-sm shrink-0">
         <div>
           <span className="font-display font-semibold text-base tracking-tight block leading-none">
             LENTERA
@@ -120,7 +119,6 @@ export function AdminSidebar({
           </span>
         </div>
 
-        {/* Hamburger / Toggle Button */}
         <button
           onClick={toggleMobileMenu}
           aria-label="Toggle menu"
@@ -146,16 +144,16 @@ export function AdminSidebar({
         </button>
       </div>
 
-      {/* 2. MOBILE OVERLAY & SLIDE-DOWN DROPDOWN */}
-      <div
-        onClick={handleClose}
-        className={`md:hidden fixed inset-0 z-40 bg-ink/50 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
-          isMobileVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
-      />
+      {/* 2. MOBILE OVERLAY & DROPDOWN */}
+      {isMobileVisible && (
+        <div
+          onClick={handleClose}
+          className="md:hidden fixed inset-0 z-40 bg-ink/50 backdrop-blur-xs transition-opacity"
+        />
+      )}
 
       <div
-        className={`md:hidden fixed top-[57px] left-0 right-0 z-40 bg-forest text-cream border-b border-cream/10 px-4 py-5 shadow-2xl transition-all duration-300 ease-in-out transform origin-top max-h-[85vh] overflow-y-auto ${
+        className={`md:hidden fixed top-[57px] left-0 right-0 z-50 bg-forest text-cream border-b border-cream/10 px-4 py-5 shadow-2xl transition-all duration-300 ease-in-out transform origin-top max-h-[85vh] overflow-y-auto ${
           isMobileVisible
             ? "translate-y-0 opacity-100 scale-y-100 pointer-events-auto"
             : "-translate-y-4 opacity-0 scale-y-95 pointer-events-none"
@@ -240,8 +238,8 @@ export function AdminSidebar({
         </div>
       </div>
 
-      {/* 3. DESKTOP SIDEBAR */}
-      <aside className="hidden md:flex w-64 shrink-0 bg-forest text-cream flex-col h-screen sticky top-0">
+      {/* 3. DESKTOP SIDEBAR (Strictly Hidden on Mobile) */}
+      <aside className="hidden md:flex md:w-64 shrink-0 bg-forest text-cream flex-col h-screen sticky top-0">
         <div className="p-6 border-b border-cream/10">
           <span className="font-display font-semibold text-lg tracking-tight">
             LENTERA

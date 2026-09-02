@@ -5,5 +5,9 @@ export default function DashboardAdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <div className="min-h-screen bg-cream">{children}</div>;
+  return (
+    <div className="min-h-screen bg-cream flex flex-col md:flex-row relative w-full overflow-x-hidden">
+      {children}
+    </div>
+  );
 }
