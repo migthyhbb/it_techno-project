@@ -99,69 +99,63 @@ export function DashboardSidebar() {
 
   return (
     <>
-      {/* 1. MOBILE TOP BAR (Tampil hanya di HP < md) */}
-      <div className="md:hidden sticky top-0 z-40 bg-forest text-cream flex items-center justify-between px-4 py-3 border-b border-cream/10 w-full">
+      {/* 1. MOBILE TOP BAR */}
+      <div className="md:hidden sticky top-0 z-50 bg-forest text-cream flex items-center justify-between px-5 py-3.5 border-b border-cream/10 w-full shadow-sm">
         <div>
           <span className="font-display font-semibold text-base tracking-tight block leading-none">
             LENTERA
           </span>
-          <span className="text-[10px] text-cream/45">Portal Mitra</span>
+          <span className="text-[10px] text-cream/45 font-mono uppercase tracking-wider">Portal Mitra</span>
         </div>
 
+        {/* Dynamic Animated Hamburger Button */}
         <button
           onClick={() => setIsOpen(!isOpen)}
           aria-label="Toggle menu"
-          className="p-2 text-cream/80 hover:text-cream rounded-lg focus:outline-none"
+          className="p-2 text-cream/80 hover:text-cream rounded-xl hover:bg-cream/10 transition-all duration-200 active:scale-95 focus:outline-none"
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {isOpen ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-            )}
-          </svg>
+          <div className="w-5 h-5 flex flex-col justify-center items-center relative">
+            <span
+              className={`h-0.5 w-5 bg-current rounded-full transition-all duration-300 ease-in-out ${
+                isOpen ? "rotate-45 translate-y-[2px]" : "-translate-y-1"
+              }`}
+            />
+            <span
+              className={`h-0.5 w-5 bg-current rounded-full transition-all duration-200 ease-in-out ${
+                isOpen ? "opacity-0" : "opacity-100"
+              }`}
+            />
+            <span
+              className={`h-0.5 w-5 bg-current rounded-full transition-all duration-300 ease-in-out ${
+                isOpen ? "-rotate-45 -translate-y-[2px]" : "translate-y-1"
+              }`}
+            />
+          </div>
         </button>
       </div>
 
-      {/* 2. MOBILE MENU DROPDOWN (Tampil saat Hamburger di-klik) */}
-      {isOpen && (
-        <div className="md:hidden fixed top-[53px] left-0 right-0 bottom-0 z-30 bg-forest/95 backdrop-blur-sm text-cream px-4 py-4 space-y-3 w-full shadow-lg h-[calc(100vh-53px)] overflow-y-auto">
-          <nav className="space-y-1 bg-forest p-2 rounded-xl border border-cream/10">
-            {navItems.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                onClick={() => setIsOpen(false)}
-                className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-cream/80 hover:text-cream hover:bg-cream/10 transition-colors"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-5 h-5 shrink-0"
-                >
-                  {item.icon}
-                </svg>
-                {item.label}
-              </a>
-            ))}
-          </nav>
+      {/* 2. MOBILE OVERLAY & SMOOTH SLIDE-DOWN DROPDOWN */}
+      <div
+        onClick={() => setIsOpen(false)}
+        className={`md:hidden fixed inset-0 z-40 bg-ink/50 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+      />
 
-          <div className="pt-4 px-2">
-            {mitraName && (
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
-                  {mitraName.charAt(0).toUpperCase()}
-                </div>
-                <p className="text-sm text-cream/90 truncate font-medium">{mitraName}</p>
-              </div>
-            )}
-            <button
-              onClick={handleLogout}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-red-100 bg-red-500/20 hover:bg-red-500/30 transition-colors w-full border border-red-500/20"
+      <div
+        className={`md:hidden fixed top-[57px] left-0 right-0 z-40 bg-forest text-cream border-b border-cream/10 px-4 py-5 shadow-2xl transition-all duration-300 ease-in-out transform origin-top ${
+          isOpen
+            ? "translate-y-0 opacity-100 scale-y-100 pointer-events-auto"
+            : "-translate-y-4 opacity-0 scale-y-95 pointer-events-none"
+        }`}
+      >
+        <nav className="space-y-1">
+          {navItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-all duration-150 active:scale-[0.98]"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -170,25 +164,54 @@ export function DashboardSidebar() {
                 strokeWidth="1.8"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="w-4 h-4 shrink-0"
+                className="w-5 h-5 shrink-0 text-gold/80"
               >
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <path d="M16 17 21 12 16 7" />
-                <path d="M21 12H9" />
+                {item.icon}
               </svg>
-              Keluar
-            </button>
-          </div>
-        </div>
-      )}
+              {item.label}
+            </a>
+          ))}
+        </nav>
 
-      {/* 3. DESKTOP SIDEBAR (Tampil di Layar Desktop >= md) */}
+        <div className="mt-5 pt-4 border-t border-cream/10 space-y-3">
+          {mitraName && (
+            <div className="flex items-center gap-3 px-3 py-1">
+              <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0 border border-gold/30">
+                {mitraName.charAt(0).toUpperCase()}
+              </div>
+              <p className="text-sm font-medium text-cream/90 truncate">{mitraName}</p>
+            </div>
+          )}
+
+          <button
+            onClick={handleLogout}
+            className="flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl text-xs font-semibold text-red-200 bg-red-500/15 hover:bg-red-500/25 active:bg-red-500/35 transition-all duration-150 w-full border border-red-500/20 cursor-pointer"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-4 h-4 shrink-0"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17 21 12 16 7" />
+              <path d="M21 12H9" />
+            </svg>
+            Keluar dari Sesi
+          </button>
+        </div>
+      </div>
+
+      {/* 3. DESKTOP SIDEBAR */}
       <aside className="hidden md:flex w-64 shrink-0 bg-forest text-cream flex-col h-screen sticky top-0">
         <div className="p-6 border-b border-cream/10">
           <span className="font-display font-semibold text-lg tracking-tight">
             LENTERA
           </span>
-          <p className="text-xs text-cream/45 mt-1">Portal Mitra</p>
+          <p className="text-xs text-cream/45 mt-1 font-mono uppercase tracking-wider">Portal Mitra</p>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
@@ -225,7 +248,7 @@ export function DashboardSidebar() {
           )}
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-red-300 hover:bg-cream/10 transition-colors w-full"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-red-300 hover:bg-cream/10 transition-colors w-full cursor-pointer"
           >
             <svg
               viewBox="0 0 24 24"
