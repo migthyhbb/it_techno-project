@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 interface LegalShellProps {
@@ -8,7 +9,7 @@ interface LegalShellProps {
   children: React.ReactNode;
 }
 
-export function LegalShell({
+function LegalShellContent({
   title,
   updatedAt = "2 September 2026",
   children,
@@ -17,7 +18,6 @@ export function LegalShell({
   const searchParams = useSearchParams();
 
   const handleBack = () => {
-    // 1. Cek parameter query ?from=... di URL (misal: ?from=/daftar/mitra)
     const fromParam = searchParams.get("from");
 
     if (fromParam) {
@@ -25,24 +25,20 @@ export function LegalShell({
       return;
     }
 
-    // 2. Jika dibuka di tab baru (opener ada atau history cuma 1), coba tutup tab
     if (window.opener || window.history.length <= 1) {
       window.close();
-      // Fallback jika browser memblokir window.close()
       setTimeout(() => {
         router.push("/");
       }, 200);
       return;
     }
 
-    // 3. Jika navigasi biasa di tab yang sama
     router.back();
   };
 
   return (
     <div className="min-h-screen bg-cream text-ink py-12 md:py-20 px-4 sm:px-6 md:px-12">
       <div className="max-w-4xl mx-auto">
-        
         {/* Tombol Kembali Dinamis */}
         <button
           onClick={handleBack}
@@ -78,9 +74,17 @@ export function LegalShell({
 
         {/* Konten Utama */}
         <div className="space-y-8">{children}</div>
-
       </div>
     </div>
+  );
+}
+
+// Wrapper Suspense untuk mencegah error "npm run build" di Vercel
+export function LegalShell(props: LegalShellProps) {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-cream p-12 text-forest">Memuat...</div>}>
+      <LegalShellContent {...props} />
+    </Suspense>
   );
 }
 
