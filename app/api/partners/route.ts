@@ -68,7 +68,6 @@ export async function GET() {
 
     return NextResponse.json(combinedData);
   } catch (error: any) {
-    // SEKARANG ERRORNYA AKAN MUNCUL JELAS DI TAB NETWORK (TIDAK DISEMBUNYIKAN LAGI)
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
