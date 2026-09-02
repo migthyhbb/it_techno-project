@@ -129,16 +129,11 @@ export function AdminSidebar({
             : "-translate-y-4 opacity-0 scale-y-95 pointer-events-none"
         }`}
       >
-        <div className="flex items-center justify-between pb-3 mb-3 border-b border-cream/10">
+        {/* Tombol X Tutup udah dibuang, sisain judul doang biar rapi */}
+        <div className="pb-3 mb-3 border-b border-cream/10">
           <p className="text-xs font-mono text-gold uppercase tracking-wider">
             Navigasi Panel Admin
           </p>
-          <button
-            onClick={() => setIsOpen(false)}
-            className="text-cream/60 hover:text-cream text-xs font-medium px-2 py-1 rounded-lg bg-cream/5 hover:bg-cream/10 transition-colors cursor-pointer"
-          >
-            ✕ Tutup
-          </button>
         </div>
 
         <nav className="space-y-1">
