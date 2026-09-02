@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// 🚀 MANTRA SAKTI ANTI-CACHE NEXT.JS
+export const dynamic = "force-dynamic";
+
 // PANGGIL JALUR VIP (SERVICE ROLE) BIAR BISA NEMBUS RLS DARI BACKEND
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
