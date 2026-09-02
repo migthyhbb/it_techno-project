@@ -1,34 +1,23 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase-client";
+import { createClient } from "@supabase/supabase-js";
 
-interface PartnerRecord {
-  id?: string;
-  nama?: string;
-  nama_mitra?: string;
-  nama_lengkap?: string;
-  nama_perusahaan?: string;
-  nama_industri?: string;
-  name?: string;
-  alamat?: string;
-  lokasi?: string;
-  alamat_lengkap?: string;
-  alamat_perusahaan?: string;
-  created_at?: string;
-}
+// PANGGIL JALUR VIP (SERVICE ROLE) BIAR BISA NEMBUS RLS DARI BACKEND
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
 
 export async function GET() {
   try {
-    // 1. Fetch data dari tabel mitra_profiles
-    const { data: mitraData, error: mitraError } = await supabase
+    // 1. Fetch data mitra (CUMA AMBIL KOLOM YANG AMAN DILIHAT PUBLIK!)
+    const { data: mitraData, error: mitraError } = await supabaseAdmin
       .from("mitra_profiles")
-      .select("id, nama, nama_mitra, nama_lengkap, name, alamat, lokasi, alamat_lengkap, created_at")
-      .limit(100);
+      .select("id, user_id, nama_mitra, alamat, created_at");
 
-    // 2. Fetch data dari tabel industri_profiles
-    const { data: industriData, error: industriError } = await supabase
+    // 2. Fetch data industri (CUMA AMBIL KOLOM YANG AMAN DILIHAT PUBLIK!)
+    const { data: industriData, error: industriError } = await supabaseAdmin
       .from("industri_profiles")
-      .select("id, nama, nama_perusahaan, nama_industri, name, alamat, lokasi, alamat_perusahaan, created_at")
-      .limit(100);
+      .select("id, user_id, nama_perusahaan, alamat, created_at");
 
     if (mitraError) {
       console.error("Error fetching mitra_profiles:", mitraError.message);
@@ -39,10 +28,10 @@ export async function GET() {
     }
 
     // 3. Mapping data mitra
-    const formattedMitra = (mitraData || []).map((item: PartnerRecord) => ({
-      id: item.id,
-      nama: item.nama || item.nama_mitra || item.nama_lengkap || item.name || "Mitra Tanpa Nama",
-      alamat: item.alamat || item.lokasi || item.alamat_lengkap || "Lokasi belum diisi",
+    const formattedMitra = (mitraData || []).map((item) => ({
+      id: item.id || item.user_id,
+      nama: item.nama_mitra || "Mitra Tanpa Nama",
+      alamat: item.alamat || "Lokasi belum diisi",
       tipe: "mitra",
       tanggalBergabung: item.created_at
         ? new Date(item.created_at).toLocaleDateString("id-ID", {
@@ -54,10 +43,10 @@ export async function GET() {
     }));
 
     // 4. Mapping data industri
-    const formattedIndustri = (industriData || []).map((item: PartnerRecord) => ({
-      id: item.id,
-      nama: item.nama || item.nama_perusahaan || item.nama_industri || item.name || "Industri Tanpa Nama",
-      alamat: item.alamat || item.lokasi || item.alamat_perusahaan || "Lokasi belum diisi",
+    const formattedIndustri = (industriData || []).map((item) => ({
+      id: item.id || item.user_id,
+      nama: item.nama_perusahaan || "Industri Tanpa Nama",
+      alamat: item.alamat || "Lokasi belum diisi",
       tipe: "industri",
       tanggalBergabung: item.created_at
         ? new Date(item.created_at).toLocaleDateString("id-ID", {
