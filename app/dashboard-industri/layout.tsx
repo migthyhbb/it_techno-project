@@ -24,7 +24,7 @@ export default function DashboardIndustriLayout({
       />
 
       {/* Area Konten Utama */}
-      <main className="flex-1 w-full min-w-0 overflow-x-hidden">
+      <main className="flex-1 w-full min-w-0 max-w-full overflow-x-hidden">
         {children}
       </main>
     </div>
