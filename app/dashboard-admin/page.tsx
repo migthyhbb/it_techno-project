@@ -494,10 +494,10 @@ export default function DashboardAdminPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-cream relative">
+    <div className="flex min-h-screen bg-cream relative overflow-x-hidden">
       
-      {/* 🚀 KODE SIHIR ANTI-MELAR: h-[64px] min-h-[64px] max-h-[64px] */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-[64px] min-h-[64px] max-h-[64px] bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10 overflow-hidden shadow-md">
+      {/* HEADER MOBILE */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10 shadow-sm">
         <div className="flex flex-col">
           <span className="font-display font-bold tracking-tight text-base">LENTERA</span>
           <span className="text-[10px] text-cream/50">Portal Admin</span>
@@ -512,13 +512,28 @@ export default function DashboardAdminPage() {
         </button>
       </div>
 
-      <AdminSidebar
-        isOpen={isMobileOpen}
-        onClose={() => setIsMobileOpen(false)}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-      />
+      {/* OVERLAY GELAP SAAT SIDEBAR DIBUKA DI HP */}
+      {isMobileOpen && (
+        <div 
+          className="md:hidden fixed inset-0 z-40 bg-ink/60 backdrop-blur-sm"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
 
+      {/* 🚀 WRAPPER SIDEBAR: Melayang di HP (Fixed), Berjejer di PC (Relative) */}
+      <div className={`
+        fixed inset-y-0 left-0 z-50 md:relative md:z-auto transition-transform duration-300 ease-in-out md:translate-x-0
+        ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
+      `}>
+        <AdminSidebar
+          isOpen={isMobileOpen}
+          onClose={() => setIsMobileOpen(false)}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+      </div>
+
+      {/* KONTEN UTAMA */}
       <main className="flex-1 min-w-0 px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-24 md:pt-12">
         <div className="mb-8">
           <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">Administrator Portal</p>
