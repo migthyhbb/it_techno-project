@@ -1,485 +1,488 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { AdminSidebar } from "@/components/dashboard/admin-sidebar";
+import { AIAssistant } from "@/components/ai-assistant";
 
-interface Shipment {
+interface IndustriProfile {
+  nama_perusahaan: string;
+  npwp: string;
+  alamat: string;
+  telepon: string;
+  provinsi?: string;
+  kota_kabupaten?: string;
+  created_at: string;
+  status_akun?: string;
+  alasan_ban?: string;
+}
+
+interface WasteShipment {
   id: string;
-  user_id: string;
   nama_limbah: string;
   perkiraan_berat: number;
   lokasi_penjemputan: string;
   status: string;
-  industri_profiles: { nama_perusahaan: string; telepon: string };
-}
-
-interface Product {
-  id: string;
-  nama_produk: string;
-  deskripsi: string;
-  satuan: string;
-  harga_default: number;
-  stok_dummy: number;
-}
-
-interface RegionalProductPrice {
-  id: string;
-  product_id: string;
-  provinsi: string;
-  kota: string;
-  harga: number;
-  stok: number;
-  products?: { nama_produk: string; satuan: string };
-}
-
-interface Order {
-  id: string;
+  is_b3?: boolean;
+  kategori_b3?: string;
+  biaya_pengolahan?: number;
   created_at: string;
-  total_harga: number;
-  status: string;
-  bukti_pengiriman_url?: string | null; 
 }
 
-interface UserAccount {
-  id: string;
-  user_id: string;
-  nama: string;
-  email?: string;
-  nik_nib: string;
-  telepon: string;
-  provinsi?: string;
-  kota_kabupaten?: string;
-  kecamatan?: string;
-  kelurahan?: string;
-  alamat?: string;
-  lat?: number | null;
-  lng?: number | null;
-  foto_doc_url?: string;
-  tipe: "mitra" | "industri";
-  status_akun: "aktif" | "banned";
-  alasan_ban?: string;
-  kuota_pemesanan?: number;
-  total_pemesanan?: number;
+function InfoRow({
+  label,
+  value,
+  className = "",
+}: {
+  label: string;
+  value?: string | null;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <p className="text-xs text-ink/45 mb-1">{label}</p>
+      <p className="text-forest font-medium text-sm md:text-base">{value || "-"}</p>
+    </div>
+  );
 }
 
-export default function DashboardAdminPage() {
+const KREDIT_PER_KG = 100;
+
+const KATEGORI_B3 = [
+  { id: "cair_kimia", nama: "Limbah Cair & Kimia Industri", tarif: 15000 },
+  { id: "oli_pelumas", nama: "Oli Bekas & Pelumas Sintetis", tarif: 12000 },
+  { id: "baterai_elektronik", nama: "Baterai & E-Waste B3", tarif: 20000 },
+  { id: "medis_farmasi", nama: "Limbah Medis & Farmasi", tarif: 25000 },
+  { id: "sludge_lumpur", nama: "Sludge / Lumpur Berbahaya", tarif: 18000 },
+];
+
+export default function DashboardIndustriPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [profile, setProfile] = useState<IndustriProfile | null>(null);
 
-  const [activeTab, setActiveTab] = useState("ringkasan");
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [totalTerkirim, setTotalTerkirim] = useState(0);
+  const [totalKredit, setTotalKredit] = useState(0);
+  const [shipments, setShipments] = useState<WasteShipment[]>([]);
 
-  const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [regionalPrices, setRegionalPrices] = useState<RegionalProductPrice[]>([]);
-  const [usersList, setUsersList] = useState<UserAccount[]>([]);
-
-  const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [selectedUserDetail, setSelectedUserDetail] = useState<UserAccount | null>(null);
-
-  const [ordersModalOpen, setOrdersModalOpen] = useState(false);
-  const [userOrders, setUserOrders] = useState<Order[]>([]);
-  const [loadingOrders, setLoadingOrders] = useState(false);
-  const [newQuota, setNewQuota] = useState<number>(30);
-
-  const [orderStatusModalOpen, setOrderStatusModalOpen] = useState(false);
-  const [selectedOrderUpdate, setSelectedOrderUpdate] = useState<Order | null>(null);
-  const [newOrderStatus, setNewOrderStatus] = useState("");
-  const [proofFile, setProofFile] = useState<File | null>(null);
-
-  const [proofModalOpen, setProofModalOpen] = useState(false);
-  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
-
-  const [banModalOpen, setBanModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
-  const [banReason, setBanReason] = useState("");
-
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
-  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
-  const [newStatus, setNewStatus] = useState("");
-
-  const [priceModalOpen, setPriceModalOpen] = useState(false);
-  const [formPrice, setFormPrice] = useState({
-    product_id: "",
-    provinsi: "",
-    kota: "",
-    harga: "",
-    stok: "",
-  });
-
-  const [productModalOpen, setProductModalOpen] = useState(false);
-  const [formProduct, setFormProduct] = useState({
-    nama_produk: "",
-    deskripsi: "",
-    satuan: "karung",
-    harga_default: "",
-    stok: "50",
-  });
-
+  // State Modal Penjemputan Limbah Biasa
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [provinces, setProvinces] = useState<{ id: string; name: string }[]>([]);
-  const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [formLimbah, setFormLimbah] = useState({
+    nama_limbah: "",
+    berat: "",
+    lokasi: "",
+    foto: null as File | null,
+  });
+
+  // State Modal Penjemputan Limbah B3
+  const [isB3ModalOpen, setIsB3ModalOpen] = useState(false);
+  const [formB3, setFormB3] = useState({
+    nama_limbah: "",
+    kategori_id: "cair_kimia",
+    berat: "",
+    lokasi: "",
+    foto: null as File | null,
+  });
+
+  // State Modal Pembayaran B3
+  const [selectedPayShipment, setSelectedPayShipment] = useState<WasteShipment | null>(null);
+  const [buktiBayarFile, setBuktiBayarFile] = useState<File | null>(null);
+  const [isPaying, setIsPaying] = useState(false);
+
+  // State Modal Pencairan (Withdrawal)
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+  const [formWithdraw, setFormWithdraw] = useState({
+    jumlah_token: "",
+    metode: "Bank Transfer",
+    nomor_rekening: "",
+  });
+
+  // State Modal Edit Profil Industri
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nama_perusahaan: "",
+    npwp: "",
+    telepon: "",
+    provinsi: "",
+    kota_kabupaten: "",
+    alamat: "",
+  });
+
+  // State Modal Hapus Akun Industri
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
-    fetch("https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json")
-      .then((res) => res.json())
-      .then((data) => setProvinces(Array.isArray(data) ? data : []))
-      .catch((err) => console.error("Error fetch provinsi:", err));
-  }, []);
+    let intervalId: NodeJS.Timeout;
+    const supabase = createSupabaseBrowserClient();
 
-  useEffect(() => {
-    const fetchAdminData = async () => {
-      const supabase = createSupabaseBrowserClient();
-      const { data: authData } = await supabase.auth.getUser();
+    const fetchTrackingData = async (uid: string) => {
+      const { data: shipmentData } = await supabase
+        .from("waste_shipments")
+        .select("*")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false });
 
-      if (!authData.user) {
+      const { data: withdrawData } = await supabase
+        .from("pencairan_dana")
+        .select("jumlah_tarik_tunai")
+        .eq("id_agen", uid);
+
+      if (shipmentData) {
+        setShipments(shipmentData);
+        const totalKg = shipmentData
+          .filter((s) => s.status.toLowerCase() === "selesai")
+          .reduce((sum, s) => sum + Number(s.perkiraan_berat), 0);
+
+        setTotalTerkirim(totalKg);
+
+        const grossToken = totalKg * KREDIT_PER_KG;
+        const totalDicairkan = withdrawData
+          ? withdrawData.reduce((sum, w) => sum + Number(w.jumlah_tarik_tunai), 0)
+          : 0;
+
+        const netKredit = grossToken - totalDicairkan;
+        setTotalKredit(netKredit > 0 ? netKredit : 0);
+      }
+    };
+
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) {
+        router.replace("/masuk");
+        return;
+      }
+      setUserId(data.user.id);
+      setEmail(data.user.email ?? null);
+
+      const { data: profileData } = await supabase
+        .from("industri_profiles")
+        .select("nama_perusahaan, npwp, alamat, telepon, provinsi, kota_kabupaten, created_at, status_akun, alasan_ban")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+
+      if (!profileData) {
+        router.replace("/daftar/industri");
+        return;
+      }
+
+      if (profileData.status_akun === "banned") {
+        alert(
+          `Akun Anda telah di-ban oleh Administrator!\nAlasan: ${
+            profileData.alasan_ban || "Pelanggaran ketentuan layanan."
+          }`
+        );
+        await supabase.auth.signOut();
         router.replace("/masuk");
         return;
       }
 
-      const { data: adminProfile } = await supabase
-        .from("admin_profiles")
-        .select("user_id")
-        .eq("user_id", authData.user.id)
-        .maybeSingle();
+      setProfile(profileData);
+      setEditForm({
+        nama_perusahaan: profileData.nama_perusahaan || "",
+        npwp: profileData.npwp || "",
+        telepon: profileData.telepon || "",
+        provinsi: profileData.provinsi || "",
+        kota_kabupaten: profileData.kota_kabupaten || "",
+        alamat: profileData.alamat || "",
+      });
 
-      if (!adminProfile) {
-        router.replace("/dashboard");
+      fetchTrackingData(data.user.id);
+      setLoading(false);
+
+      intervalId = setInterval(() => {
+        fetchTrackingData(data.user.id);
+      }, 300000);
+    });
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [router]);
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+    setEditLoading(true);
+
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase
+      .from("industri_profiles")
+      .update({
+        nama_perusahaan: editForm.nama_perusahaan,
+        npwp: editForm.npwp,
+        telepon: editForm.telepon,
+        provinsi: editForm.provinsi,
+        kota_kabupaten: editForm.kota_kabupaten,
+        alamat: editForm.alamat,
+      })
+      .eq("user_id", userId);
+
+    setEditLoading(false);
+
+    if (!error) {
+      setProfile((prev) =>
+        prev ? { ...prev, ...editForm } : null
+      );
+      setIsEditOpen(false);
+      alert("Profil industri berhasil diperbarui!");
+    } else {
+      alert("Gagal memperbarui profil: " + error.message);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!userId) return;
+    setDeleteLoading(true);
+
+    try {
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert("Gagal menghapus akun: " + data.error);
+        setDeleteLoading(false);
         return;
       }
 
-      const { data: shipData } = await supabase
-        .from("waste_shipments")
-        .select(`*, industri_profiles(nama_perusahaan, telepon)`)
-        .order("created_at", { ascending: false });
-      if (shipData) setShipments(shipData as unknown as Shipment[]);
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
 
-      const { data: productData } = await supabase
-        .from("products")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (productData) setProducts(productData);
-
-      const { data: priceData } = await supabase
-        .from("regional_product_prices")
-        .select(`*, products(nama_produk, satuan)`)
-        .order("kota", { ascending: true });
-      if (priceData) setRegionalPrices(priceData as unknown as RegionalProductPrice[]);
-
-      const { data: mitraData } = await supabase.from("mitra_profiles").select("*");
-      const { data: industriData } = await supabase.from("industri_profiles").select("*");
-      const { data: ordersCount } = await supabase.from("orders").select("user_id");
-
-      const orderCountMap: Record<string, number> = {};
-      (ordersCount || []).forEach((o: { user_id: string }) => {
-        orderCountMap[o.user_id] = (orderCountMap[o.user_id] || 0) + 1;
-      });
-
-      const combinedUsers: UserAccount[] = [
-        ...(mitraData || []).map((m: Record<string, unknown>, idx: number) => ({
-          id: (m.id as string) || (m.user_id as string) || `mitra-${idx}`,
-          user_id: (m.user_id as string) || `uid-mitra-${idx}`,
-          nama: (m.nama_mitra as string) || "Tanpa Nama",
-          nik_nib: (m.nik_nib as string) || "-",
-          telepon: (m.telepon as string) || "-",
-          provinsi: (m.provinsi as string) || "-",
-          kota_kabupaten: (m.kota_kabupaten as string) || "-",
-          kecamatan: (m.kecamatan as string) || "-",
-          kelurahan: (m.kelurahan as string) || "-",
-          alamat: (m.alamat as string) || "-",
-          lat: m.lat as number | null,
-          lng: m.lng as number | null,
-          foto_doc_url: m.foto_nik_url as string,
-          tipe: "mitra" as const,
-          status_akun: (m.status_akun as "aktif" | "banned") || "aktif",
-          alasan_ban: m.alasan_ban as string,
-          kuota_pemesanan: (m.kuota_pemesanan as number) ?? 30,
-          total_pemesanan: orderCountMap[m.user_id as string] || 0,
-        })),
-        ...(industriData || []).map((i: Record<string, unknown>, idx: number) => ({
-          id: (i.id as string) || (i.user_id as string) || `industri-${idx}`,
-          user_id: (i.user_id as string) || `uid-industri-${idx}`,
-          nama: (i.nama_perusahaan as string) || "Tanpa Nama",
-          nik_nib: (i.nik_nib as string) || (i.npwp as string) || "-",
-          telepon: (i.telepon as string) || "-",
-          provinsi: (i.provinsi as string) || "-",
-          kota_kabupaten: (i.kota_kabupaten as string) || "-",
-          kecamatan: (i.kecamatan as string) || "-",
-          kelurahan: (i.kelurahan as string) || "-",
-          alamat: (i.alamat as string) || "-",
-          lat: i.lat as number | null,
-          lng: i.lng as number | null,
-          foto_doc_url: i.foto_npwp_url as string,
-          tipe: "industri" as const,
-          status_akun: (i.status_akun as "aktif" | "banned") || "aktif",
-          alasan_ban: i.alasan_ban as string,
-        })),
-      ];
-
-      setUsersList(combinedUsers);
-      setLoading(false);
-    };
-
-    fetchAdminData();
-  }, [router]);
-
-  const handleOpenOrdersModal = async (usr: UserAccount) => {
-    setSelectedUserDetail(usr);
-    setNewQuota(usr.kuota_pemesanan ?? 30);
-    setOrdersModalOpen(true);
-    setLoadingOrders(true);
-
-    const supabase = createSupabaseBrowserClient();
-    const { data } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("user_id", usr.user_id)
-      .order("created_at", { ascending: false });
-
-    setUserOrders(data || []);
-    setLoadingOrders(false);
+      alert("Akun industri berhasil dihapus permanen.");
+      router.push("/masuk");
+    } catch {
+      alert("Terjadi kesalahan jaringan saat menghapus akun.");
+      setDeleteLoading(false);
+    }
   };
 
-  const handleSaveOrderStatus = async (e: React.FormEvent) => {
+  async function handleKirimLimbah(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedOrderUpdate) return;
     setIsSubmitting(true);
-
-    const supabase = createSupabaseBrowserClient();
-    let finalProofUrl = selectedOrderUpdate.bukti_pengiriman_url;
+    setErrorMsg(null);
 
     try {
-      if (proofFile) {
-        const fileExt = proofFile.name.split('.').pop();
-        const fileName = `bukti-${selectedOrderUpdate.id}-${Date.now()}.${fileExt}`;
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) throw new Error("Sesi Anda telah berakhir, silakan login kembali.");
+
+      let fotoUrl = "";
+      if (formLimbah.foto) {
+        const fileExt = formLimbah.foto.name.split('.').pop();
+        const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
-          .from("bukti_pengiriman")
-          .upload(fileName, proofFile);
+          .from('waste_images')
+          .upload(`limbah/${fileName}`, formLimbah.foto, { upsert: true });
 
-        if (uploadError) throw new Error("Gagal upload gambar: " + uploadError.message);
+        if (uploadError) throw new Error(`Gagal mengunggah foto: ${uploadError.message}`);
 
         const { data: publicUrlData } = supabase.storage
-          .from("bukti_pengiriman")
-          .getPublicUrl(fileName);
+          .from('waste_images')
+          .getPublicUrl(`limbah/${fileName}`);
 
-        finalProofUrl = publicUrlData.publicUrl;
+        fotoUrl = publicUrlData.publicUrl;
       }
 
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({
-          status: newOrderStatus,
-          ...(finalProofUrl ? { bukti_pengiriman_url: finalProofUrl } : {})
-        })
-        .eq("id", selectedOrderUpdate.id);
+      const response = await fetch("/api/setoran-limbah", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          deskripsi_input: formLimbah.nama_limbah,
+          berat_kg: Number(formLimbah.berat),
+          lokasi: formLimbah.lokasi.toUpperCase(),
+          foto_url: fotoUrl,
+          is_b3: false,
+        }),
+      });
+      const responseData = await response.json();
+      if (!response.ok) throw new Error(responseData.error || "Gagal menyimpan data limbah.");
 
-      if (updateError) throw new Error("Gagal update status: " + updateError.message);
+      setFormLimbah({ nama_limbah: "", berat: "", lokasi: "", foto: null });
+      setIsModalOpen(false);
 
-      setUserOrders((prev) =>
-        prev.map((o) =>
-          o.id === selectedOrderUpdate.id
-            ? { ...o, status: newOrderStatus, bukti_pengiriman_url: finalProofUrl }
-            : o
-        )
-      );
+      const { data: newData } = await supabase
+        .from("waste_shipments")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
 
-      alert("Status & Bukti berhasil diperbarui!");
-      setOrderStatusModalOpen(false);
-    } catch (err: any) {
-      alert(err.message);
+      if (newData) setShipments(newData);
+
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan data.");
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }
 
-  const handleUpdateQuota = async (e: React.FormEvent) => {
+  async function handleKirimLimbahB3(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedUserDetail) return;
     setIsSubmitting(true);
+    setErrorMsg(null);
 
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase
-      .from("mitra_profiles")
-      .update({ kuota_pemesanan: Number(newQuota) })
-      .eq("user_id", selectedUserDetail.user_id);
+    const katSelected = KATEGORI_B3.find((k) => k.id === formB3.kategori_id);
+    const tarifPerKg = katSelected ? katSelected.tarif : 15000;
+    const totalBiaya = Number(formB3.berat || 0) * tarifPerKg;
 
-    if (!error) {
-      setUsersList((prev) =>
-        prev.map((u) =>
-          u.user_id === selectedUserDetail.user_id
-            ? { ...u, kuota_pemesanan: Number(newQuota) }
-            : u
-        )
-      );
-      alert(`Kuota pemesanan berhasil diubah menjadi ${newQuota}!`);
-    } else {
-      alert("Gagal memperbarui kuota: " + error.message);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) throw new Error("Sesi Anda telah berakhir, silakan login kembali.");
+
+      let fotoUrl = "";
+      if (formB3.foto) {
+        const fileExt = formB3.foto.name.split('.').pop();
+        const fileName = `b3-${session.user.id}-${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('waste_images')
+          .upload(`limbah_b3/${fileName}`, formB3.foto, { upsert: true });
+
+        if (uploadError) throw new Error(`Gagal mengunggah foto: ${uploadError.message}`);
+
+        const { data: publicUrlData } = supabase.storage
+          .from('waste_images')
+          .getPublicUrl(`limbah_b3/${fileName}`);
+
+        fotoUrl = publicUrlData.publicUrl;
+      }
+
+      const response = await fetch("/api/setoran-limbah", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          deskripsi_input: `[B3] ${formB3.nama_limbah}`,
+          berat_kg: Number(formB3.berat),
+          lokasi: formB3.lokasi.toUpperCase(),
+          foto_url: fotoUrl,
+          is_b3: true,
+          kategori_b3: katSelected?.nama,
+          biaya_pengolahan: totalBiaya,
+          status: "Menunggu Pembayaran",
+        }),
+      });
+
+      const responseData = await response.json();
+      if (!response.ok) throw new Error(responseData.error || "Gagal mendaftarkan limbah B3.");
+
+      alert(`Pendaftaran Berhasil!\nLimbah B3 kamu telah didaftarkan. Silakan lakukan konfirmasi pembayaran pada tabel 'Status Pembayaran Limbah B3' di bawah.`);
+      setFormB3({ nama_limbah: "", kategori_id: "cair_kimia", berat: "", lokasi: "", foto: null });
+      setIsB3ModalOpen(false);
+
+      const { data: newData } = await supabase
+        .from("waste_shipments")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
+
+      if (newData) setShipments(newData);
+
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : "Terjadi kesalahan saat mendaftarkan data.");
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
-  };
+  }
 
-  const handleBanUser = async (e: React.FormEvent) => {
+  const handleKonfirmasiPembayaran = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUser || !banReason.trim()) return;
-    setIsSubmitting(true);
+    if (!selectedPayShipment || !buktiBayarFile) return;
 
-    const supabase = createSupabaseBrowserClient();
-    const table = selectedUser.tipe === "mitra" ? "mitra_profiles" : "industri_profiles";
+    setIsPaying(true);
 
-    await supabase.from("blacklists").insert({
-      nik_nib: selectedUser.nik_nib,
-      user_id: selectedUser.user_id,
-      alasan: banReason,
-      tipe_akun: selectedUser.tipe,
-    });
+    try {
+      const supabase = createSupabaseBrowserClient();
+      
+      const { error: updateError } = await supabase
+        .from("waste_shipments")
+        .update({ status: "Menunggu Verifikasi" })
+        .eq("id", selectedPayShipment.id);
 
-    await supabase
-      .from(table)
-      .update({ status_akun: "banned", alasan_ban: banReason })
-      .eq("user_id", selectedUser.user_id);
+      if (updateError) throw updateError;
 
-    setUsersList(
-      usersList.map((u) =>
-        u.user_id === selectedUser.user_id
-          ? { ...u, status_akun: "banned", alasan_ban: banReason }
-          : u
-      )
-    );
+      alert("Bukti pembayaran berhasil dikirim! Tim kami akan melakukan verifikasi.");
+      setSelectedPayShipment(null);
+      setBuktiBayarFile(null);
 
-    alert(`Akun ${selectedUser.nama} berhasil di-ban!`);
-    setBanModalOpen(false);
-    setBanReason("");
-    setIsSubmitting(false);
-  };
+      if (userId) {
+        const { data: newData } = await supabase
+          .from("waste_shipments")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
 
-  const handleUnbanUser = async (user: UserAccount) => {
-    if (!confirm(`Apakah Anda yakin ingin melepas ban untuk akun ${user.nama}?`)) return;
+        if (newData) setShipments(newData);
+      }
 
-    const supabase = createSupabaseBrowserClient();
-    const table = user.tipe === "mitra" ? "mitra_profiles" : "industri_profiles";
-
-    await supabase.from("blacklists").delete().eq("user_id", user.user_id);
-
-    const { error } = await supabase
-      .from(table)
-      .update({ status_akun: "aktif", alasan_ban: null })
-      .eq("user_id", user.user_id);
-
-    if (!error) {
-      setUsersList(
-        usersList.map((u) =>
-          u.user_id === user.user_id
-            ? { ...u, status_akun: "aktif", alasan_ban: undefined }
-            : u
-        )
-      );
-      alert(`Ban untuk akun ${user.nama} berhasil dilepas! Akun kini aktif kembali.`);
-    } else {
-      alert("Gagal melepas ban: " + error.message);
+    } catch (err) {
+      console.error(err);
+      alert("Gagal mengirim konfirmasi pembayaran.");
+    } finally {
+      setIsPaying(false);
     }
   };
 
-  const handleProvinsiChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const provId = e.target.value;
-    const provName = e.target.options[e.target.selectedIndex]?.text || "";
-
-    setFormPrice((prev) => ({ ...prev, provinsi: provName, kota: "" }));
-    setCities([]);
-
-    if (provId) {
-      fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`)
-        .then((res) => res.json())
-        .then((data) => setCities(Array.isArray(data) ? data : []))
-        .catch((err) => console.error("Error fetch kota:", err));
-    }
-  };
-
-  const handleUpdateStatus = async (e: React.FormEvent) => {
+  const handlePencairan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedShipment) return;
-    setIsSubmitting(true);
-    
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.from("waste_shipments").update({ status: newStatus }).eq("id", selectedShipment.id);
-    
-    setIsSubmitting(false);
+    const jumlahCair = Number(formWithdraw.jumlah_token);
 
-    if (error) {
-      alert("Gagal mengubah status pengiriman: " + error.message);
+    if (jumlahCair > totalKredit) {
+      alert("Token yang ingin dicairkan melebihi saldo tersedia!");
       return;
     }
 
-    setShipments(shipments.map((s) => (s.id === selectedShipment.id ? { ...s, status: newStatus } : s)));
-    setStatusModalOpen(false);
-    alert("Status pengiriman berhasil diubah!");
-  };
+    setIsWithdrawing(true);
 
-  const handleSaveProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    const supabase = createSupabaseBrowserClient();
-    const { data, error } = await supabase
-      .from("products")
-      .insert({
-        nama_produk: formProduct.nama_produk,
-        deskripsi: formProduct.deskripsi,
-        satuan: formProduct.satuan,
-        harga_default: Number(formProduct.harga_default),
-        stok_dummy: Number(formProduct.stok),
-      })
-      .select()
-      .single();
+    try {
+      const response = await fetch("/api/gamifikasi/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jumlah_poin: jumlahCair,
+          metode_pencairan: `${formWithdraw.metode} - ${formWithdraw.nomor_rekening}`,
+        }),
+      });
+      const responseData = await response.json();
+      if (!response.ok) throw new Error(responseData.error || "Gagal memproses pencairan.");
 
-    if (data) setProducts([data, ...products]);
-    if (error) alert("Gagal menambah produk: " + error.message);
+      setTotalKredit((prev) => prev - jumlahCair);
+      setWithdrawSuccess(true);
 
-    setProductModalOpen(false);
-    setFormProduct({ nama_produk: "", deskripsi: "", satuan: "karung", harga_default: "", stok: "50" });
-    setIsSubmitting(false);
-  };
+      setTimeout(() => {
+        setWithdrawSuccess(false);
+        setIsWithdrawModalOpen(false);
+        setFormWithdraw({ jumlah_token: "", metode: "Bank Transfer", nomor_rekening: "" });
+      }, 3000);
 
-  const handleSavePrice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    const supabase = createSupabaseBrowserClient();
-
-    const { error } = await supabase.from("regional_product_prices").upsert(
-      {
-        product_id: formPrice.product_id,
-        provinsi: formPrice.provinsi.toUpperCase(),
-        kota: formPrice.kota.toUpperCase(),
-        harga: Number(formPrice.harga),
-        stok: Number(formPrice.stok),
-      },
-      { onConflict: "product_id,kota" }
-    );
-
-    if (!error) {
-      alert("Harga dan stok wilayah berhasil disimpan!");
-      window.location.reload();
-    } else {
-      alert("Gagal menyimpan data wilayah: " + error.message);
+    } catch (error: unknown) {
+      console.error("Gagal melakukan pencairan:", error);
+      const message = error instanceof Error ? error.message : "Terjadi kesalahan pada database.";
+      alert(`Gagal pencairan: ${message}`);
+    } finally {
+      setIsWithdrawing(false);
     }
-    setIsSubmitting(false);
-  };
-
-  const handleDeleteProduct = async (id: string) => {
-    if (!confirm("Yakin ingin menghapus produk ini?")) return;
-    const supabase = createSupabaseBrowserClient();
-    await supabase.from("products").delete().eq("id", id);
-    setProducts(products.filter((p) => p.id !== id));
-    setRegionalPrices(regionalPrices.filter((rp) => rp.product_id !== id));
-  };
-
-  const handleDeleteRegionalPrice = async (id: string) => {
-    if (!confirm("Yakin ingin menghapus harga wilayah ini?")) return;
-    const supabase = createSupabaseBrowserClient();
-    await supabase.from("regional_product_prices").delete().eq("id", id);
-    setRegionalPrices(regionalPrices.filter((rp) => rp.id !== id));
   };
 
   if (loading) {
@@ -487,748 +490,893 @@ export default function DashboardAdminPage() {
       <div className="flex items-center justify-center min-h-screen bg-cream">
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 border-2 border-forest border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-forest font-medium text-sm">Memuat pusat kendali admin...</p>
+          <p className="text-forest font-medium text-sm">Memuat data portal...</p>
         </div>
       </div>
     );
   }
 
+  const joinedLabel = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "-";
+
+  const estimasiKredit = Number(formLimbah.berat || 0) * KREDIT_PER_KG;
+  const selectedKatB3 = KATEGORI_B3.find((k) => k.id === formB3.kategori_id);
+  const estimasiBiayaB3 = Number(formB3.berat || 0) * (selectedKatB3?.tarif || 0);
+  const estimasiRupiah = Number(formWithdraw.jumlah_token || 0) * 500;
+
+  const b3Shipments = shipments.filter((s) => s.is_b3);
+
   return (
-    <div className="flex min-h-screen bg-cream relative">
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10">
-        <div className="flex flex-col">
-          <span className="font-display font-bold tracking-tight text-base">LENTERA</span>
-          <span className="text-[10px] text-cream/50">Portal Admin</span>
-        </div>
-        <button
-          onClick={() => setIsMobileOpen(true)}
-          className="p-2 text-cream hover:bg-cream/10 rounded-lg transition-colors cursor-pointer"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </div>
+    <div className="px-4 sm:px-8 md:px-12 py-6 md:py-10 max-w-6xl mx-auto w-full relative">
+      {/* Ringkasan */}
+      <section id="ringkasan" className="scroll-mt-8 mb-10">
+        <p className="font-mono text-[11px] tracking-widest uppercase text-green mb-2">
+          Ringkasan
+        </p>
+        <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest mb-1.5">
+          Selamat datang, {profile?.nama_perusahaan ?? "Industri"}
+        </h1>
+        <p className="text-ink/60 mb-6 text-sm">
+          Pantau ringkasan kemitraan industri kamu dengan LENTERA di sini.
+        </p>
 
-      <AdminSidebar
-        isOpen={isMobileOpen}
-        onClose={() => setIsMobileOpen(false)}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-      />
-
-      <main className="flex-1 min-w-0 px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-20 md:pt-12">
-        <div className="mb-8">
-          <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">Administrator Portal</p>
-          <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest capitalize">
-            {activeTab.replace("-", " ")}
-          </h1>
-        </div>
-
-        {/* 🚀 UPDATE: RINGKASAN DI PERPADAT (2 KOLOM DI MOBILE) */}
-        {activeTab === "ringkasan" && (
-          <div className="space-y-5">
-            <div className="bg-paper p-5 md:p-6 rounded-2xl border border-forest/10 shadow-xs">
-              <h3 className="font-display font-semibold text-lg text-forest mb-1.5">Selamat Datang di Portal Kendali</h3>
-              <p className="text-sm text-ink/60 leading-relaxed">
-                Pantau statistik utama, kelola akun, dan navigasikan katalog produk serta pengiriman dari satu tempat.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
-                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Mitra</p>
-                <p className="font-display font-semibold text-xl md:text-2xl text-forest">
-                  {usersList.filter((u) => u.tipe === "mitra").length}
-                </p>
-              </div>
-              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
-                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Industri</p>
-                <p className="font-display font-semibold text-xl md:text-2xl text-forest">
-                  {usersList.filter((u) => u.tipe === "industri").length}
-                </p>
-              </div>
-              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
-                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Pengiriman Limbah</p>
-                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{shipments.length}</p>
-              </div>
-              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
-                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Produk Katalog</p>
-                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{products.length}</p>
-              </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
+            <p className="text-xs text-ink/45 mb-1">Status akun</p>
+            <div className="flex items-center gap-1.5 mt-2">
+              <svg className="w-4 h-4 text-forest opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="font-display font-semibold text-forest text-lg">Aktif</p>
             </div>
           </div>
-        )}
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
+            <p className="text-xs text-ink/45 mb-1">Total limbah terkirim</p>
+            <p className="font-display font-semibold text-forest text-lg mt-2">
+              {totalTerkirim.toLocaleString("id-ID")} <span className="text-sm font-normal text-ink/60">kg</span>
+            </p>
+          </div>
 
-        {(activeTab === "manajemen-pengguna" || activeTab === "manajemen-akun") && (
-          <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-forest/10 bg-forest/5 flex justify-between items-center">
-              <div>
-                <h3 className="font-display font-semibold text-forest text-base">Daftar Akun Mitra & Industri</h3>
-                <p className="text-xs text-ink/60">Inspeksi profil lengkap, foto KTP/NPWP, dan set kuota transaksi.</p>
+          <div className="bg-gradient-to-br from-forest to-forest/90 rounded-2xl border border-forest p-5 shadow-sm flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
+            <div className="flex justify-between items-start relative z-10">
+              <p className="text-xs text-cream/70 mb-1">Kredit Tersedia</p>
+              <button
+                onClick={() => setIsWithdrawModalOpen(true)}
+                disabled={totalKredit <= 0}
+                className="bg-gold/20 hover:bg-gold/40 disabled:bg-gold/10 text-gold disabled:text-gold/50 text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+              >
+                Cairkan
+              </button>
+            </div>
+            <div className="flex items-end gap-1.5 mt-2 relative z-10">
+              <span className="text-gold font-display font-bold text-2xl">
+                {totalKredit.toLocaleString("id-ID")}
+              </span>
+              <span className="text-xs text-cream/70 font-medium mb-1.5 uppercase tracking-wider">Token</span>
+            </div>
+          </div>
+
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
+            <p className="text-xs text-ink/45 mb-1">Bergabung sejak</p>
+            <p className="font-display font-semibold text-forest text-lg mt-2">{joinedLabel}</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Lacak Pengiriman */}
+      <section id="lacak-pengiriman" className="scroll-mt-8 mb-10">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="font-display font-semibold text-xl text-forest">Status Pengiriman</h2>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-forest/5 border border-forest/10 text-[10px] text-forest/70 font-semibold tracking-wide uppercase">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Sistem tersinkronisasi
               </div>
             </div>
+            <p className="text-xs text-ink/60">Pantau pergerakan limbah yang sedang diproses secara real-time.</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto">
+            <button
+              onClick={() => {
+                setErrorMsg(null);
+                setIsModalOpen(true);
+              }}
+              className="bg-forest text-paper px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium hover:bg-forest/90 transition-colors shadow-xs text-center flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
+              Penjemputan Limbah Biasa
+            </button>
 
-            <div className="block md:hidden p-4 space-y-4 bg-cream/30">
-              {usersList.map((usr, index) => (
-                <div key={`${usr.tipe}-${usr.user_id}-${index}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-semibold text-forest text-sm">{usr.nama}</h4>
-                      <p className="text-xs text-ink/60 uppercase font-mono mt-0.5">{usr.tipe} • {usr.nik_nib}</p>
+            <button
+              onClick={() => {
+                setErrorMsg(null);
+                setIsB3ModalOpen(true);
+              }}
+              className="bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold hover:bg-amber-700 transition-colors shadow-xs text-center flex items-center justify-center gap-1.5 cursor-pointer border border-amber-700"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              Daftar Pengolahan B3
+            </button>
+          </div>
+        </div>
+
+        {shipments.length === 0 ? (
+          <div className="bg-paper rounded-2xl border border-forest/10 p-10 text-center">
+            <p className="text-ink/60 text-sm">Belum ada riwayat pengiriman limbah.</p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {shipments.map((shipment) => {
+              const isPendingPayment = shipment.status.toLowerCase() === "menunggu pembayaran";
+
+              return (
+                <div key={shipment.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col justify-between shadow-xs hover:border-forest/20 transition-colors">
+                  <div>
+                    <div className="flex justify-between items-start mb-3 gap-2">
+                      <div>
+                        <h3 className="font-semibold text-forest text-base leading-snug">{shipment.nama_limbah}</h3>
+                        {shipment.is_b3 && (
+                          <span className="inline-block mt-0.5 text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
+                            Kategori B3
+                          </span>
+                        )}
+                      </div>
+                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 ${
+                        shipment.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
+                        : isPendingPayment ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                        : shipment.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
+                        : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {shipment.status}
+                      </span>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${
-                      usr.status_akun === "banned" ? "bg-red-100 text-red-700" : "bg-green/10 text-green"
-                    }`}>
-                      {usr.status_akun}
-                    </span>
+
+                    <div className="text-sm text-ink/70 space-y-1.5 mb-4">
+                      <p><strong className="font-medium text-ink">Berat:</strong> {shipment.perkiraan_berat} kg</p>
+                      <p className="line-clamp-2"><strong className="font-medium text-ink">Lokasi:</strong> {shipment.lokasi_penjemputan}</p>
+
+                      {shipment.is_b3 && shipment.biaya_pengolahan && (
+                        <p className="text-xs font-semibold text-amber-900 pt-1">
+                          Biaya Pengolahan: Rp {shipment.biaya_pengolahan.toLocaleString("id-ID")}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  {usr.tipe === "mitra" && (
-                    <div className="text-xs text-ink/70">
-                      Penggunaan Kuota: <span className="font-mono font-medium text-forest">{usr.total_pemesanan} / {usr.kuota_pemesanan ?? 30}</span>
-                    </div>
-                  )}
+                  <div className="flex justify-between items-center border-t border-forest/10 pt-3 mt-auto">
+                    <p className="text-xs text-ink/40">
+                      Dibuat: {new Date(shipment.created_at).toLocaleDateString("id-ID")}
+                    </p>
 
-                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-forest/5 mt-1">
-                    <button onClick={() => { setSelectedUserDetail(usr); setDetailModalOpen(true); }} className="flex-1 text-xs font-medium py-2 bg-forest/5 text-forest rounded-lg hover:bg-forest/10 transition-colors text-center cursor-pointer">
-                      Detail
-                    </button>
-                    {usr.tipe === "mitra" && (
-                      <button onClick={() => handleOpenOrdersModal(usr)} className="flex-1 text-xs font-medium py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-center cursor-pointer">
-                        Pesanan
-                      </button>
-                    )}
-                    {usr.status_akun === "banned" ? (
-                      <button onClick={() => handleUnbanUser(usr)} className="flex-1 text-xs font-semibold py-2 bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 transition-colors text-center cursor-pointer">
-                        Lepas Ban
-                      </button>
-                    ) : (
-                      <button onClick={() => { setSelectedUser(usr); setBanModalOpen(true); }} className="flex-1 text-xs font-semibold py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-center cursor-pointer">
-                        Ban
-                      </button>
+                    {!shipment.is_b3 && shipment.status.toLowerCase() === 'selesai' && (
+                      <p className="text-[10px] font-medium text-gold bg-gold/10 px-2 py-0.5 rounded-md">
+                        +{Number(shipment.perkiraan_berat) * KREDIT_PER_KG} Token
+                      </p>
                     )}
                   </div>
                 </div>
-              ))}
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* SECTION: STATUS PEMBAYARAN LIMBAH B3 & KONFIRMASI */}
+      {b3Shipments.length > 0 && (
+        <section id="pembayaran-b3" className="scroll-mt-8 mb-10">
+          <div className="mb-4">
+            <p className="font-mono text-xs tracking-widest uppercase text-amber-700 mb-1">
+              Tagihan & Transaksi
+            </p>
+            <h2 className="font-display font-semibold text-xl text-forest">
+              Status Pembayaran Limbah B3
+            </h2>
+            <p className="text-xs text-ink/60 mt-0.5">
+              Lakukan pembayaran dan upload konfirmasi untuk pesanan B3 yang masih menunggu.
+            </p>
+          </div>
+
+          <div className="bg-paper rounded-2xl border border-amber-200 overflow-hidden shadow-xs p-4 md:p-0">
+            {/* TAMPILAN CARD - KHUSUS MOBILE (sm ke bawah) */}
+            <div className="block md:hidden space-y-3">
+              {b3Shipments.map((b3) => {
+                const isPending = b3.status.toLowerCase() === "menunggu pembayaran";
+
+                return (
+                  <div key={b3.id} className="bg-amber-50/50 border border-amber-200 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <h4 className="font-semibold text-forest text-sm leading-tight">{b3.nama_limbah}</h4>
+                        <p className="text-xs text-ink/60 mt-1">Berat: {b3.perkiraan_berat} kg</p>
+                      </div>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full shrink-0 ${
+                        isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : b3.status.toLowerCase() === "menunggu verifikasi" ? "bg-blue-100 text-blue-800"
+                        : "bg-green/10 text-green"
+                      }`}>
+                        {b3.status}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-amber-200/60 pt-2.5">
+                      <div>
+                        <p className="text-[10px] text-ink/50 uppercase font-medium">Total Biaya</p>
+                        <p className="text-sm font-bold text-amber-900">
+                          Rp {(b3.biaya_pengolahan || 0).toLocaleString("id-ID")}
+                        </p>
+                      </div>
+
+                      {isPending ? (
+                        <button
+                          onClick={() => setSelectedPayShipment(b3)}
+                          className="text-xs font-bold px-3 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
+                        >
+                          Konfirmasi Bayar
+                        </button>
+                      ) : (
+                        <span className="text-xs text-ink/40 italic">Lunas / Diproses</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
+            {/* TAMPILAN TABEL - KHUSUS DESKTOP (md ke atas) */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
-                  <tr>
-                    <th className="p-4">Nama / Perusahaan</th>
-                    <th className="p-4">Tipe</th>
-                    <th className="p-4">NIK / NIB / NPWP</th>
-                    <th className="p-4">Penggunaan Kuota</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-center">Aksi</th>
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-amber-50/80 border-b border-amber-200 text-xs font-bold text-amber-900 uppercase tracking-wider">
+                    <th className="p-4">Deskripsi Limbah</th>
+                    <th className="p-4">Berat Total</th>
+                    <th className="p-4">Total Biaya</th>
+                    <th className="p-4">Status Pembayaran</th>
+                    <th className="p-4 text-right">Aksi Konfirmasi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-forest/10">
-                  {usersList.map((usr, index) => (
-                    <tr
-                      key={`desktop-${usr.tipe}-${usr.user_id}-${index}`}
-                      className="hover:bg-forest/[0.02] transition-colors"
-                    >
-                      <td className="p-4 font-medium text-forest">{usr.nama}</td>
-                      <td className="p-4 capitalize text-xs font-mono">{usr.tipe}</td>
-                      <td className="p-4 text-xs font-mono">{usr.nik_nib}</td>
-                      <td className="p-4 text-xs">
-                        {usr.tipe === "mitra" ? (
-                          <span className="font-mono font-medium text-forest">
-                            {usr.total_pemesanan} / {usr.kuota_pemesanan ?? 30}
+                  {b3Shipments.map((b3) => {
+                    const isPending = b3.status.toLowerCase() === "menunggu pembayaran";
+
+                    return (
+                      <tr key={b3.id} className="hover:bg-cream/40 transition-colors">
+                        <td className="p-4 font-medium text-forest">{b3.nama_limbah}</td>
+                        <td className="p-4 text-ink/70">{b3.perkiraan_berat} kg</td>
+                        <td className="p-4 font-semibold text-amber-900">
+                          Rp {(b3.biaya_pengolahan || 0).toLocaleString("id-ID")}
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full ${
+                            isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
+                            : b3.status.toLowerCase() === "menunggu verifikasi" ? "bg-blue-100 text-blue-800"
+                            : "bg-green/10 text-green"
+                          }`}>
+                            {b3.status}
                           </span>
-                        ) : (
-                          <span className="text-ink/40 italic">-</span>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        <span
-                          className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold ${
-                            usr.status_akun === "banned"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-green/10 text-green"
-                          }`}
-                        >
-                          {usr.status_akun}
-                        </span>
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => {
-                              setSelectedUserDetail(usr);
-                              setDetailModalOpen(true);
-                            }}
-                            className="text-xs font-medium px-2.5 py-1.5 bg-forest/10 text-forest rounded-lg hover:bg-forest/20 transition-colors cursor-pointer"
-                          >
-                            Detail
-                          </button>
-
-                          {usr.tipe === "mitra" && (
+                        </td>
+                        <td className="p-4 text-right">
+                          {isPending ? (
                             <button
-                              onClick={() => handleOpenOrdersModal(usr)}
-                              className="text-xs font-medium px-2.5 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors cursor-pointer"
+                              onClick={() => setSelectedPayShipment(b3)}
+                              className="text-xs font-bold px-3.5 py-1.5 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer"
                             >
-                              Pesanan
-                            </button>
-                          )}
-
-                          {usr.status_akun === "banned" ? (
-                            <button
-                              onClick={() => handleUnbanUser(usr)}
-                              className="text-xs font-semibold px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer"
-                            >
-                              Lepas Ban
+                              Konfirmasi Bayar
                             </button>
                           ) : (
-                            <button
-                              onClick={() => {
-                                setSelectedUser(usr);
-                                setBanModalOpen(true);
-                              }}
-                              className="text-xs font-semibold px-2.5 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors cursor-pointer"
-                            >
-                              Ban
-                            </button>
+                            <span className="text-xs text-ink/40 italic">Lunas / Diproses</span>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-          </section>
-        )}
-
-        {activeTab === "katalog-produk" && (
-          <section className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-xs text-ink/60">Daftar produk energi yang terdaftar secara nasional.</p>
-              <button
-                onClick={() => setProductModalOpen(true)}
-                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer"
-              >
-                + Tambah Produk Baru
-              </button>
-            </div>
-            <div className="grid sm:grid-cols-3 gap-4">
-              {products.map((p) => (
-                <div key={p.id} className="bg-paper border border-forest/10 p-5 rounded-2xl flex flex-col relative group shadow-xs">
-                  <button
-                    onClick={() => handleDeleteProduct(p.id)}
-                    className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer"
-                  >
-                    Hapus
-                  </button>
-                  <h3 className="font-display font-semibold text-forest text-lg pr-10">{p.nama_produk}</h3>
-                  <p className="text-xs text-ink/60 mb-3 leading-relaxed">{p.deskripsi}</p>
-                  <div className="mt-auto border-t border-forest/10 pt-3">
-                    <p className="text-[10px] text-ink/50 uppercase tracking-widest">Harga Nasional (Default)</p>
-                    <p className="font-semibold text-green">
-                      Rp {p.harga_default?.toLocaleString("id-ID")}{" "}
-                      <span className="text-xs font-normal text-ink/50">/{p.satuan}</span>
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {activeTab === "harga-wilayah" && (
-          <section className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-xs text-ink/60">Penyesuaian harga dan ketersediaan stok produk per daerah.</p>
-              <button
-                onClick={() => setPriceModalOpen(true)}
-                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer"
-              >
-                + Set Harga Wilayah
-              </button>
-            </div>
-            <div className="grid sm:grid-cols-3 gap-4">
-              {regionalPrices.length === 0 && (
-                <div className="col-span-3 p-8 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">
-                  Belum ada penyesuaian harga spesifik daerah.
-                </div>
-              )}
-              {regionalPrices.map((rp) => (
-                <div key={rp.id} className="bg-paper rounded-2xl border border-forest/10 p-5 relative group shadow-xs">
-                  <button
-                    onClick={() => handleDeleteRegionalPrice(rp.id)}
-                    className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer"
-                  >
-                    Hapus
-                  </button>
-                  <p className="text-[10px] uppercase text-ink/50 mb-1 pr-10">{rp.kota}, {rp.provinsi}</p>
-                  <h3 className="font-semibold text-forest text-lg mb-1">{rp.products?.nama_produk}</h3>
-                  <div className="text-sm text-ink/70 space-y-1 mt-2 border-t border-forest/10 pt-2">
-                    <p>
-                      Harga: <span className="font-bold text-green">Rp {rp.harga?.toLocaleString("id-ID")}</span>
-                    </p>
-                    <p>Stok: <span className="font-bold text-forest">{rp.stok} {rp.products?.satuan || "karung"}</span></p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {activeTab === "pengiriman" && (
-          <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
-            
-            <div className="block md:hidden p-4 space-y-4 bg-cream/30">
-              {shipments.map((ship) => (
-                <div key={`mobile-ship-${ship.id}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-semibold text-forest text-sm">{ship.industri_profiles?.nama_perusahaan || "-"}</h4>
-                      <p className="text-xs text-ink/70 mt-1">{ship.nama_limbah} <span className="font-semibold">({ship.perkiraan_berat}kg)</span></p>
-                    </div>
-                    <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${
-                      ship.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
-                      : ship.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
-                      : 'bg-amber-100 text-amber-800'
-                    }`}>
-                      {ship.status}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-ink/60 bg-forest/5 p-2 rounded-lg">
-                    <span className="block font-medium text-ink/80 mb-0.5">Lokasi Penjemputan:</span>
-                    {ship.lokasi_penjemputan}
-                  </div>
-
-                  <div className="pt-2 border-t border-forest/5 mt-1">
-                    <button onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }} className="w-full text-xs font-semibold py-2 bg-green/10 text-green rounded-lg hover:bg-green/20 transition-colors text-center cursor-pointer">
-                      Ubah Status
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
-                  <tr>
-                    <th className="p-4">Industri</th>
-                    <th className="p-4">Limbah & Berat</th>
-                    <th className="p-4">Lokasi Penjemputan</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-forest/10">
-                  {shipments.map((ship) => (
-                    <tr key={`desktop-ship-${ship.id}`} className="hover:bg-forest/[0.02] transition-colors">
-                      <td className="p-4 font-medium text-forest">{ship.industri_profiles?.nama_perusahaan || "-"}</td>
-                      <td className="p-4">{ship.nama_limbah} ({ship.perkiraan_berat}kg)</td>
-                      <td className="p-4 text-xs max-w-xs truncate">{ship.lokasi_penjemputan}</td>
-                      <td className="p-4 font-bold text-xs">
-                        <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] ${
-                          ship.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
-                          : ship.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
-                          : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {ship.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-center">
-                        <button
-                          onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }}
-                          className="text-green hover:underline text-xs font-medium cursor-pointer"
-                        >
-                          Ubah Status
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {detailModalOpen && selectedUserDetail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-start mb-4 border-b border-forest/10 pb-3">
-                <div>
-                  <span className="text-[10px] uppercase font-mono tracking-widest text-green">Profil {selectedUserDetail.tipe}</span>
-                  <h3 className="font-display font-semibold text-xl text-forest">{selectedUserDetail.nama}</h3>
-                </div>
-                <button onClick={() => setDetailModalOpen(false)} className="text-ink/40 hover:text-ink text-sm font-bold cursor-pointer">✕</button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mb-6">
-                <div className="bg-white p-3 rounded-xl border border-forest/10 space-y-1.5">
-                  <p className="text-ink/50 uppercase font-mono text-[10px]">Identitas Resmi</p>
-                  <p><span className="font-semibold">NIK / NIB / NPWP:</span> {selectedUserDetail.nik_nib}</p>
-                  <p><span className="font-semibold">Telepon:</span> {selectedUserDetail.telepon}</p>
-                  <p><span className="font-semibold">Status Akun:</span> <span className="capitalize font-bold">{selectedUserDetail.status_akun}</span></p>
-                  {selectedUserDetail.alasan_ban && (
-                    <p className="text-red-600"><span className="font-semibold">Alasan Ban:</span> {selectedUserDetail.alasan_ban}</p>
-                  )}
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-forest/10 space-y-1.5">
-                  <p className="text-ink/50 uppercase font-mono text-[10px]">Alamat & Wilayah Operasional</p>
-                  <p><span className="font-semibold">Provinsi:</span> {selectedUserDetail.provinsi}</p>
-                  <p><span className="font-semibold">Kota / Kab:</span> {selectedUserDetail.kota_kabupaten}</p>
-                  <p><span className="font-semibold">Kec / Kel:</span> {selectedUserDetail.kecamatan}, {selectedUserDetail.kelurahan}</p>
-                  <p><span className="font-semibold">Detail Alamat:</span> {selectedUserDetail.alamat}</p>
-                  <p><span className="font-semibold">Koordinat GPS:</span> {selectedUserDetail.lat && selectedUserDetail.lng ? `${selectedUserDetail.lat}, ${selectedUserDetail.lng}` : "Belum di-set"}</p>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <p className="text-xs font-semibold text-forest mb-2">Dokumen Verifikasi (Foto KTP / NPWP):</p>
-                {selectedUserDetail.foto_doc_url ? (
-                  <div className="bg-black/5 rounded-xl p-2 border border-forest/10 overflow-hidden text-center">
-                    <a href={selectedUserDetail.foto_doc_url} target="_blank" rel="noopener noreferrer">
-                      <Image
-                        src={selectedUserDetail.foto_doc_url}
-                        alt="Foto Dokumen"
-                        width={800}
-                        height={600}
-                        className="max-h-64 object-contain mx-auto rounded-lg hover:opacity-90 transition-opacity"
-                      />
-                    </a>
-                  </div>
-                ) : (
-                  <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-6 text-center text-ink/40 text-xs">
-                    Foto dokumen tidak diunggah atau belum tersedia.
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end pt-3 border-t border-forest/10">
-                <button type="button" onClick={() => setDetailModalOpen(false)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 cursor-pointer">
-                  Tutup Profil
-                </button>
-              </div>
-            </div>
           </div>
-        )}
+        </section>
+      )}
 
-        {ordersModalOpen && selectedUserDetail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-start mb-4 border-b border-forest/10 pb-3">
-                <div>
-                  <span className="text-[10px] uppercase font-mono tracking-widest text-blue-600">Riwayat & Status Pesanan Mitra</span>
-                  <h3 className="font-display font-semibold text-xl text-forest">{selectedUserDetail.nama}</h3>
-                </div>
-                <button onClick={() => setOrdersModalOpen(false)} className="text-ink/40 hover:text-ink text-sm font-bold cursor-pointer">✕</button>
-              </div>
-
-              <form onSubmit={handleUpdateQuota} className="bg-blue-50/50 border border-blue-200/60 rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-end gap-3">
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold text-blue-900 mb-1">Atur Batas Kuota Pemesanan Akun Ini:</label>
-                  <input type="number" min={0} required value={newQuota} onChange={(e) => setNewQuota(Number(e.target.value))} className="w-full border border-blue-300 p-2 rounded-xl text-sm bg-white outline-none font-mono" />
-                </div>
-                <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-blue-700 transition-colors cursor-pointer">
-                  {isSubmitting ? "Menyimpan..." : "Simpan Kuota Baru"}
-                </button>
-              </form>
-
-              <div className="mb-4">
-                <h4 className="font-semibold text-forest text-sm mb-2">Daftar Transaksi Pemesanan</h4>
-                {loadingOrders ? (
-                  <p className="text-xs text-ink/50 py-4 text-center">Memuat riwayat transaksi...</p>
-                ) : userOrders.length === 0 ? (
-                  <div className="bg-white border border-forest/10 rounded-xl p-6 text-center text-xs text-ink/50">Mitra ini belum pernah melakukan pemesanan produk.</div>
-                ) : (
-                  <div className="border border-forest/10 rounded-xl overflow-hidden bg-white">
-                    <table className="w-full text-left text-xs block md:table overflow-x-auto">
-                      <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10 hidden md:table-header-group">
-                        <tr>
-                          <th className="p-3">ID Pesanan</th>
-                          <th className="p-3">Tanggal</th>
-                          <th className="p-3">Total Biaya</th>
-                          <th className="p-3">Status Pengiriman</th>
-                          <th className="p-3 text-center">Ubah Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-forest/10 block md:table-row-group">
-                        {userOrders.map((ord) => (
-                          <tr key={ord.id} className="block md:table-row p-4 md:p-0">
-                            <td className="p-1 md:p-3 font-mono font-medium text-forest truncate block md:table-cell mb-2 md:mb-0">
-                              <span className="inline-block md:hidden text-ink/50 mr-2">ID:</span>
-                              {ord.id.slice(0, 8)}...
-                            </td>
-                            <td className="p-1 md:p-3 text-ink/60 block md:table-cell mb-2 md:mb-0">
-                              <span className="inline-block md:hidden text-ink/50 mr-2">Tgl:</span>
-                              {new Date(ord.created_at).toLocaleDateString("id-ID")}
-                            </td>
-                            <td className="p-1 md:p-3 font-semibold text-green block md:table-cell mb-3 md:mb-0">
-                              <span className="inline-block md:hidden text-ink/50 mr-2">Total:</span>
-                              Rp {ord.total_harga?.toLocaleString("id-ID")}
-                            </td>
-                            <td className="p-1 md:p-3 block md:table-cell mb-4 md:mb-0">
-                              <div className="flex flex-col gap-1 items-start">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
-                                  ord.status === 'dikirim' ? 'bg-amber-100 text-amber-800'
-                                  : ord.status === 'selesai' ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-gray-100 text-gray-700'
-                                }`}>
-                                  {ord.status}
-                                </span>
-                                {ord.bukti_pengiriman_url && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      setSelectedProofUrl(ord.bukti_pengiriman_url!);
-                                      setProofModalOpen(true);
-                                    }}
-                                    className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-1 cursor-pointer font-medium"
-                                  >
-                                    📎 Lihat Bukti
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                            <td className="p-1 md:p-3 text-center block md:table-cell border-t md:border-0 border-forest/10 pt-3 md:pt-0 mt-2 md:mt-0">
-                              <button
-                                onClick={() => {
-                                  setSelectedOrderUpdate(ord);
-                                  setNewOrderStatus(ord.status);
-                                  setProofFile(null); 
-                                  setOrderStatusModalOpen(true);
-                                }}
-                                className="w-full md:w-auto text-green hover:underline text-xs font-medium cursor-pointer bg-green/10 md:bg-transparent py-2 md:py-0 rounded-lg md:rounded-none"
-                              >
-                                Ubah Status & Bukti
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end pt-3 border-t border-forest/10">
-                <button type="button" onClick={() => setOrdersModalOpen(false)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 cursor-pointer">
-                  Tutup Modal
-                </button>
-              </div>
-            </div>
+      {/* Profil Industri */}
+      <section id="profil-industri" className="scroll-mt-8 mb-10">
+        <div className="flex justify-between items-end mb-4">
+          <div>
+            <p className="font-mono text-xs tracking-widest uppercase text-clay mb-1">
+              Profil industri
+            </p>
+            <h2 className="font-display font-semibold text-xl text-forest">
+              Informasi Industri
+            </h2>
           </div>
-        )}
-
-        {orderStatusModalOpen && selectedOrderUpdate && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
-              <h3 className="font-display font-semibold text-forest mb-4">Ubah Status & Upload Bukti</h3>
-              <form onSubmit={handleSaveOrderStatus} className="space-y-4">
-                
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Status Pesanan</label>
-                  <select 
-                    value={newOrderStatus} 
-                    onChange={(e) => setNewOrderStatus(e.target.value)} 
-                    className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer"
-                  >
-                    <option value={newOrderStatus} className="hidden">{newOrderStatus}</option>
-                    <option value="menunggu_pembayaran">Menunggu Pembayaran</option>
-                    <option value="diproses">Diproses</option>
-                    <option value="dikirim">Dikirim (Dalam Pengiriman)</option>
-                    <option value="selesai">Selesai</option>
-                    <option value="dibatalkan">Dibatalkan</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Foto Bukti Pengiriman (Opsional)</label>
-                  <input 
-                    type="file" 
-                    accept="image/*"
-                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-ink/70 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-forest/10 file:text-forest hover:file:bg-forest/20 cursor-pointer border border-ink/20 rounded-xl p-1 bg-white"
-                  />
-                  {selectedOrderUpdate.bukti_pengiriman_url && !proofFile && (
-                    <p className="text-[10px] text-green mt-1">✓ Bukti sudah pernah diupload sebelumnya.</p>
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setOrderStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">
-                    {isSubmitting ? "Menyimpan..." : "Simpan Perubahan"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {banModalOpen && selectedUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
-              <h3 className="font-display font-semibold text-red-800 mb-2">Blokir / Ban Akun</h3>
-              <p className="text-xs text-ink/70 mb-4">
-                Anda akan memblokir <span className="font-bold">{selectedUser.nama}</span> ({selectedUser.nik_nib}). NIK/NIB ini akan dimasukkan ke daftar hitam.
-              </p>
-              <form onSubmit={handleBanUser} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Alasan Pemblokiran</label>
-                  <textarea required rows={3} placeholder="Misal: Pengiriman data fiktif / deskripsi limbah tidak sesuai." value={banReason} onChange={(e) => setBanReason(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none resize-none" />
-                </div>
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setBanModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Memproses..." : "Ya, Ban Akun"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {priceModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
-              <h3 className="font-display font-semibold text-forest mb-4">Set Harga & Stok Wilayah</h3>
-              <form onSubmit={handleSavePrice} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Pilih Produk</label>
-                  <select className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white cursor-pointer" required value={formPrice.product_id} onChange={(e) => setFormPrice({ ...formPrice, product_id: e.target.value })}>
-                    <option value="">-- Pilih Produk --</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.nama_produk}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-ink mb-1">Provinsi</label>
-                    <select className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase outline-none bg-white cursor-pointer" onChange={handleProvinsiChange} required>
-                      <option value="">PROVINSI</option>
-                      {provinces.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-ink mb-1">Kota / Kab</label>
-                    <select className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase disabled:bg-gray-100 outline-none bg-white cursor-pointer" value={formPrice.kota} onChange={(e) => setFormPrice((prev) => ({ ...prev, kota: e.target.options[e.target.selectedIndex]?.text || "" }))} disabled={cities.length === 0} required>
-                      <option value="">KOTA/KAB</option>
-                      {cities.map((c) => (
-                        <option key={c.id} value={c.name}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-ink mb-1">Harga (Rp)</label>
-                    <input type="number" placeholder="18000" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.harga} onChange={(e) => setFormPrice({ ...formPrice, harga: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-ink mb-1">Stok Gudang</label>
-                    <input type="number" placeholder="50" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.stok} onChange={(e) => setFormPrice({ ...formPrice, stok: e.target.value })} />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setPriceModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Data"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {productModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-lg p-6">
-              <h3 className="font-display font-semibold text-forest mb-4">Tambah Produk Utama</h3>
-              <form onSubmit={handleSaveProduct} className="space-y-4">
-                <input type="text" placeholder="Nama Produk" required value={formProduct.nama_produk} onChange={(e) => setFormProduct({ ...formProduct, nama_produk: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                <input type="text" placeholder="Deskripsi Singkat" required value={formProduct.deskripsi} onChange={(e) => setFormProduct({ ...formProduct, deskripsi: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                <div className="grid grid-cols-2 gap-4">
-                  <input type="text" placeholder="Satuan (karung/liter)" required value={formProduct.satuan} onChange={(e) => setFormProduct({ ...formProduct, satuan: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                  <input type="number" placeholder="Stok Default" required value={formProduct.stok} onChange={(e) => setFormProduct({ ...formProduct, stok: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                </div>
-                <input type="number" placeholder="Harga Default Nasional (Rp)" required value={formProduct.harga_default} onChange={(e) => setFormProduct({ ...formProduct, harga_default: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setProductModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Produk"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {statusModalOpen && selectedShipment && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
-              <h3 className="font-display font-semibold text-forest mb-4">Ubah Status Pengiriman Limbah</h3>
-              <form onSubmit={handleUpdateStatus} className="space-y-4">
-                <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer">
-                  <option value={newStatus} className="hidden">{newStatus}</option>
-                  <option value="MENUNGGU PEMBAYARAN">Menunggu Pembayaran</option>
-                  <option value="Menunggu Penjemputan">Menunggu Penjemputan</option>
-                  <option value="Diperjalanan">Diperjalanan</option>
-                  <option value="Selesai">Selesai</option>
-                  <option value="Dibatalkan">Dibatalkan</option>
-                </select>
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Status"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* 🚀 MODAL BARU: TAMPILKAN BUKTI PENGIRIMAN DI ADMIN */}
-        {proofModalOpen && selectedProofUrl && (
-          <div 
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"
-            onClick={() => setProofModalOpen(false)}
+          <button
+            onClick={() => setIsEditOpen(true)}
+            className="text-xs font-semibold px-4 py-2 bg-forest text-cream rounded-xl hover:bg-forest/90 transition-colors cursor-pointer"
           >
-            <div 
-              className="relative bg-paper rounded-2xl shadow-2xl max-w-2xl w-full p-2 animate-in zoom-in-95 duration-200" 
-              onClick={(e) => e.stopPropagation()} 
-            >
-              <div className="flex justify-between items-center p-3 border-b border-forest/10 mb-2">
-                <h3 className="font-display font-semibold text-forest text-sm">Foto Bukti Pengiriman</h3>
-                <button 
-                  onClick={() => setProofModalOpen(false)} 
-                  className="text-ink/50 hover:text-ink font-bold w-8 h-8 flex items-center justify-center rounded-full bg-forest/5 hover:bg-forest/10 transition-colors cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
-                <img 
-                  src={selectedProofUrl} 
-                  alt="Bukti Pengiriman Barang" 
-                  className="max-w-full max-h-[70vh] object-contain rounded-lg"
+            Ubah Profil
+          </button>
+        </div>
+
+        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6 shadow-xs">
+          <InfoRow label="Nama Perusahaan" value={profile?.nama_perusahaan} />
+          <InfoRow label="Email Kontak" value={email} />
+          <InfoRow label="NPWP" value={profile?.npwp} />
+          <InfoRow label="Nomor Telepon" value={profile?.telepon} />
+          <InfoRow
+            label="Wilayah Operasional"
+            value={
+              profile?.kota_kabupaten
+                ? `${profile.kota_kabupaten}, ${profile.provinsi}`
+                : "BELUM DISET"
+            }
+          />
+          <InfoRow label="Alamat Lengkap" value={profile?.alamat} className="sm:col-span-2" />
+        </div>
+      </section>
+
+      {/* Danger Zone: Hapus Akun */}
+      <section className="bg-red-50/50 border border-red-200/60 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h3 className="font-display font-semibold text-red-900 text-base sm:text-lg">
+            Hapus Akun Industri
+          </h3>
+          <p className="text-xs sm:text-sm text-red-700/80 mt-0.5">
+            Tindakan ini permanen. Seluruh profil perusahaan dan riwayat pengiriman kamu akan dihapus.
+          </p>
+        </div>
+        <button
+          onClick={() => setIsDeleteOpen(true)}
+          className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors shrink-0 cursor-pointer"
+        >
+          Hapus Akun
+        </button>
+      </section>
+
+      {/* MODAL KONFIRMASI PEMBAYARAN B3 */}
+      {selectedPayShipment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-amber-200 rounded-2xl max-w-md w-full p-6 shadow-xl">
+            <h3 className="font-display font-semibold text-lg text-amber-900 mb-1">
+              Konfirmasi Pembayaran Limbah B3
+            </h3>
+            <p className="text-xs text-ink/60 mb-4">
+              Silakan transfer sesuai tagihan dan unggah foto bukti transfer.
+            </p>
+
+            <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-xs space-y-1.5 mb-4">
+              <p><strong>Item:</strong> {selectedPayShipment.nama_limbah}</p>
+              <p><strong>Total Tagihan:</strong> Rp {(selectedPayShipment.biaya_pengolahan || 0).toLocaleString("id-ID")}</p>
+              <p><strong>Rekening Bank:</strong> BCA 123-456-7890 a.n. LENTERA BERKAH</p>
+            </div>
+
+            <form onSubmit={handleKonfirmasiPembayaran} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium mb-1.5 text-ink">Upload Bukti Transfer</label>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg"
+                  required
+                  onChange={(e) => setBuktiBayarFile(e.target.files?.[0] || null)}
+                  className="block w-full text-xs text-ink/80 border border-ink/20 rounded-xl p-2 bg-white file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:bg-amber-100 file:text-amber-800"
                 />
               </div>
-              <div className="p-3 text-center">
-                <a 
-                  href={selectedProofUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="text-[11px] font-medium text-blue-600 hover:underline"
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPayShipment(null)}
+                  className="text-xs font-semibold px-4 py-2 text-ink/60 hover:text-ink cursor-pointer"
                 >
-                  Buka gambar resolusi penuh di tab baru
-                </a>
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPaying || !buktiBayarFile}
+                  className="text-xs font-bold px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 disabled:opacity-50 cursor-pointer"
+                >
+                  {isPaying ? "Mengirim..." : "Kirim Bukti Pembayaran"}
+                </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL UBAH PROFIL INDUSTRI */}
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-forest/10 rounded-2xl max-w-lg w-full p-6 shadow-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="font-display font-semibold text-xl text-forest mb-4">
+              Ubah Data Industri
+            </h3>
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              <div>
+                <label className="block text-xs text-ink/60 mb-1">Nama Perusahaan</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.nama_perusahaan}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, nama_perusahaan: e.target.value })
+                  }
+                  className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">NPWP</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.npwp}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, npwp: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Nomor Telepon</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.telepon}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, telepon: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Provinsi</label>
+                  <input
+                    type="text"
+                    value={editForm.provinsi}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, provinsi: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Kota / Kabupaten</label>
+                  <input
+                    type="text"
+                    value={editForm.kota_kabupaten}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, kota_kabupaten: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-ink/60 mb-1">Alamat Lengkap</label>
+                <textarea
+                  rows={3}
+                  value={editForm.alamat}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, alamat: e.target.value })
+                  }
+                  className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                <button
+                  type="button"
+                  onClick={() => setIsEditOpen(false)}
+                  className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="text-xs font-semibold px-4 py-2.5 bg-forest text-cream rounded-xl hover:bg-forest/90 disabled:opacity-50 cursor-pointer"
+                >
+                  {editLoading ? "Menyimpan..." : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS AKUN */}
+      {isDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-red-200 rounded-2xl max-w-md w-full p-6 shadow-lg">
+            <h3 className="font-display font-semibold text-xl text-red-900 mb-2">
+              Konfirmasi Hapus Akun
+            </h3>
+            <p className="text-sm text-ink/70 mb-6">
+              Apakah kamu yakin ingin menghapus akun industri ini? Semua data profil dan riwayat penjemputan limbah kamu akan dihapus permanen.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteOpen(false)}
+                className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading}
+                className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+              >
+                {deleteLoading ? "Menghapus..." : "Ya, Hapus Akun"}
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-      </main>
+      {/* MODAL PENCAIRAN KREDIT */}
+      {isWithdrawModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col transform transition-all">
+
+            {!withdrawSuccess ? (
+              <>
+                <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center bg-forest text-cream">
+                  <h3 className="font-display font-semibold text-lg">Pencairan Token</h3>
+                  <button onClick={() => setIsWithdrawModalOpen(false)} className="hover:text-gold transition-colors cursor-pointer">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                <form onSubmit={handlePencairan} className="p-6 space-y-4">
+                  <div className="bg-gold/10 border border-gold/20 rounded-xl p-3 text-center mb-2">
+                    <p className="text-xs text-ink/60 mb-0.5">Saldo Tersedia</p>
+                    <p className="text-lg font-bold text-gold-dark">{totalKredit.toLocaleString("id-ID")} Token</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-ink">Jumlah Token</label>
+                    <input
+                      type="number"
+                      className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
+                      placeholder="Masukkan jumlah"
+                      value={formWithdraw.jumlah_token}
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, jumlah_token: e.target.value })}
+                      required
+                      min="100"
+                      max={totalKredit}
+                    />
+                    <div className="flex justify-between mt-1 px-1">
+                      <p className="text-[10px] text-ink/50">Min. 100 Token</p>
+                      <p className="text-[10px] font-medium text-green">
+                        Est: Rp {estimasiRupiah.toLocaleString("id-ID")}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-ink">Pilih Tujuan Pencairan</label>
+                    <select
+                      className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
+                      value={formWithdraw.metode}
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, metode: e.target.value })}
+                    >
+                      <option value="Bank Transfer">Bank Transfer (BCA, BNI, BRI)</option>
+                      <option value="GoPay">GoPay</option>
+                      <option value="DANA">DANA</option>
+                      <option value="OVO">OVO</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-ink">Nomor Rekening / E-Wallet</label>
+                    <input
+                      type="text"
+                      className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
+                      placeholder="Contoh: 081234567890"
+                      value={formWithdraw.nomor_rekening}
+                      onChange={(e) => setFormWithdraw({ ...formWithdraw, nomor_rekening: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isWithdrawing || !formWithdraw.jumlah_token || !formWithdraw.nomor_rekening}
+                    className="w-full bg-gold text-forest mt-2 py-2.5 rounded-xl text-sm font-bold hover:bg-gold/90 transition-colors disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isWithdrawing ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-forest border-t-transparent rounded-full animate-spin"></span>
+                        Memproses...
+                      </>
+                    ) : (
+                      "Cairkan Sekarang"
+                    )}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <div className="p-8 flex flex-col items-center justify-center text-center space-y-3">
+                <div className="w-16 h-16 bg-green/10 text-green rounded-full flex items-center justify-center mb-2">
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="font-display font-bold text-xl text-forest">Pencairan Berhasil!</h3>
+                <p className="text-sm text-ink/60">
+                  Dana sebesar <strong className="text-ink">Rp {(Number(formWithdraw.jumlah_token) * 500).toLocaleString("id-ID")}</strong> sedang diproses ke {formWithdraw.metode} kamu.
+                </p>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP MODAL KIRIM LIMBAH BIASA */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+
+            <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center shrink-0">
+              <h3 className="font-display font-semibold text-forest text-lg">Formulir Penjemputan Limbah Biasa</h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-forest/5 text-ink/40 hover:text-ink transition-colors cursor-pointer"
+                aria-label="Tutup"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleKirimLimbah} className="p-6 space-y-4 overflow-y-auto">
+              {errorMsg && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs leading-relaxed">
+                  {errorMsg}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Nama Limbah</label>
+                <input
+                  type="text"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white"
+                  placeholder="Contoh: Limbah Plastik Cair"
+                  value={formLimbah.nama_limbah}
+                  onChange={(e) => setFormLimbah({ ...formLimbah, nama_limbah: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Perkiraan Berat (kg)</label>
+                <input
+                  type="number"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white"
+                  placeholder="0"
+                  value={formLimbah.berat}
+                  onChange={(e) => setFormLimbah({ ...formLimbah, berat: e.target.value })}
+                  required
+                  min="1"
+                />
+
+                <div className={`mt-2 p-3 rounded-xl border flex items-center justify-between transition-colors ${
+                  estimasiKredit > 0 ? 'bg-gold/10 border-gold/30' : 'bg-forest/5 border-forest/10'
+                }`}>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-ink/50 mb-0.5">Potensi Pendapatan</p>
+                    <p className="text-xs text-ink/70">Estimasi token yang didapat</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-display font-bold text-lg ${estimasiKredit > 0 ? 'text-gold-dark' : 'text-ink/40'}`}>
+                      +{estimasiKredit.toLocaleString("id-ID")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Detail Lokasi Penjemputan</label>
+                <textarea
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-green bg-white resize-none"
+                  rows={3}
+                  placeholder="Jalan, No. Gedung, Patokan (Otomatis Kapital)"
+                  value={formLimbah.lokasi}
+                  onChange={(e) => setFormLimbah({ ...formLimbah, lokasi: e.target.value.toUpperCase() })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Limbah</label>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg"
+                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-green bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green/10 file:text-green hover:file:bg-green/20"
+                  onChange={(e) => setFormLimbah({ ...formLimbah, foto: e.target.files?.[0] || null })}
+                  required
+                />
+                <p className="text-[11px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
+              </div>
+
+              <div className="pt-4 mt-2 border-t border-forest/10 flex justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-forest text-cream px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-cream border-t-transparent rounded-full animate-spin"></span>
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    "Kirim Jadwal"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP MODAL PENGOLAHAN LIMBAH B3 */}
+      {isB3ModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+
+            <div className="px-6 py-4 border-b border-amber-200 bg-amber-50 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-display font-semibold text-amber-900 text-lg">Formulir Pendaftaran Limbah B3</h3>
+                <p className="text-xs text-amber-700">Daftarkan limbah B3 terlebih dahulu untuk mendapatkan rincian tagihan.</p>
+              </div>
+              <button
+                onClick={() => setIsB3ModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-amber-100 text-amber-700 transition-colors cursor-pointer"
+                aria-label="Tutup"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleKirimLimbahB3} className="p-6 space-y-4 overflow-y-auto">
+              {errorMsg && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs leading-relaxed">
+                  {errorMsg}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Pilih Kategori Limbah B3</label>
+                <select
+                  value={formB3.kategori_id}
+                  onChange={(e) => setFormB3({ ...formB3, kategori_id: e.target.value })}
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                >
+                  {KATEGORI_B3.map((kat) => (
+                    <option key={kat.id} value={kat.id}>
+                      {kat.nama} (Rp {kat.tarif.toLocaleString("id-ID")}/kg)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Nama / Deskripsi Spesifik Limbah</label>
+                <input
+                  type="text"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                  placeholder="Contoh: Sludge Hasil Filtrasi Pabrik"
+                  value={formB3.nama_limbah}
+                  onChange={(e) => setFormB3({ ...formB3, nama_limbah: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Perkiraan Berat Total (kg)</label>
+                <input
+                  type="number"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                  placeholder="0"
+                  value={formB3.berat}
+                  onChange={(e) => setFormB3({ ...formB3, berat: e.target.value })}
+                  required
+                  min="1"
+                />
+
+                <div className="mt-2 p-3 rounded-xl border bg-amber-50/80 border-amber-200 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-800 mb-0.5">Estimasi Biaya Pengolahan</p>
+                    <p className="text-xs text-amber-900/70">Dapat dibayar setelah pendaftaran</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-display font-bold text-lg text-amber-900">
+                      Rp {estimasiBiayaB3.toLocaleString("id-ID")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Detail Lokasi Penjemputan</label>
+                <textarea
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white resize-none"
+                  rows={3}
+                  placeholder="Jalan, No. Gedung, Patokan (Otomatis Kapital)"
+                  value={formB3.lokasi}
+                  onChange={(e) => setFormB3({ ...formB3, lokasi: e.target.value.toUpperCase() })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Dokumentasi Limbah B3</label>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg"
+                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200"
+                  onChange={(e) => setFormB3({ ...formB3, foto: e.target.files?.[0] || null })}
+                  required
+                />
+                <p className="text-[11px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
+              </div>
+
+              <div className="pt-4 mt-2 border-t border-forest/10 flex justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsB3ModalOpen(false)}
+                  className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-amber-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Mendaftarkan...</span>
+                    </>
+                  ) : (
+                    "Daftarkan Sekarang"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* AI Assistant Floating Widget */}
+      <AIAssistant />
     </div>
   );
 }

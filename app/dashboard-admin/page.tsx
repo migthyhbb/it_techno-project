@@ -40,7 +40,7 @@ interface Order {
   created_at: string;
   total_harga: number;
   status: string;
-  bukti_pengiriman_url?: string | null;
+  bukti_pengiriman_url?: string | null; 
 }
 
 interface UserAccount {
@@ -253,7 +253,7 @@ export default function DashboardAdminPage() {
 
     try {
       if (proofFile) {
-        const fileExt = proofFile.name.split(".").pop();
+        const fileExt = proofFile.name.split('.').pop();
         const fileName = `bukti-${selectedOrderUpdate.id}-${Date.now()}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
@@ -273,7 +273,7 @@ export default function DashboardAdminPage() {
         .from("orders")
         .update({
           status: newOrderStatus,
-          ...(finalProofUrl ? { bukti_pengiriman_url: finalProofUrl } : {}),
+          ...(finalProofUrl ? { bukti_pengiriman_url: finalProofUrl } : {})
         })
         .eq("id", selectedOrderUpdate.id);
 
@@ -402,13 +402,10 @@ export default function DashboardAdminPage() {
     e.preventDefault();
     if (!selectedShipment) return;
     setIsSubmitting(true);
-
+    
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase
-      .from("waste_shipments")
-      .update({ status: newStatus })
-      .eq("id", selectedShipment.id);
-
+    const { error } = await supabase.from("waste_shipments").update({ status: newStatus }).eq("id", selectedShipment.id);
+    
     setIsSubmitting(false);
 
     if (error) {
@@ -497,9 +494,22 @@ export default function DashboardAdminPage() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-cream w-full relative overflow-x-hidden">
-      
-      {/* Sidebar Component */}
+    <div className="flex min-h-screen bg-cream relative">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10">
+        <div className="flex flex-col">
+          <span className="font-display font-bold tracking-tight text-base">LENTERA</span>
+          <span className="text-[10px] text-cream/50">Portal Admin</span>
+        </div>
+        <button
+          onClick={() => setIsMobileOpen(true)}
+          className="p-2 text-cream hover:bg-cream/10 rounded-lg transition-colors cursor-pointer"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
+
       <AdminSidebar
         isOpen={isMobileOpen}
         onClose={() => setIsMobileOpen(false)}
@@ -507,50 +517,45 @@ export default function DashboardAdminPage() {
         setActiveTab={setActiveTab}
       />
 
-      {/* Main Content View Container */}
-      <main className="flex-1 min-w-0 w-full px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl">
+      <main className="flex-1 min-w-0 px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-20 md:pt-12">
         <div className="mb-8">
-          <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">
-            Administrator Portal
-          </p>
+          <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">Administrator Portal</p>
           <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest capitalize">
             {activeTab.replace("-", " ")}
           </h1>
         </div>
 
+        {/* 🚀 UPDATE: RINGKASAN DI PERPADAT (2 KOLOM DI MOBILE) */}
         {activeTab === "ringkasan" && (
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-paper p-5 rounded-2xl border border-forest/10 shadow-xs">
-                <p className="text-xs text-ink/50 uppercase font-mono mb-1">Total Mitra</p>
-                <p className="font-display font-semibold text-2xl text-forest">
+          <div className="space-y-5">
+            <div className="bg-paper p-5 md:p-6 rounded-2xl border border-forest/10 shadow-xs">
+              <h3 className="font-display font-semibold text-lg text-forest mb-1.5">Selamat Datang di Portal Kendali</h3>
+              <p className="text-sm text-ink/60 leading-relaxed">
+                Pantau statistik utama, kelola akun, dan navigasikan katalog produk serta pengiriman dari satu tempat.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Mitra</p>
+                <p className="font-display font-semibold text-xl md:text-2xl text-forest">
                   {usersList.filter((u) => u.tipe === "mitra").length}
                 </p>
               </div>
-              <div className="bg-paper p-5 rounded-2xl border border-forest/10 shadow-xs">
-                <p className="text-xs text-ink/50 uppercase font-mono mb-1">Total Industri</p>
-                <p className="font-display font-semibold text-2xl text-forest">
+              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Industri</p>
+                <p className="font-display font-semibold text-xl md:text-2xl text-forest">
                   {usersList.filter((u) => u.tipe === "industri").length}
                 </p>
               </div>
-              <div className="bg-paper p-5 rounded-2xl border border-forest/10 shadow-xs">
-                <p className="text-xs text-ink/50 uppercase font-mono mb-1">Pengiriman Limbah</p>
-                <p className="font-display font-semibold text-2xl text-forest">{shipments.length}</p>
+              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Pengiriman Limbah</p>
+                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{shipments.length}</p>
               </div>
-              <div className="bg-paper p-5 rounded-2xl border border-forest/10 shadow-xs">
-                <p className="text-xs text-ink/50 uppercase font-mono mb-1">Produk Katalog</p>
-                <p className="font-display font-semibold text-2xl text-forest">{products.length}</p>
+              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Produk Katalog</p>
+                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{products.length}</p>
               </div>
-            </div>
-
-            <div className="bg-paper p-6 rounded-2xl border border-forest/10">
-              <h3 className="font-display font-semibold text-lg text-forest mb-2">
-                Selamat Datang di Portal Kendali
-              </h3>
-              <p className="text-sm text-ink/60 leading-relaxed">
-                Gunakan menu di sidebar untuk menavigasi manajemen akun, katalog produk, harga
-                wilayah, dan pengiriman limbah industri.
-              </p>
             </div>
           </div>
         )}
@@ -559,16 +564,57 @@ export default function DashboardAdminPage() {
           <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-forest/10 bg-forest/5 flex justify-between items-center">
               <div>
-                <h3 className="font-display font-semibold text-forest text-base">
-                  Daftar Akun Mitra & Industri
-                </h3>
-                <p className="text-xs text-ink/60">
-                  Inspeksi profil lengkap, foto KTP/NPWP, dan set kuota transaksi.
-                </p>
+                <h3 className="font-display font-semibold text-forest text-base">Daftar Akun Mitra & Industri</h3>
+                <p className="text-xs text-ink/60">Inspeksi profil lengkap, foto KTP/NPWP, dan set kuota transaksi.</p>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse min-w-[600px]">
+
+            <div className="block md:hidden p-4 space-y-4 bg-cream/30">
+              {usersList.map((usr, index) => (
+                <div key={`${usr.tipe}-${usr.user_id}-${index}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-semibold text-forest text-sm">{usr.nama}</h4>
+                      <p className="text-xs text-ink/60 uppercase font-mono mt-0.5">{usr.tipe} • {usr.nik_nib}</p>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${
+                      usr.status_akun === "banned" ? "bg-red-100 text-red-700" : "bg-green/10 text-green"
+                    }`}>
+                      {usr.status_akun}
+                    </span>
+                  </div>
+
+                  {usr.tipe === "mitra" && (
+                    <div className="text-xs text-ink/70">
+                      Penggunaan Kuota: <span className="font-mono font-medium text-forest">{usr.total_pemesanan} / {usr.kuota_pemesanan ?? 30}</span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-forest/5 mt-1">
+                    <button onClick={() => { setSelectedUserDetail(usr); setDetailModalOpen(true); }} className="flex-1 text-xs font-medium py-2 bg-forest/5 text-forest rounded-lg hover:bg-forest/10 transition-colors text-center cursor-pointer">
+                      Detail
+                    </button>
+                    {usr.tipe === "mitra" && (
+                      <button onClick={() => handleOpenOrdersModal(usr)} className="flex-1 text-xs font-medium py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-center cursor-pointer">
+                        Pesanan
+                      </button>
+                    )}
+                    {usr.status_akun === "banned" ? (
+                      <button onClick={() => handleUnbanUser(usr)} className="flex-1 text-xs font-semibold py-2 bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 transition-colors text-center cursor-pointer">
+                        Lepas Ban
+                      </button>
+                    ) : (
+                      <button onClick={() => { setSelectedUser(usr); setBanModalOpen(true); }} className="flex-1 text-xs font-semibold py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-center cursor-pointer">
+                        Ban
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
                   <tr>
                     <th className="p-4">Nama / Perusahaan</th>
@@ -582,7 +628,7 @@ export default function DashboardAdminPage() {
                 <tbody className="divide-y divide-forest/10">
                   {usersList.map((usr, index) => (
                     <tr
-                      key={`${usr.tipe}-${usr.user_id}-${index}`}
+                      key={`desktop-${usr.tipe}-${usr.user_id}-${index}`}
                       className="hover:bg-forest/[0.02] transition-colors"
                     >
                       <td className="p-4 font-medium text-forest">{usr.nama}</td>
@@ -659,16 +705,16 @@ export default function DashboardAdminPage() {
 
         {activeTab === "katalog-produk" && (
           <section className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
+            <div className="flex justify-between items-center mb-2">
               <p className="text-xs text-ink/60">Daftar produk energi yang terdaftar secara nasional.</p>
               <button
                 onClick={() => setProductModalOpen(true)}
-                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer self-start sm:self-auto"
+                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer"
               >
                 + Tambah Produk Baru
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-3 gap-4">
               {products.map((p) => (
                 <div key={p.id} className="bg-paper border border-forest/10 p-5 rounded-2xl flex flex-col relative group shadow-xs">
                   <button
@@ -694,18 +740,18 @@ export default function DashboardAdminPage() {
 
         {activeTab === "harga-wilayah" && (
           <section className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
+            <div className="flex justify-between items-center mb-2">
               <p className="text-xs text-ink/60">Penyesuaian harga dan ketersediaan stok produk per daerah.</p>
               <button
                 onClick={() => setPriceModalOpen(true)}
-                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer self-start sm:self-auto"
+                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer"
               >
                 + Set Harga Wilayah
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-3 gap-4">
               {regionalPrices.length === 0 && (
-                <div className="col-span-1 sm:col-span-2 lg:col-span-3 p-8 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">
+                <div className="col-span-3 p-8 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">
                   Belum ada penyesuaian harga spesifik daerah.
                 </div>
               )}
@@ -733,8 +779,40 @@ export default function DashboardAdminPage() {
 
         {activeTab === "pengiriman" && (
           <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse min-w-[600px]">
+            
+            <div className="block md:hidden p-4 space-y-4 bg-cream/30">
+              {shipments.map((ship) => (
+                <div key={`mobile-ship-${ship.id}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-semibold text-forest text-sm">{ship.industri_profiles?.nama_perusahaan || "-"}</h4>
+                      <p className="text-xs text-ink/70 mt-1">{ship.nama_limbah} <span className="font-semibold">({ship.perkiraan_berat}kg)</span></p>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${
+                      ship.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
+                      : ship.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
+                      : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {ship.status}
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-ink/60 bg-forest/5 p-2 rounded-lg">
+                    <span className="block font-medium text-ink/80 mb-0.5">Lokasi Penjemputan:</span>
+                    {ship.lokasi_penjemputan}
+                  </div>
+
+                  <div className="pt-2 border-t border-forest/5 mt-1">
+                    <button onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }} className="w-full text-xs font-semibold py-2 bg-green/10 text-green rounded-lg hover:bg-green/20 transition-colors text-center cursor-pointer">
+                      Ubah Status
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
                   <tr>
                     <th className="p-4">Industri</th>
@@ -746,7 +824,7 @@ export default function DashboardAdminPage() {
                 </thead>
                 <tbody className="divide-y divide-forest/10">
                   {shipments.map((ship) => (
-                    <tr key={ship.id} className="hover:bg-forest/[0.02] transition-colors">
+                    <tr key={`desktop-ship-${ship.id}`} className="hover:bg-forest/[0.02] transition-colors">
                       <td className="p-4 font-medium text-forest">{ship.industri_profiles?.nama_perusahaan || "-"}</td>
                       <td className="p-4">{ship.nama_limbah} ({ship.perkiraan_berat}kg)</td>
                       <td className="p-4 text-xs max-w-xs truncate">{ship.lokasi_penjemputan}</td>
@@ -775,7 +853,6 @@ export default function DashboardAdminPage() {
           </section>
         )}
 
-        {/* MODAL PROFIL USER */}
         {detailModalOpen && selectedUserDetail && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
@@ -838,7 +915,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL PESANAN MITRA */}
         {ordersModalOpen && selectedUserDetail && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
@@ -867,9 +943,9 @@ export default function DashboardAdminPage() {
                 ) : userOrders.length === 0 ? (
                   <div className="bg-white border border-forest/10 rounded-xl p-6 text-center text-xs text-ink/50">Mitra ini belum pernah melakukan pemesanan produk.</div>
                 ) : (
-                  <div className="border border-forest/10 rounded-xl overflow-hidden bg-white overflow-x-auto">
-                    <table className="w-full text-left text-xs min-w-[500px]">
-                      <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
+                  <div className="border border-forest/10 rounded-xl overflow-hidden bg-white">
+                    <table className="w-full text-left text-xs block md:table overflow-x-auto">
+                      <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10 hidden md:table-header-group">
                         <tr>
                           <th className="p-3">ID Pesanan</th>
                           <th className="p-3">Tanggal</th>
@@ -878,13 +954,22 @@ export default function DashboardAdminPage() {
                           <th className="p-3 text-center">Ubah Status</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-forest/10">
+                      <tbody className="divide-y divide-forest/10 block md:table-row-group">
                         {userOrders.map((ord) => (
-                          <tr key={ord.id}>
-                            <td className="p-3 font-mono font-medium text-forest truncate max-w-[100px]">{ord.id.slice(0, 8)}...</td>
-                            <td className="p-3 text-ink/60">{new Date(ord.created_at).toLocaleDateString("id-ID")}</td>
-                            <td className="p-3 font-semibold text-green">Rp {ord.total_harga?.toLocaleString("id-ID")}</td>
-                            <td className="p-3">
+                          <tr key={ord.id} className="block md:table-row p-4 md:p-0">
+                            <td className="p-1 md:p-3 font-mono font-medium text-forest truncate block md:table-cell mb-2 md:mb-0">
+                              <span className="inline-block md:hidden text-ink/50 mr-2">ID:</span>
+                              {ord.id.slice(0, 8)}...
+                            </td>
+                            <td className="p-1 md:p-3 text-ink/60 block md:table-cell mb-2 md:mb-0">
+                              <span className="inline-block md:hidden text-ink/50 mr-2">Tgl:</span>
+                              {new Date(ord.created_at).toLocaleDateString("id-ID")}
+                            </td>
+                            <td className="p-1 md:p-3 font-semibold text-green block md:table-cell mb-3 md:mb-0">
+                              <span className="inline-block md:hidden text-ink/50 mr-2">Total:</span>
+                              Rp {ord.total_harga?.toLocaleString("id-ID")}
+                            </td>
+                            <td className="p-1 md:p-3 block md:table-cell mb-4 md:mb-0">
                               <div className="flex flex-col gap-1 items-start">
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
                                   ord.status === 'dikirim' ? 'bg-amber-100 text-amber-800'
@@ -908,7 +993,7 @@ export default function DashboardAdminPage() {
                                 )}
                               </div>
                             </td>
-                            <td className="p-3 text-center">
+                            <td className="p-1 md:p-3 text-center block md:table-cell border-t md:border-0 border-forest/10 pt-3 md:pt-0 mt-2 md:mt-0">
                               <button
                                 onClick={() => {
                                   setSelectedOrderUpdate(ord);
@@ -916,7 +1001,7 @@ export default function DashboardAdminPage() {
                                   setProofFile(null); 
                                   setOrderStatusModalOpen(true);
                                 }}
-                                className="text-green hover:underline text-xs font-medium cursor-pointer"
+                                className="w-full md:w-auto text-green hover:underline text-xs font-medium cursor-pointer bg-green/10 md:bg-transparent py-2 md:py-0 rounded-lg md:rounded-none"
                               >
                                 Ubah Status & Bukti
                               </button>
@@ -938,7 +1023,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL EDIT STATUS PESANAN */}
         {orderStatusModalOpen && selectedOrderUpdate && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -985,7 +1069,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL BAN USER */}
         {banModalOpen && selectedUser && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -1007,7 +1090,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL SET HARGA WILAYAH */}
         {priceModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -1063,7 +1145,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL TAMBAH PRODUK */}
         {productModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-lg p-6">
@@ -1085,7 +1166,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL STATUS PENGIRIMAN LIMBAH */}
         {statusModalOpen && selectedShipment && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -1108,7 +1188,7 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* MODAL FOTO BUKTI PENGIRIMAN */}
+        {/* 🚀 MODAL BARU: TAMPILKAN BUKTI PENGIRIMAN DI ADMIN */}
         {proofModalOpen && selectedProofUrl && (
           <div 
             className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"
