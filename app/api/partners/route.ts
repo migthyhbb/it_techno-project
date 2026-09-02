@@ -21,12 +21,14 @@ export async function GET() {
     // 1. Fetch data dari tabel mitra_profiles
     const { data: mitraData, error: mitraError } = await supabase
       .from("mitra_profiles")
-      .select("*");
+      .select("id, nama, nama_mitra, nama_lengkap, name, alamat, lokasi, alamat_lengkap, created_at")
+      .limit(100);
 
     // 2. Fetch data dari tabel industri_profiles
     const { data: industriData, error: industriError } = await supabase
       .from("industri_profiles")
-      .select("*");
+      .select("id, nama, nama_perusahaan, nama_industri, name, alamat, lokasi, alamat_perusahaan, created_at")
+      .limit(100);
 
     if (mitraError) {
       console.error("Error fetching mitra_profiles:", mitraError.message);

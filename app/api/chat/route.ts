@@ -1,10 +1,50 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createClient } from "@/lib/supabase/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const maxDuration = 60;
+
+let ratelimit: Ratelimit | null = null;
+
+try {
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+
+    ratelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "60 s"),
+      analytics: true,
+    });
+  }
+} catch (e) {
+  console.warn("Ratelimit init skipped:", e);
+}
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    if (ratelimit) {
+      try {
+        const { success } = await ratelimit.limit(`chat:${user.id}`);
+        if (!success) {
+          return new Response("Terlalu banyak permintaan. Silakan tunggu beberapa detik.", { status: 429 });
+        }
+      } catch (err) {
+        console.warn("Ratelimit Redis skipped:", err);
+      }
+    }
+
     const { message } = await req.json();
     const apiKey = process.env.GEMINI_API_KEY;
 

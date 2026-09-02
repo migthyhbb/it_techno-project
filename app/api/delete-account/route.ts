@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
   try {
@@ -10,6 +11,17 @@ export async function POST(req: Request) {
         { error: "User ID tidak ditemukan" },
         { status: 400 }
       );
+    }
+
+    const supabase = await createServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (userId !== user.id) {
+      return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
     }
 
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

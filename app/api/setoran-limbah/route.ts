@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
   try {
@@ -50,8 +51,10 @@ export async function POST(req: Request) {
       );
     }
 
+    const supabaseAdmin = createAdminClient();
+
     // Simpan ke database Supabase
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("waste_shipments")
       .insert({
         user_id: userId,

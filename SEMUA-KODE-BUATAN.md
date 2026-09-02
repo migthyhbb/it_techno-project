@@ -1,6 +1,6 @@
-# Semua Kode Buatan LENTERA
+﻿# Semua Kode Buatan LENTERA
 
-Dokumen ini adalah snapshot dari source aktual repository. Seluruh file TypeScript, TSX, JavaScript/MJS, CSS, dan schema SQL disertakan; file rahasia `.env`, dependency, asset biner, build output, dan dokumen ini sendiri tidak disertakan.
+Dokumen ini adalah snapshot source dan konfigurasi kode aktual repository. File yang di-ignore Git, `.gitignore` itu sendiri, dependency lock, asset, dokumentasi, dan dokumen ini tidak disertakan.
 
 ## FILE: __tests__/auth.test.ts
 
@@ -48,9 +48,79 @@ test("redeem: percobaan kedua tidak dapat membelanjakan saldo yang sama", () => 
 });
 ```
 
-## FILE: app/admin/page.tsx
+## FILE: __tests__/kyc-validation.test.ts
 
 ```ts
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { validateOfficialDocumentImage } from "../lib/kyc-validation.ts";
+
+test("KYC validator rejects non-official document responses", async () => {
+  const result = await validateOfficialDocumentImage(
+    "https://example.com/not-a-document.jpg",
+    "NO",
+  );
+
+  assert.equal(result, false);
+});
+
+test("KYC validator accepts official document responses", async () => {
+  const result = await validateOfficialDocumentImage(
+    "https://example.com/ktp.jpg",
+    "YES",
+  );
+
+  assert.equal(result, true);
+});
+```
+
+## FILE: __tests__/webhook.test.ts
+
+```ts
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createMidtransSignature, isValidMidtransSignature } from "../lib/midtrans-signature.ts";
+
+test("Midtrans webhook: signature SHA-512 valid diterima", () => {
+  const payload = {
+    orderId: "AGEN-order-123",
+    statusCode: "200",
+    grossAmount: "45000.00",
+  };
+  const serverKey = "dummy-midtrans-server-key";
+  const signature = createMidtransSignature(
+    payload.orderId,
+    payload.statusCode,
+    payload.grossAmount,
+    serverKey,
+  );
+
+  assert.equal(
+    isValidMidtransSignature(
+      signature,
+      payload.orderId,
+      payload.statusCode,
+      payload.grossAmount,
+      serverKey,
+    ),
+    true,
+  );
+});
+
+test("Midtrans webhook: signature palsu ditolak", () => {
+  const signature = createMidtransSignature("ORDER-1", "200", "10000.00", "dummy-key");
+
+  assert.equal(
+    isValidMidtransSignature(signature, "ORDER-1", "200", "99999.00", "dummy-key"),
+    false,
+  );
+});
+```
+
+## FILE: app/admin/page.tsx
+
+```tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -77,7 +147,7 @@ export default function AdminPage() {
         .maybeSingle();
 
       if (!adminRow) {
-        // Login valid tapi bukan akun admin — jangan biarkan lihat halaman ini.
+        // Login valid tapi bukan akun admin â€” jangan biarkan lihat halaman ini.
         router.replace("/masuk");
         return;
       }
@@ -106,7 +176,7 @@ export default function AdminPage() {
         </h1>
         <p className="text-ink/60 text-sm leading-relaxed">
           Jalur login admin sudah berfungsi. Halaman dashboard admin
-          sungguhan (data mitra & industri, dll) belum dibuat — ini baru
+          sungguhan (data mitra & industri, dll) belum dibuat â€” ini baru
           placeholder untuk konfirmasi routing-nya jalan.
         </p>
       </div>
@@ -197,11 +267,19 @@ export async function PATCH(request: Request) {
 ```ts
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { createClient } from '@/lib/supabase/server';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { pertanyaan } = body;
 
@@ -344,6 +422,24 @@ export async function POST(request: Request) {
 
     if (!inputNpwp || !inputNama || !fileDokumen) {
       return NextResponse.json({ error: "Data KYC tidak lengkap." }, { status: 400 });
+    }
+
+    const maxFileSize = 5 * 1024 * 1024;
+    const allowedFileTypes: Record<string, string[]> = {
+      pdf: ["application/pdf"],
+      png: ["image/png"],
+      jpg: ["image/jpeg"],
+      jpeg: ["image/jpeg"],
+    };
+
+    if (!(fileDokumen instanceof File) || fileDokumen.size > maxFileSize) {
+      return NextResponse.json({ error: "Ukuran dokumen maksimal 5 MB." }, { status: 400 });
+    }
+
+    const fileExtension = fileDokumen.name.split('.').pop()?.toLowerCase() || "";
+
+    if (!allowedFileTypes[fileExtension]?.includes(fileDokumen.type)) {
+      return NextResponse.json({ error: "Tipe dokumen tidak didukung." }, { status: 400 });
     }
 
     const bytes = await fileDokumen.arrayBuffer();
@@ -523,27 +619,99 @@ export async function POST() {
 
 ```ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
+export const runtime = "edge";
+export const maxDuration = 60;
+
+let ratelimit: Ratelimit | null = null;
+
+try {
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+
+    ratelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "60 s"),
+      analytics: true,
+    });
+  }
+} catch (e) {
+  console.warn("Ratelimit init skipped:", e);
+}
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    if (ratelimit) {
+      try {
+        const { success } = await ratelimit.limit(`chat:${user.id}`);
+        if (!success) {
+          return new Response("Terlalu banyak permintaan. Silakan tunggu beberapa detik.", { status: 429 });
+        }
+      } catch (err) {
+        console.warn("Ratelimit Redis skipped:", err);
+      }
+    }
+
     const { message } = await req.json();
     const apiKey = process.env.GEMINI_API_KEY;
 
-    if (!apiKey) return NextResponse.json({ reply: "API Key Gemini belum dipasang!" }, { status: 500 });
+    if (!apiKey) {
+      return new Response("API Key Gemini belum dipasang!", { status: 500 });
+    }
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      systemInstruction: "Kamu adalah Asisten AI LENTERA..."
+      model: "gemini-3.5-flash-lite",
+      systemInstruction: `Kamu adalah Asisten AI Resmi dari LENTERA (Limbah Energi Terjangkau Rakyat).
+
+Peran & Karakter:
+1. Ramah, profesional, solutif, dan mendukung keberlanjutan lingkungan (sustainability).
+2. Membantu menjawab pertanyaan pengguna terkait:
+   - Pengolahan limbah industri (minyak jelantah, limbah kayu, limbah organik, dll) menjadi energi alternatif/biomassa/biodiesel.
+   - Cara bergabung sebagai Mitra Agen/Distributor atau Industri Penyuplai Limbah.
+   - Program edukasi energi terbarukan LENTERA.
+3. Jawab dengan ringkas, jelas, dan gunakan bahasa Indonesia yang baik tanpa ada format bold.
+
+Restriksi / Batasan:
+- Jika ada pertanyaan di luar topik energi terbarukan, lingkungan, atau layanan LENTERA, tolak dengan sopan dan ingatkan fokus kamu sebagai Asisten LENTERA.
+- Jangan memberikan informasi harga yang tidak ada di platform, arahkan untuk cek langsung di halaman produk/dashboard.
+`
+
     });
 
-    const result = await model.generateContent(message);
-    return NextResponse.json({ reply: result.response.text() });
+    const result = await model.generateContentStream(message);
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        for await (const chunk of result.stream) {
+          const chunkText = chunk.text();
+          controller.enqueue(new TextEncoder().encode(chunkText));
+        }
+        controller.close();
+      }
+    });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    });
+
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Terjadi kesalahan pada AI";
     console.error("Gemini SDK Error:", msg);
-    return NextResponse.json({ reply: `Gagal memproses AI: ${msg}` }, { status: 500 });
+    return new Response(`Gagal memproses AI: ${msg}`, { status: 500 });
   }
 }
 ```
@@ -554,14 +722,34 @@ export async function POST(req: Request) {
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 import { translateAuthError } from "@/lib/auth-errors";
+import { validateOfficialDocumentImage } from "@/lib/kyc-validation";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { email, password, nama_perusahaan, npwp, alamat, telepon } = body;
+  const { email, password, nama_perusahaan, npwp, alamat, telepon, dokumen_url } = body;
 
   if (!email || !password || !nama_perusahaan || !npwp || !alamat || !telepon) {
     return NextResponse.json(
       { error: "Semua kolom wajib diisi." },
+      { status: 400 }
+    );
+  }
+
+  const imageUrl = dokumen_url || body.foto_npwp_url || null;
+  if (!imageUrl) {
+    return NextResponse.json(
+      { error: "Dokumen KYC wajib diunggah sebelum pendaftaran." },
+      { status: 400 }
+    );
+  }
+
+  const isKycApproved = await validateOfficialDocumentImage(imageUrl);
+  if (!isKycApproved) {
+    return NextResponse.json(
+      {
+        error:
+          "Verifikasi KYC Gagal: Sistem mendeteksi foto yang diunggah bukan dokumen resmi (KTP/NIB) yang valid.",
+      },
       { status: 400 }
     );
   }
@@ -594,7 +782,7 @@ export async function POST(request: Request) {
     }
 
     // 2) Simpan detail profil, ditautkan ke user_id yang baru dibuat.
-    //    Pakai service role jadi tidak kena RLS — tidak bergantung sesi
+    //    Pakai service role jadi tidak kena RLS â€” tidak bergantung sesi
     //    login yang belum tentu ada di titik ini.
     const { error: profileError } = await supabase.from("industri_profiles").insert({
       user_id: userData.user.id,
@@ -605,7 +793,7 @@ export async function POST(request: Request) {
     });
     if (profileError) {
       console.error("Gagal menyimpan profil industri:", profileError);
-      // Akun sudah kebuat tapi profil gagal disimpan — hapus lagi akunnya
+      // Akun sudah kebuat tapi profil gagal disimpan â€” hapus lagi akunnya
       // supaya tidak nyangkut jadi akun "kosong" dan email-nya bisa dipakai
       // untuk coba daftar ulang.
       await supabase.auth.admin.deleteUser(userData.user.id);
@@ -632,6 +820,7 @@ export async function POST(request: Request) {
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 import { translateAuthError } from "@/lib/auth-errors";
+import { validateOfficialDocumentImage } from "@/lib/kyc-validation";
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -647,12 +836,32 @@ export async function POST(request: Request) {
     kecamatan,
     kelurahan,
     lat,
-    lng
+    lng,
+    dokumen_url,
   } = body;
 
   if (!email || !password || !nama_mitra || !nik_nib || !alamat || !telepon) {
     return NextResponse.json(
       { error: "Semua kolom utama wajib diisi." },
+      { status: 400 }
+    );
+  }
+
+  const imageUrl = dokumen_url || body.foto_nik_url || null;
+  if (!imageUrl) {
+    return NextResponse.json(
+      { error: "Dokumen KYC wajib diunggah sebelum pendaftaran." },
+      { status: 400 }
+    );
+  }
+
+  const isKycApproved = await validateOfficialDocumentImage(imageUrl);
+  if (!isKycApproved) {
+    return NextResponse.json(
+      {
+        error:
+          "Verifikasi KYC Gagal: Sistem mendeteksi foto yang diunggah bukan dokumen resmi (KTP/NIB) yang valid.",
+      },
       { status: 400 }
     );
   }
@@ -710,6 +919,84 @@ export async function POST(request: Request) {
     console.error("Kesalahan tak terduga saat daftar mitra:", err);
     return NextResponse.json(
       { error: "Terjadi kesalahan di server, coba lagi." },
+      { status: 500 }
+    );
+  }
+}
+```
+
+## FILE: app/api/delete-account/route.ts
+
+```ts
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
+
+export async function POST(req: Request) {
+  try {
+    const { userId } = await req.json();
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "User ID tidak ditemukan" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = await createServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (userId !== user.id) {
+      return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
+    }
+
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    if (!serviceRoleKey || !supabaseUrl) {
+      return NextResponse.json(
+        { error: "SUPABASE_SERVICE_ROLE_KEY belum dipasang di .env.local" },
+        { status: 500 }
+      );
+    }
+
+    // Inisialisasi Supabase Admin Client
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    // 1. Hapus data profil mitra di database
+    await supabaseAdmin
+      .from("mitra_profiles")
+      .delete()
+      .eq("user_id", userId);
+
+    // 2. Hapus user dari Supabase Auth secara permanen (auth.users)
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(
+      userId
+    );
+
+    if (deleteError) {
+      return NextResponse.json(
+        { error: deleteError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Terjadi kesalahan server";
+
+    return NextResponse.json(
+      { error: message },
       { status: 500 }
     );
   }
@@ -799,6 +1086,38 @@ export async function POST(request: Request) {
 }
 ```
 
+## FILE: app/api/health/route.ts
+
+```ts
+import { NextResponse } from "next/server";
+import { Redis } from "@upstash/redis";
+
+export async function GET() {
+  const timestamp = new Date().toISOString();
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (!url || !token) {
+    return NextResponse.json(
+      { status: "unhealthy", redis: "disconnected", timestamp },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const redis = new Redis({ url, token });
+    await redis.ping();
+    return NextResponse.json({ status: "healthy", redis: "connected", timestamp }, { status: 200 });
+  } catch (error: unknown) {
+    console.error("Health check Redis gagal:", error);
+    return NextResponse.json(
+      { status: "unhealthy", redis: "disconnected", timestamp },
+      { status: 503 },
+    );
+  }
+}
+```
+
 ## FILE: app/api/katalog/produk/route.ts
 
 ```ts
@@ -844,12 +1163,19 @@ export async function GET() {
 ```ts
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { createAdminClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function POST(request: Request) {
   try {
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const supabase = createAdminClient();
     const formData = await request.formData();
 
@@ -1098,15 +1424,29 @@ const redis = new Redis({
 
 export async function POST(request: Request) {
   try {
-    // 1. KEAMANAN MUTLAK: Ambil ID langsung dari Sesi Login, JANGAN dari Front-End!
+    // 1. Ambil Token Autentikasi dari Header
+    const authHeader = request.headers.get("Authorization");
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    
+    let userId: string | null = null;
 
-    if (!user) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) userId = user.id;
+    }
+
+    // Fallback jika token dikirim via Cookie Sesi Server
+    if (!userId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) userId = user.id;
+    }
+
+    if (!userId) {
       return NextResponse.json({ error: "Sesi tidak valid / Belum login." }, { status: 401 });
     }
-    const userId = user.id;
 
+    // Rate Limiting via Redis
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
       || request.headers.get("x-real-ip")
       || "unknown";
@@ -1120,24 +1460,56 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Tangkap Payload (Hanya deskripsi dan berat)
-    const { deskripsi_input, berat_kg, lokasi, foto_url } = await request.json();
+    // 2. Tangkap Payload Lengkap (Biasa & B3)
+    const {
+      deskripsi_input,
+      berat_kg,
+      lokasi,
+      foto_url,
+      is_b3,
+      kategori_b3,
+      biaya_pengolahan,
+      status
+    } = await request.json();
 
     if (!deskripsi_input || !berat_kg || !lokasi) {
       return NextResponse.json({ error: "Data limbah tidak lengkap." }, { status: 400 });
     }
 
-    // 3. HEURISTIC FILTER (Jalur Cepat Non-B3)
+    const supabaseAdmin = createAdminClient();
+
+    // 3. JIKA PERMINTAAN LIMBAH B3: LANGSUNG CATAT DENGAN STATUS "Menunggu Pembayaran"
+    if (is_b3) {
+      const { data, error } = await supabaseAdmin.from('waste_shipments').insert([{
+        user_id: userId,
+        nama_limbah: deskripsi_input,
+        perkiraan_berat: berat_kg,
+        lokasi_penjemputan: lokasi,
+        kategori: 'B3',
+        kategori_b3: kategori_b3 || null,
+        biaya_pengolahan: biaya_pengolahan || null,
+        is_b3: true,
+        foto_url: foto_url || "",
+        status: status || 'Menunggu Pembayaran'
+      }]).select().single();
+
+      if (error) throw error;
+
+      return NextResponse.json({
+        message: "Limbah B3 berhasil didaftarkan.",
+        data
+      }, { status: 201 });
+    }
+
+    // 4. HEURISTIC FILTER (Jalur Cepat Non-B3)
     const kataKunciAman = ['kardus', 'kertas', 'plastik', 'botol', 'kayu', 'serbuk', 'daun', 'organik'];
     const inputLowerCase = deskripsi_input.toLowerCase();
     const isOtomatisAman = kataKunciAman.some(kata => inputLowerCase.includes(kata));
 
     if (isOtomatisAman) {
-      // PROSES NON-B3 SECARA INSTAN
       const poin = Math.round(berat_kg * 10);
-      const supabaseAdmin = createAdminClient();
 
-      const { error } = await supabaseAdmin.from('waste_shipments').insert([{
+      const { data, error } = await supabaseAdmin.from('waste_shipments').insert([{
         user_id: userId,
         nama_limbah: deskripsi_input,
         perkiraan_berat: berat_kg,
@@ -1145,8 +1517,8 @@ export async function POST(request: Request) {
         kategori: 'NON_B3',
         jalur_proses: 'IN_HOUSE',
         poin_didapat: poin,
-        foto_url: foto_url,
-        status: 'menunggu_konfirmasi'
+        foto_url: foto_url || "",
+        status: 'Menunggu Penjemputan'
       }]).select().single();
 
       if (error) throw error;
@@ -1154,11 +1526,12 @@ export async function POST(request: Request) {
       return NextResponse.json({
         message: "Setoran limbah dicatat. Menunggu penjemputan.",
         kategori: "NON_B3",
-        poin_tambahan: poin
+        poin_tambahan: poin,
+        data
       }, { status: 201 });
 
     } else {
-      // PROSES AMBIGU: Lempar ke AI Pekerja Latar Belakang (QStash)
+      // 5. PROSES AMBIGU: Lempar ke AI Worker (QStash)
       const workerUrl = process.env.NODE_ENV === 'production'
         ? `https://${process.env.VERCEL_URL}/api/limbah/worker`
         : process.env.NGROK_URL + '/api/limbah/worker';
@@ -1175,7 +1548,7 @@ export async function POST(request: Request) {
       }, { status: 202 });
     }
 
-  }  catch (error: unknown) {
+  } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Kesalahan server internal.";
     console.error("API Setoran Error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -1270,12 +1643,14 @@ export async function GET() {
     // 1. Fetch data dari tabel mitra_profiles
     const { data: mitraData, error: mitraError } = await supabase
       .from("mitra_profiles")
-      .select("*");
+      .select("id, nama, nama_mitra, nama_lengkap, name, alamat, lokasi, alamat_lengkap, created_at")
+      .limit(100);
 
     // 2. Fetch data dari tabel industri_profiles
     const { data: industriData, error: industriError } = await supabase
       .from("industri_profiles")
-      .select("*");
+      .select("id, nama, nama_perusahaan, nama_industri, name, alamat, lokasi, alamat_perusahaan, created_at")
+      .limit(100);
 
     if (mitraError) {
       console.error("Error fetching mitra_profiles:", mitraError.message);
@@ -1389,80 +1764,229 @@ export async function PATCH(request: Request) {
 }
 ```
 
-## FILE: app/api/transaksi/order/route.ts
+## FILE: app/api/setoran-limbah/route.ts
 
 ```ts
-import { NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/server";
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
-    // 1. KEAMANAN MUTLAK: Ambil ID dari Sesi Login, abaikan ID dari Front-End
-    const supabaseUser = await createClient();
-    const { data: { user } } = await supabaseUser.auth.getUser();
+    const body = await req.json();
+    const {
+      deskripsi_input,
+      berat_kg,
+      lokasi,
+      foto_url,
+      is_b3,
+      kategori_b3,
+      biaya_pengolahan,
+      status,
+    } = body;
 
-    if (!user) {
-      return NextResponse.json({ error: "Sesi tidak valid / Belum login." }, { status: 401 });
-    }
-    const id_agen = user.id;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    const body = await request.json();
-    const { volume_terjual_kg } = body;
-
-    // Tangkal Nilai Negatif
-    if (!volume_terjual_kg || Number(volume_terjual_kg) <= 0) {
+    if (!supabaseUrl || !supabaseAnonKey) {
       return NextResponse.json(
-        { error: "Volume penjualan tidak valid." },
-        { status: 400 }
+        { error: "Konfigurasi Supabase tidak ditemukan di .env" },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    // Dapatkan sesi user aktif
+    const authHeader = req.headers.get("Authorization");
+    let userId = null;
+
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) userId = user.id;
+    }
+
+    // Jika user id belum didapat via token, coba via sesi client
+    if (!userId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) userId = user.id;
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Sesi Anda tidak valid. Silakan re-login." },
+        { status: 401 }
       );
     }
 
     const supabaseAdmin = createAdminClient();
 
-    // 2. AMBIL HARGA HET TERBARU
-    const { data: hargaData } = await supabaseAdmin
-      .from('patokan_harga')
-      .select('harga_rekomendasi_ai')
-      .eq('status', 'Approved')
-      .order('created_at', { ascending: false })
-      .limit(1)
+    // Simpan ke database Supabase
+    const { data, error } = await supabaseAdmin
+      .from("waste_shipments")
+      .insert({
+        user_id: userId,
+        nama_limbah: deskripsi_input,
+        perkiraan_berat: Number(berat_kg),
+        lokasi_penjemputan: lokasi,
+        foto_url: foto_url || "",
+        is_b3: Boolean(is_b3),
+        kategori_b3: kategori_b3 || null,
+        biaya_pengolahan: biaya_pengolahan ? Number(biaya_pengolahan) : null,
+        status: status || (is_b3 ? "Menunggu Pembayaran" : "Menunggu Penjemputan"),
+      })
+      .select()
       .single();
 
-    const harga_per_kg = hargaData ? hargaData.harga_rekomendasi_ai : 3000;
-    const total_pendapatan = Number(volume_terjual_kg) * harga_per_kg;
-
-    // 3. DELEGASIKAN KE DATABASE (ATOMIC TRANSACTION)
-    const { data: rpcResult, error: rpcError } = await supabaseAdmin
-      .rpc('eksekusi_kasir_atomic', {
-        p_id_agen: id_agen,
-        p_volume_kg: Number(volume_terjual_kg),
-        p_harga_per_kg: harga_per_kg,
-        p_total_pendapatan: total_pendapatan
-      });
-
-    if (rpcError) throw rpcError;
-
-    if (!rpcResult.success) {
-      return NextResponse.json(
-        { error: `Transaksi Gagal: ${rpcResult.message}` },
-        { status: 400 }
-      );
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({
-      message: "Transaksi Kasir Berhasil!",
-      struk_digital: {
-        volume_kg: volume_terjual_kg,
-        harga_satuan: harga_per_kg,
-        total_bayar: total_pendapatan,
-        sisa_stok_gudang: rpcResult.sisa_stok_gudang,
-        saldo_dompet_sekarang: rpcResult.saldo_dompet_sekarang
-      }
-    }, { status: 201 });
+    return NextResponse.json({ success: true, data });
+  } catch (err) {
+    console.error("Error pada setoran-limbah:", err);
+    return NextResponse.json(
+      { error: "Terjadi kesalahan internal server." },
+      { status: 500 }
+    );
+  }
+}
+```
 
-  } catch (_err: unknown) { // <-- Kerapian: Ganti 'any' jadi 'unknown'
-    const msg = _err instanceof Error ? _err.message : "Terjadi kesalahan internal";
-    console.error("API POS/Order Error:", msg);
+## FILE: app/api/transaksi/order/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
+import midtransClient from 'midtrans-client';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+
+let ratelimit: Ratelimit | null = null;
+
+try {
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+
+    ratelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "60 s"),
+      analytics: true,
+    });
+  }
+} catch (e) {
+  console.warn("Ratelimit init skipped:", e);
+}
+
+export async function POST(request: Request) {
+  try {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || request.headers.get('x-real-ip')
+      || '127.0.0.1';
+
+    if (ratelimit) {
+      try {
+        const { success } = await ratelimit.limit(ip);
+        if (!success) {
+          return NextResponse.json(
+            { error: 'Terlalu banyak permintaan. Silakan tunggu beberapa detik.' },
+            { status: 429 }
+          );
+        }
+      } catch (err) {
+        console.warn("Ratelimit Redis skipped:", err);
+      }
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return NextResponse.json({ error: "Sesi habis, silakan login ulang." }, { status: 401 });
+
+    const body = await request.json() as Record<string, unknown>;
+    const produk_id = String(body.produk_id || body.product_id || "");
+    const volume_terjual_kg = Number(body.volume_terjual_kg || body.jumlah || 0);
+
+    if (!volume_terjual_kg || volume_terjual_kg <= 0 || !produk_id) {
+      return NextResponse.json({ error: "Data pesanan tidak valid." }, { status: 400 });
+    }
+
+    const supabaseAdmin = createAdminClient();
+
+    // 1. Ambil data produk untuk menghitung total harga
+    const { data: product } = await supabaseAdmin
+      .from('products')
+      .select('*')
+      .eq('id', produk_id)
+      .maybeSingle();
+
+    const harga = product?.harga_default || product?.price || 15000;
+    const totalBayar = volume_terjual_kg * harga;
+    const orderId = `AGEN-${Date.now()}`;
+
+    const serverKey = process.env.MIDTRANS_SERVER_KEY;
+    const clientKey = process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY;
+
+    let snapToken: string | null = null;
+
+    if (serverKey && serverKey.trim().length > 0) {
+      try {
+        const snap = new midtransClient.Snap({
+          isProduction: false,
+          serverKey: serverKey.trim(),
+          clientKey: clientKey ? clientKey.trim() : ""
+        });
+
+        const parameter = {
+          transaction_details: {
+            order_id: orderId,
+            gross_amount: Math.round(totalBayar)
+          },
+          customer_details: {
+            first_name: "Mitra",
+            email: user.email || "mitra@lentera.com"
+          }
+        };
+
+        const transaction = await snap.createTransaction(parameter);
+        snapToken = transaction.token;
+      } catch (midtransErr) {
+        console.warn("Midtrans SDK Warning (Menggunakan Mode SIMULASI):", midtransErr);
+      }
+    }
+
+    const statusPesanan = snapToken ? 'menunggu_pembayaran' : 'diproses';
+
+    // 2. Simpan ke tabel orders (untuk dibaca oleh Dashboard Mitra)
+    await supabaseAdmin.from('orders').insert([{
+      id: orderId,
+      user_id: user.id,
+      total_harga: totalBayar,
+      status: statusPesanan
+    }]);
+
+    // 3. Simpan ke tabel pesanan_mitra (untuk manajemen riwayat backend)
+    await supabaseAdmin.from('pesanan_mitra').insert([{
+      id: orderId,
+      user_id: user.id,
+      produk_id: produk_id,
+      jumlah: volume_terjual_kg,
+      total_harga: totalBayar,
+      status: statusPesanan.toUpperCase()
+    }]);
+
+    return NextResponse.json({
+      token: snapToken,
+      message: snapToken ? "Menunggu pembayaran" : "Pesanan berhasil dibuat!",
+    }, { status: 200 });
+
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Kesalahan Internal Server";
+    console.error("API Order Error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
@@ -1523,12 +2047,81 @@ export async function GET(request: Request) {
 }
 ```
 
-## FILE: app/api/webhook/route.ts
+## FILE: app/api/transaksi/update_stock/route.ts
+
+```ts
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
+
+export async function POST(req: Request) {
+  try {
+    const supabase = await createServerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { product_id, quantity, user_id, total_harga } = body;
+
+    // Paksa pastikan quantity jadi format Angka (Number)
+    const qtyNum = Number(quantity);
+
+    if (!product_id || !qtyNum) {
+      return NextResponse.json({ error: "Data tidak lengkap" }, { status: 400 });
+    }
+
+    // 1. Kurangi Stok Master (Products)
+    const { data: masterData } = await supabaseAdmin.from("products").select("stok").eq("id", product_id).single();
+    if (masterData) {
+      const sisa = Number(masterData.stok || 0) - qtyNum;
+      await supabaseAdmin.from("products").update({ stok: sisa, stok_dummy: sisa }).eq("id", product_id);
+    }
+
+    // 2. Kurangi Stok Wilayah (Regional)
+    const { data: regData } = await supabaseAdmin.from("regional_product_prices").select("id, stok").eq("product_id", product_id);
+    if (regData && regData.length > 0) {
+      for (const reg of regData) {
+        const sisaReg = Number(reg.stok || 0) - qtyNum;
+        await supabaseAdmin.from("regional_product_prices").update({ stok: sisaReg }).eq("id", reg.id);
+      }
+    }
+
+    // 3. Catat Struk Pesanan ke Orders
+    if (user_id && total_harga) {
+      const { error: errOrder } = await supabaseAdmin.from("orders").insert({
+        id: crypto.randomUUID(), 
+        user_id: user_id,
+        status: "diproses",
+        total_harga: Number(total_harga),
+        items: { product_id, quantity: qtyNum }
+      });
+      
+      // Kalau nolak, panggil error ke layar!
+      if (errOrder) throw new Error("Gagal catat pesanan: " + errOrder.message);
+    }
+
+    return NextResponse.json({ success: true });
+
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+```
+
+## FILE: app/api/transaksi/webhook/route.ts
 
 ```ts
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import crypto from "crypto";
+import { isValidMidtransSignature } from "@/lib/midtrans-signature";
 
 export async function POST(request: Request) {
   try {
@@ -1548,19 +2141,61 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Webhook belum dikonfigurasi" }, { status: 500 });
     }
 
-    const hash = crypto
-      .createHash("sha512")
-      .update(`${order_id}${status_code}${gross_amount}${serverKey}`)
-      .digest("hex");
-    const receivedSignature = Buffer.from(signature_key, "utf8");
-    const expectedSignature = Buffer.from(hash, "utf8");
-
-    if (
-      receivedSignature.length !== expectedSignature.length ||
-      !crypto.timingSafeEqual(receivedSignature, expectedSignature)
-    ) {
+    if (!isValidMidtransSignature(signature_key, order_id, status_code, gross_amount, serverKey)) {
       console.error("WEBHOOK DITOLAK: Signature Midtrans Palsu!");
       return NextResponse.json({ error: "Invalid Signature" }, { status: 403 });
+    }
+
+    if (["expire", "cancel", "deny"].includes(transaction_status)) {
+      const supabase = createAdminClient();
+
+      if (order_id.startsWith("AGEN-")) {
+        const { data: pesanan, error: pesananError } = await supabase
+          .from("pesanan_mitra")
+          .select("status, produk_id, jumlah")
+          .eq("id", order_id)
+          .single();
+
+        if (pesananError) throw pesananError;
+
+        if (pesanan && pesanan.status !== "DIBATALKAN") {
+          const { data: updatedOrder, error: updateError } = await supabase
+            .from("pesanan_mitra")
+            .update({ status: "DIBATALKAN" })
+            .eq("id", order_id)
+            .neq("status", "DIBATALKAN")
+            .select("id")
+            .maybeSingle();
+
+          if (updateError) throw updateError;
+
+          if (updatedOrder) {
+            const { data: product, error: productError } = await supabase
+              .from("products")
+              .select("stok, stok_dummy")
+              .eq("id", pesanan.produk_id)
+              .single();
+
+            if (productError) throw productError;
+
+            const restoredStock = Number(product.stok || 0) + Number(pesanan.jumlah || 0);
+            const restoredDummyStock = Number(product.stok_dummy ?? product.stok ?? 0) + Number(pesanan.jumlah || 0);
+            const { error: stockError } = await supabase
+              .from("products")
+              .update({ stok: restoredStock, stok_dummy: restoredDummyStock })
+              .eq("id", pesanan.produk_id);
+
+            if (stockError) throw stockError;
+          }
+        }
+
+        await supabase
+          .from("orders")
+          .update({ status: "dibatalkan" })
+          .eq("id", order_id);
+      }
+
+      return NextResponse.json({ message: "Pesanan dibatalkan dan stok dikembalikan" }, { status: 200 });
     }
 
     if (transaction_status !== "settlement" && transaction_status !== "capture") {
@@ -1629,768 +2264,186 @@ export async function POST(request: Request) {
 
 ## FILE: app/daftar/industri/page.tsx
 
-```ts
+```tsx
 "use client";
 
-import { useEffect, useState, useId } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "motion/react";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/auth/form-field";
-import { OtpField } from "@/components/auth/otp-field";
 import { SubmitButton } from "@/components/auth/submit-button";
-import { BackButton } from "@/components/auth/back-button";
-import { ProgressSteps } from "@/components/auth/progress-steps";
-import { TermsCheckbox } from "@/components/auth/terms-checkbox";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { translateAuthError } from "@/lib/auth-errors";
-import {
-  isValidNpwp,
-  isValidAddress,
-  isValidPhone,
-  isValidPassword,
-  validationMessages,
-} from "@/lib/validation";
-import { PasswordRequirements } from "@/components/auth/password-requirements";
 
-// Import Dynamic LocationPickerMap (Client-side Only)
-const LocationPickerMap = dynamic(
-  () => import("@/components/location-picker-map").then((mod) => mod.LocationPickerMap),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-[280px] w-full bg-ink/5 animate-pulse rounded-xl flex items-center justify-center text-sm text-ink/40">
-        Memuat Peta...
-      </div>
-    ),
-  }
-);
-
-const stepLabels = ["Email", "Verifikasi Email", "Kata Sandi", "Detail Profil"];
-
-const variants = {
-  enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
-  center: { opacity: 1, x: 0 },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
-};
-
-type FormState = {
+type FormValues = {
   email: string;
-  otp: string;
   password: string;
   nama_perusahaan: string;
   npwp: string;
-  provinsi: string;
-  kota: string;
-  kecamatan: string;
-  kelurahan: string;
-  detail_alamat: string;
+  alamat: string;
   telepon: string;
-  lat: number | null;
-  lng: number | null;
-  foto_npwp: File | null;
 };
-
-type FieldErrors = Partial<
-  Record<
-    | "nama_perusahaan"
-    | "npwp"
-    | "provinsi"
-    | "kota"
-    | "kecamatan"
-    | "kelurahan"
-    | "detail_alamat"
-    | "telepon"
-    | "foto_npwp",
-    string
-  >
->;
-
-// Helper Fungsi Penerjemah Error Umum & Storage/Database
-function formatHumanFriendlyError(err: unknown): string {
-  if (!err) return "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi.";
-
-  const message = typeof err === "string" ? err : (err as { message?: string })?.message || "";
-
-  // Error Storage / Upload
-  if (message.includes("Payload too large") || message.includes("413") || message.includes("exceeds")) {
-    return "Ukuran gambar terlalu besar. Maksimal ukuran berkas adalah 5MB.";
-  }
-  if (message.includes("mime") || message.includes("not allowed") || message.includes("extension")) {
-    return "Format gambar tidak didukung. Harap upload foto berformat JPG, JPEG, atau PNG.";
-  }
-  if (message.includes("bucket") || message.includes("storage")) {
-    return "Gagal mengunggah dokumen. Silakan periksa koneksi internet Anda dan coba lagi.";
-  }
-
-  // Error Database / Auth
-  if (message.includes("duplicate key") || message.includes("already exists")) {
-    return "Data NPWP atau profil industri ini sudah pernah terdaftar.";
-  }
-  if (message.includes("different") || message.includes("same password")) {
-    return "Kata sandi baru tidak boleh sama dengan kata sandi lama.";
-  }
-  if (message === "no-session") {
-    return "Sesi pendaftaran Anda telah berakhir. Silakan lakukan verifikasi ulang.";
-  }
-
-  // Terjemahkan Auth Error Bawaan jika ada
-  const translated = translateAuthError(message);
-  if (translated !== "Terjadi kesalahan, coba lagi.") {
-    return translated;
-  }
-
-  return "Gagal memproses pendaftaran. Silakan periksa kembali data Anda dan coba lagi.";
-}
 
 export default function DaftarIndustriPage() {
   const router = useRouter();
-  const npwpFileId = useId();
-  const [step, setStep] = useState(0);
-  const [direction, setDirection] = useState(1);
-  const [form, setForm] = useState<FormState>({
+  const [form, setForm] = useState<FormValues>({
     email: "",
-    otp: "",
     password: "",
     nama_perusahaan: "",
     npwp: "",
-    provinsi: "",
-    kota: "",
-    kecamatan: "",
-    kelurahan: "",
-    detail_alamat: "",
+    alamat: "",
     telepon: "",
-    lat: null,
-    lng: null,
-    foto_npwp: null,
   });
-
-  const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
+  const [dokumen, setDokumen] = useState<File | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [agreed, setAgreed] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
 
-  // State Hierarki Wilayah
-  const [provinces, setProvinces] = useState<{ id: string; name: string }[]>([]);
-  const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
-  const [districts, setDistricts] = useState<{ id: string; name: string }[]>([]);
-  const [villages, setVillages] = useState<{ id: string; name: string }[]>([]);
-
-  // Pengecekan Sesi Aktif (Direct ke Step 3 Jika Email/Password Sudah Terbuat)
-  useEffect(() => {
-    const checkExistingSession = async () => {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        // Cek apakah profil industri sudah lengkap di DB
-        const { data: profile } = await supabase
-          .from("industri_profiles")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (profile) {
-          router.replace("/dashboard-industri");
-          return;
-        }
-
-        // Jika user terautentikasi TAPI profil belum ada, langsung lompat ke Step 3 (Detail Profil)
-        setForm((prev) => ({ ...prev, email: user.email || "" }));
-        setStep(3);
-      }
-    };
-
-    checkExistingSession();
-  }, [router]);
-
-  // Load Provinsi saat mount
-  useEffect(() => {
-    fetch("https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json")
-      .then((res) => res.json())
-      .then((data) => setProvinces(data))
-      .catch(() => console.error("Gagal memuat data provinsi"));
-  }, []);
-
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const id = setInterval(() => setResendCooldown((c) => Math.max(0, c - 1)), 1000);
-    return () => clearInterval(id);
-  }, [resendCooldown]);
-
-  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
+  function updateField(field: keyof FormValues, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
   }
 
-  // Handler Perubahan Dropdown Wilayah Berjenjang
-  const handleProvinsiChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const provId = e.target.value;
-    const provName = e.target.options[e.target.selectedIndex].text;
-
-    update("provinsi", provId ? provName : "");
-    update("kota", "");
-    update("kecamatan", "");
-    update("kelurahan", "");
-    setCities([]);
-    setDistricts([]);
-    setVillages([]);
-
-    if (provId) {
-      fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`)
-        .then((res) => res.json())
-        .then((data) => setCities(data))
-        .catch(() => console.error("Gagal memuat data kota"));
-    }
-  };
-
-  const handleKotaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const regencyId = e.target.value;
-    const regencyName = e.target.options[e.target.selectedIndex].text;
-
-    update("kota", regencyId ? regencyName : "");
-    update("kecamatan", "");
-    update("kelurahan", "");
-    setDistricts([]);
-    setVillages([]);
-
-    if (regencyId) {
-      fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/districts/${regencyId}.json`)
-        .then((res) => res.json())
-        .then((data) => setDistricts(data))
-        .catch(() => console.error("Gagal memuat data kecamatan"));
-    }
-  };
-
-  const handleKecamatanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const districtId = e.target.value;
-    const districtName = e.target.options[e.target.selectedIndex].text;
-
-    update("kecamatan", districtId ? districtName : "");
-    update("kelurahan", "");
-    setVillages([]);
-
-    if (districtId) {
-      fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/villages/${districtId}.json`)
-        .then((res) => res.json())
-        .then((data) => setVillages(data))
-        .catch(() => console.error("Gagal memuat data kelurahan"));
-    }
-  };
-
-  // Handler saat titik pada Map di-klik
-  const handleLocationSelect = (loc: {
-    lat: number;
-    lng: number;
-    alamat: string;
-    kelurahan: string;
-    kecamatan: string;
-    kota_kabupaten: string;
-    provinsi: string;
-  }) => {
-    setForm((prev) => ({
-      ...prev,
-      lat: Number(loc.lat),
-      lng: Number(loc.lng),
-      detail_alamat: prev.detail_alamat || loc.alamat.toUpperCase(),
-      provinsi: prev.provinsi || loc.provinsi,
-      kota: prev.kota || loc.kota_kabupaten,
-      kecamatan: prev.kecamatan || loc.kecamatan,
-      kelurahan: prev.kelurahan || loc.kelurahan,
-    }));
-  };
-
-  function goNext() {
-    setDirection(1);
-    setStep((s) => Math.min(s + 1, stepLabels.length - 1));
-  }
-
-  function goBack() {
-    setDirection(-1);
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setError(null);
-    setStep((s) => Math.max(s - 1, 0));
-  }
 
-  async function sendOtp() {
-    const supabase = createSupabaseBrowserClient();
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: form.email,
-      options: { shouldCreateUser: true },
-    });
-    if (otpError) throw otpError;
-    setResendCooldown(30);
-  }
+    if (!dokumen) {
+      setError("Dokumen NPWP/NIB wajib diunggah.");
+      return;
+    }
 
-  async function handleResend() {
-    if (resendCooldown > 0) return;
-    setError(null);
+    if (dokumen.size > 5 * 1024 * 1024) {
+      setError("Ukuran dokumen maksimal 5MB.");
+      return;
+    }
+
     setStatus("loading");
+
     try {
-      await sendOtp();
-    } catch (err) {
-      setError(formatHumanFriendlyError(err));
-    } finally {
+      const supabase = createSupabaseBrowserClient();
+      const extension = dokumen.name.split(".").pop()?.toLowerCase() || "jpg";
+      const filePath = `npwp/registration-${Date.now()}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from("industri_documents")
+        .upload(filePath, dokumen, { upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from("industri_documents")
+        .getPublicUrl(filePath);
+      const response = await fetch("/api/daftar/industri", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, dokumen_url: publicUrlData.publicUrl }),
+      });
+      const result = await response.json();
+
+      if (!response.ok) throw new Error(result.error || "Pendaftaran gagal.");
+      router.push("/masuk?registered=industri");
+    } catch (submitError: unknown) {
       setStatus("idle");
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-
-    if (step === 0) {
-      setStatus("loading");
-      try {
-        await sendOtp();
-        setStatus("idle");
-        goNext();
-      } catch (err) {
-        setStatus("idle");
-        setError(formatHumanFriendlyError(err));
-      }
-      return;
-    }
-
-    if (step === 1) {
-      if (form.otp.length !== 6) {
-        setError("Masukkan 6 digit kode verifikasi yang benar.");
-        return;
-      }
-      setStatus("loading");
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          email: form.email,
-          token: form.otp,
-          type: "email",
-        });
-        if (verifyError) throw verifyError;
-        setStatus("idle");
-        goNext();
-      } catch {
-        setStatus("idle");
-        setError("Kode verifikasi salah atau sudah kedaluwarsa. Silakan minta kode baru.");
-      }
-      return;
-    }
-
-    if (step === 2) {
-      if (!isValidPassword(form.password)) {
-        setError(validationMessages.password);
-        return;
-      }
-      setStatus("loading");
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const { error: updateError } = await supabase.auth.updateUser({
-          password: form.password,
-          data: { role: "perusahaan" },
-        });
-
-        // Jika error terjadi karena password baru sama dengan password lama, abaikan error tersebut
-        if (
-          updateError &&
-          !updateError.message.toLowerCase().includes("different") &&
-          !updateError.message.toLowerCase().includes("same")
-        ) {
-          throw updateError;
-        }
-
-        setStatus("idle");
-        goNext();
-      } catch (err) {
-        setStatus("idle");
-        setError(formatHumanFriendlyError(err));
-      }
-      return;
-    }
-
-    // Step 3: Validasi Form Profil
-    const errors: FieldErrors = {};
-    if (!form.nama_perusahaan.trim()) errors.nama_perusahaan = "Nama perusahaan wajib diisi.";
-    if (!isValidNpwp(form.npwp)) errors.npwp = validationMessages.npwp;
-
-    if (!form.foto_npwp) {
-      errors.foto_npwp = "Foto bukti NPWP wajib diupload.";
-    } else if (form.foto_npwp.size > 5 * 1024 * 1024) {
-      // Validasi Ukuran File Sisi Klien (Maksimal 5MB)
-      errors.foto_npwp = "Ukuran gambar terlalu besar. Maksimal 5MB.";
-    }
-
-    if (!form.provinsi) errors.provinsi = "Provinsi wajib dipilih.";
-    if (!form.kota) errors.kota = "Kota/Kabupaten wajib dipilih.";
-    if (!form.kecamatan) errors.kecamatan = "Kecamatan wajib dipilih.";
-    if (!form.kelurahan) errors.kelurahan = "Kelurahan wajib dipilih.";
-    if (!form.detail_alamat.trim()) errors.detail_alamat = "Detail alamat wajib diisi.";
-
-    const alamatLengkap = `${form.detail_alamat}, Kel. ${form.kelurahan}, Kec. ${form.kecamatan}, ${form.kota}, ${form.provinsi}`;
-    if (form.provinsi && form.kota && form.detail_alamat && !isValidAddress(alamatLengkap)) {
-      errors.detail_alamat = validationMessages.address;
-    }
-
-    if (!isValidPhone(form.telepon)) errors.telepon = validationMessages.phone;
-
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
-
-    if (!agreed) {
-      setError("Anda harus menyetujui Syarat & Ketentuan dan Kebijakan Privasi LENTERA.");
-      return;
-    }
-
-    setStatus("loading");
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user ?? (await supabase.auth.getUser()).data.user;
-
-      if (!user) throw new Error("no-session");
-
-      let fotoUrl = "";
-      if (form.foto_npwp) {
-        const fileExt = form.foto_npwp.name.split(".").pop();
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("industri_documents")
-          .upload(`npwp/${fileName}`, form.foto_npwp);
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage
-          .from("industri_documents")
-          .getPublicUrl(`npwp/${fileName}`);
-
-        fotoUrl = publicUrlData.publicUrl;
-      }
-
-      const { error: profileError } = await supabase.from("industri_profiles").upsert(
-        {
-          user_id: user.id,
-          nama_perusahaan: form.nama_perusahaan,
-          npwp: form.npwp,
-          provinsi: form.provinsi,
-          kota_kabupaten: form.kota,
-          kecamatan: form.kecamatan,
-          kelurahan: form.kelurahan,
-          alamat: alamatLengkap,
-          telepon: form.telepon,
-          lat: form.lat !== null ? Number(form.lat) : null,
-          lng: form.lng !== null ? Number(form.lng) : null,
-          foto_npwp_url: fotoUrl,
-        },
-        { onConflict: "user_id" }
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Pendaftaran gagal. Silakan coba lagi."
       );
-
-      if (profileError) throw profileError;
-
-      await supabase.auth.refreshSession();
-      setStatus("submitted");
-      router.refresh();
-      router.push("/dashboard-industri");
-    } catch (err) {
-      setStatus("idle");
-      setError(formatHumanFriendlyError(err));
     }
   }
-
-  const searchQuery = `${form.kelurahan} ${form.kecamatan} ${form.kota} ${form.provinsi}`.trim();
 
   return (
     <AuthShell
       eyebrow="Pendaftaran industri"
       title="Daftar sebagai Industri"
-      subtitle="Untuk pabrik dan industri sumber limbah."
+      subtitle="Bergabung sebagai pemasok limbah industri di LENTERA."
       footer={
-        <p className="text-sm text-ink/60 space-y-1.5">
-          <span className="block">
-            Sudah punya akun?{" "}
-            <Link href="/masuk" className="text-green font-medium hover:underline">
-              Masuk
-            </Link>
-          </span>
-          <span className="block">
-            Mau daftar sebagai mitra?{" "}
-            <Link href="/daftar/mitra" className="text-green font-medium hover:underline">
-              Klik di sini
-            </Link>
-          </span>
+        <p className="text-sm text-ink/60">
+          Sudah punya akun?{" "}
+          <Link href="/masuk" className="text-green font-medium hover:underline">
+            Masuk
+          </Link>
         </p>
       }
     >
-      {status === "submitted" ? (
-        <div className="text-center py-4">
-          <p className="text-forest font-medium mb-1">Pendaftaran industri berhasil.</p>
-          <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
-        </div>
-      ) : (
-        <>
-          <ProgressSteps steps={stepLabels} current={step} />
-          <form onSubmit={handleSubmit}>
-            <AnimatePresence mode="wait" custom={direction} initial={false}>
-              <motion.div
-                key={step}
-                custom={direction}
-                variants={variants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {step === 0 && (
-                  <FormField
-                    label="Email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => update("email", e.target.value)}
-                    placeholder="nama@perusahaan.com"
-                    required
-                    autoFocus
-                  />
-                )}
-
-                {step === 1 && (
-                  <>
-                    <p className="text-sm text-ink/55 mb-4">
-                      Kode dikirim ke <span className="text-forest font-medium">{form.email}</span> ·{" "}
-                      <button type="button" onClick={goBack} className="text-green hover:underline">
-                        ganti
-                      </button>
-                    </p>
-                    <OtpField value={form.otp} onChange={(v) => update("otp", v)} />
-                    <button
-                      type="button"
-                      onClick={handleResend}
-                      disabled={resendCooldown > 0 || status === "loading"}
-                      className="text-xs text-green hover:underline disabled:text-ink/35 mb-2"
-                    >
-                      {resendCooldown > 0
-                        ? `Kirim ulang kode (${resendCooldown}s)`
-                        : "Kirim ulang kode"}
-                    </button>
-                  </>
-                )}
-
-                {step === 2 && (
-                  <>
-                    <FormField
-                      label="Kata sandi"
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => update("password", e.target.value)}
-                      placeholder="••••••••"
-                      required
-                      autoFocus
-                    />
-                    <PasswordRequirements value={form.password} />
-                  </>
-                )}
-
-                {step === 3 && (
-                  <>
-                    <FormField
-                      label="Nama perusahaan"
-                      type="text"
-                      value={form.nama_perusahaan}
-                      onChange={(e) => update("nama_perusahaan", e.target.value)}
-                      placeholder="PT / CV ..."
-                      required
-                      autoFocus
-                    />
-                    {fieldErrors.nama_perusahaan && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">
-                        {fieldErrors.nama_perusahaan}
-                      </p>
-                    )}
-
-                    <FormField
-                      label="NPWP"
-                      type="text"
-                      value={form.npwp}
-                      onChange={(e) => update("npwp", e.target.value)}
-                      placeholder="15 atau 16 digit NPWP"
-                      required
-                    />
-                    {fieldErrors.npwp && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.npwp}</p>
-                    )}
-
-                    <div className="mb-4 text-left">
-                      <label htmlFor={npwpFileId} className="block text-sm font-medium mb-1.5 text-ink">
-                        Upload Foto Bukti NPWP
-                      </label>
-                      <input
-                        id={npwpFileId}
-                        type="file"
-                        accept="image/png, image/jpeg, image/jpg"
-                        onChange={(e) => setForm((f) => ({ ...f, foto_npwp: e.target.files?.[0] || null }))}
-                        className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2 bg-white"
-                        required
-                      />
-                      <p className="text-[11px] text-ink/50 mt-1">Maksimal ukuran berkas: 5MB (JPG, JPEG, PNG)</p>
-                      {fieldErrors.foto_npwp && (
-                        <p className="text-xs text-red-600 mt-1.5">{fieldErrors.foto_npwp}</p>
-                      )}
-                    </div>
-
-                    {/* SELECT WILAYAH BERJENJANG */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                      {/* Provinsi */}
-                      <div className="text-left">
-                        <label className="block text-sm font-medium mb-1.5 text-ink">Provinsi</label>
-                        <select
-                          className={`block w-full text-sm text-ink/80 border ${
-                            fieldErrors.provinsi ? "border-red-500" : "border-ink/20"
-                          } rounded-md p-2.5 bg-white`}
-                          onChange={handleProvinsiChange}
-                          required
-                        >
-                          <option value="">Pilih Provinsi...</option>
-                          {provinces.map((prov) => (
-                            <option key={prov.id} value={prov.id}>
-                              {prov.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Kota/Kabupaten */}
-                      <div className="text-left">
-                        <label className="block text-sm font-medium mb-1.5 text-ink">Kota / Kabupaten</label>
-                        <select
-                          className={`block w-full text-sm text-ink/80 border ${
-                            fieldErrors.kota ? "border-red-500" : "border-ink/20"
-                          } rounded-md p-2.5 bg-white disabled:bg-ink/5`}
-                          onChange={handleKotaChange}
-                          disabled={cities.length === 0}
-                          required
-                        >
-                          <option value="">Pilih Kota/Kabupaten...</option>
-                          {cities.map((city) => (
-                            <option key={city.id} value={city.id}>
-                              {city.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Kecamatan */}
-                      <div className="text-left">
-                        <label className="block text-sm font-medium mb-1.5 text-ink">Kecamatan</label>
-                        <select
-                          className={`block w-full text-sm text-ink/80 border ${
-                            fieldErrors.kecamatan ? "border-red-500" : "border-ink/20"
-                          } rounded-md p-2.5 bg-white disabled:bg-ink/5`}
-                          onChange={handleKecamatanChange}
-                          disabled={districts.length === 0}
-                          required
-                        >
-                          <option value="">Pilih Kecamatan...</option>
-                          {districts.map((dist) => (
-                            <option key={dist.id} value={dist.id}>
-                              {dist.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Kelurahan */}
-                      <div className="text-left">
-                        <label className="block text-sm font-medium mb-1.5 text-ink">
-                          Kelurahan / Desa
-                        </label>
-                        <select
-                          className={`block w-full text-sm text-ink/80 border ${
-                            fieldErrors.kelurahan ? "border-red-500" : "border-ink/20"
-                          } rounded-md p-2.5 bg-white disabled:bg-ink/5`}
-                          onChange={(e) =>
-                            update("kelurahan", e.target.options[e.target.selectedIndex].text)
-                          }
-                          disabled={villages.length === 0}
-                          required
-                        >
-                          <option value="">Pilih Kelurahan...</option>
-                          {villages.map((vill) => (
-                            <option key={vill.id} value={vill.id}>
-                              {vill.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* INTERAKSI PETA */}
-                    <div className="mb-4 text-left">
-                      <label className="block text-sm font-medium mb-1.5 text-ink">
-                        Pilih Titik Lokasi Pabrik / Industri
-                      </label>
-                      <LocationPickerMap
-                        searchQuery={searchQuery}
-                        onLocationSelect={handleLocationSelect}
-                      />
-                    </div>
-
-                    <FormField
-                      label="Detail Alamat"
-                      type="text"
-                      value={form.detail_alamat}
-                      onChange={(e) => update("detail_alamat", e.target.value.toUpperCase())}
-                      placeholder="Jalan, RT/RW, no. gedung / pabrik, patokan"
-                      required
-                    />
-                    {fieldErrors.detail_alamat && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">
-                        {fieldErrors.detail_alamat}
-                      </p>
-                    )}
-
-                    <FormField
-                      label="Nomor telepon"
-                      type="tel"
-                      value={form.telepon}
-                      onChange={(e) => update("telepon", e.target.value)}
-                      placeholder="08123456789"
-                      required
-                    />
-                    {fieldErrors.telepon && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.telepon}</p>
-                    )}
-
-                    <TermsCheckbox checked={agreed} onChange={setAgreed} />
-                  </>
-                )}
-              </motion.div>
-            </AnimatePresence>
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">
-                {error}
-              </p>
-            )}
-
-            <div className="flex gap-3">
-              {step > 0 && <BackButton onClick={goBack} />}
-              <SubmitButton type="submit" disabled={status === "loading"}>
-                {status === "loading"
-                  ? "Memproses..."
-                  : step === 0
-                  ? "Kirim Kode"
-                  : step === 1
-                  ? "Verifikasi"
-                  : step < stepLabels.length - 1
-                  ? "Lanjut"
-                  : "Daftar sebagai Industri"}
-              </SubmitButton>
-            </div>
-          </form>
-        </>
-      )}
+      <form onSubmit={handleSubmit}>
+        <FormField
+          label="Email"
+          type="email"
+          value={form.email}
+          onChange={(event) => updateField("email", event.target.value)}
+          placeholder="nama@perusahaan.com"
+          required
+        />
+        <FormField
+          label="Kata sandi"
+          type="password"
+          value={form.password}
+          onChange={(event) => updateField("password", event.target.value)}
+          placeholder="Minimal 8 karakter"
+          minLength={8}
+          required
+        />
+        <FormField
+          label="Nama perusahaan"
+          value={form.nama_perusahaan}
+          onChange={(event) => updateField("nama_perusahaan", event.target.value)}
+          placeholder="PT Nama Perusahaan"
+          required
+        />
+        <FormField
+          label="NPWP"
+          value={form.npwp}
+          onChange={(event) => updateField("npwp", event.target.value)}
+          placeholder="Nomor NPWP perusahaan"
+          required
+        />
+        <FormField
+          label="Nomor telepon"
+          type="tel"
+          value={form.telepon}
+          onChange={(event) => updateField("telepon", event.target.value)}
+          placeholder="08123456789"
+          required
+        />
+        <label className="block mb-4">
+          <span className="block text-sm font-medium text-forest mb-1.5">
+            Alamat perusahaan
+          </span>
+          <textarea
+            value={form.alamat}
+            onChange={(event) => updateField("alamat", event.target.value)}
+            placeholder="Alamat lengkap perusahaan"
+            className="w-full rounded-xl border border-forest/15 bg-cream/50 px-4 py-3 text-sm text-ink placeholder:text-ink/35 outline-none transition-colors focus:border-green focus:bg-paper min-h-24 resize-y"
+            required
+          />
+        </label>
+        <label className="block mb-5">
+          <span className="block text-sm font-medium text-forest mb-1.5">
+            Dokumen NPWP / NIB
+          </span>
+          <input
+            type="file"
+            accept="image/png, image/jpeg, image/jpg"
+            onChange={(event) => setDokumen(event.target.files?.[0] || null)}
+            className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2 bg-white"
+            required
+          />
+          <span className="block text-xs text-ink/50 mt-1">
+            Format JPG, JPEG, atau PNG. Maksimal 5MB.
+          </span>
+        </label>
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3.5 py-2.5 mb-4">
+            {error}
+          </p>
+        )}
+        <SubmitButton
+          type="submit"
+          disabled={status === "loading"}
+          isSubmitting={status === "loading"}
+        >
+          {status === "loading" ? "Mendaftarkan..." : "Daftar sebagai Industri"}
+        </SubmitButton>
+      </form>
     </AuthShell>
   );
 }
@@ -2398,7 +2451,7 @@ export default function DaftarIndustriPage() {
 
 ## FILE: app/daftar/mitra/page.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -2424,7 +2477,6 @@ import {
 } from "@/lib/validation";
 import { PasswordRequirements } from "@/components/auth/password-requirements";
 
-// Import Map secara Dynamic (Client-side Only) untuk menghindari SSR Error pada Leaflet
 const LocationPickerMap = dynamic(
   () => import("@/components/location-picker-map").then((mod) => mod.LocationPickerMap),
   {
@@ -2477,13 +2529,11 @@ type FieldErrors = Partial<
   >
 >;
 
-// Helper Fungsi Penerjemah Error Umum & Storage/Database
 function formatHumanFriendlyError(err: unknown): string {
   if (!err) return "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi.";
 
   const message = typeof err === "string" ? err : (err as { message?: string })?.message || "";
 
-  // Error Storage / Upload
   if (message.includes("Payload too large") || message.includes("413") || message.includes("exceeds")) {
     return "Ukuran gambar terlalu besar. Maksimal ukuran berkas adalah 5MB.";
   }
@@ -2494,9 +2544,8 @@ function formatHumanFriendlyError(err: unknown): string {
     return "Gagal mengunggah dokumen. Silakan periksa koneksi internet Anda dan coba lagi.";
   }
 
-  // Error Database / Auth
   if (message.includes("duplicate key") || message.includes("already exists")) {
-    return "Data NIK/NIB atau profil mitra ini sudah pernah terdaftar.";
+    return "Data NIK/NIB, nomor telepon, atau profil mitra ini sudah pernah terdaftar.";
   }
   if (message.includes("different") || message.includes("same password")) {
     return "Kata sandi baru tidak boleh sama dengan kata sandi lama.";
@@ -2505,7 +2554,6 @@ function formatHumanFriendlyError(err: unknown): string {
     return "Sesi pendaftaran Anda telah berakhir. Silakan lakukan verifikasi ulang.";
   }
 
-  // Terjemahkan Auth Error Bawaan jika ada
   const translated = translateAuthError(message);
   if (translated !== "Terjadi kesalahan, coba lagi.") {
     return translated;
@@ -2541,13 +2589,11 @@ export default function DaftarMitraPage() {
   const [agreed, setAgreed] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // State Hierarki Wilayah
   const [provinces, setProvinces] = useState<{ id: string; name: string }[]>([]);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [districts, setDistricts] = useState<{ id: string; name: string }[]>([]);
   const [villages, setVillages] = useState<{ id: string; name: string }[]>([]);
 
-  // Pengecekan Sesi Aktif (Langsung ke Step 3 jika user gantung setelah verifikasi OTP)
   useEffect(() => {
     const checkExistingSession = async () => {
       const supabase = createSupabaseBrowserClient();
@@ -2556,11 +2602,25 @@ export default function DaftarMitraPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        const { data: profile } = await supabase
-          .from("mitra_profiles")
-          .select("id")
+        const { data: blacklisted } = await supabase
+          .from("blacklists")
+          .select("alasan")
           .eq("user_id", user.id)
           .maybeSingle();
+
+        const { data: profile } = await supabase
+          .from("mitra_profiles")
+          .select("id, status_akun, alasan_ban")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (blacklisted || profile?.status_akun === "banned") {
+          const alasan = blacklisted?.alasan || profile?.alasan_ban || "Pelanggaran ketentuan layanan.";
+          alert(`Akun Anda telah diblokir/di-ban!\nAlasan: ${alasan}`);
+          await supabase.auth.signOut();
+          router.replace("/masuk");
+          return;
+        }
 
         if (profile) {
           router.replace("/dashboard");
@@ -2575,11 +2635,10 @@ export default function DaftarMitraPage() {
     checkExistingSession();
   }, [router]);
 
-  // Load Provinsi saat mount
   useEffect(() => {
     fetch("https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json")
       .then((res) => res.json())
-      .then((data) => setProvinces(data))
+      .then((data) => setProvinces(Array.isArray(data) ? data : []))
       .catch(() => console.error("Gagal memuat data provinsi"));
   }, []);
 
@@ -2593,10 +2652,9 @@ export default function DaftarMitraPage() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  // Handler Perubahan Dropdown Wilayah Berjenjang
   const handleProvinsiChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const provId = e.target.value;
-    const provName = e.target.options[e.target.selectedIndex].text;
+    const provName = e.target.options[e.target.selectedIndex]?.text || "";
 
     update("provinsi", provId ? provName : "");
     update("kota", "");
@@ -2608,15 +2666,21 @@ export default function DaftarMitraPage() {
 
     if (provId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`)
-        .then((res) => res.json())
-        .then((data) => setCities(data))
-        .catch(() => console.error("Gagal memuat data kota"));
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data kota");
+          return res.json();
+        })
+        .then((data) => setCities(Array.isArray(data) ? data : []))
+        .catch(() => {
+          console.error("Gagal memuat data kota");
+          setCities([]);
+        });
     }
   };
 
   const handleKotaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const regencyId = e.target.value;
-    const regencyName = e.target.options[e.target.selectedIndex].text;
+    const regencyName = e.target.options[e.target.selectedIndex]?.text || "";
 
     update("kota", regencyId ? regencyName : "");
     update("kecamatan", "");
@@ -2626,15 +2690,21 @@ export default function DaftarMitraPage() {
 
     if (regencyId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/districts/${regencyId}.json`)
-        .then((res) => res.json())
-        .then((data) => setDistricts(data))
-        .catch(() => console.error("Gagal memuat data kecamatan"));
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data kecamatan");
+          return res.json();
+        })
+        .then((data) => setDistricts(Array.isArray(data) ? data : []))
+        .catch(() => {
+          console.error("Gagal memuat data kecamatan");
+          setDistricts([]);
+        });
     }
   };
 
   const handleKecamatanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const districtId = e.target.value;
-    const districtName = e.target.options[e.target.selectedIndex].text;
+    const districtName = e.target.options[e.target.selectedIndex]?.text || "";
 
     update("kecamatan", districtId ? districtName : "");
     update("kelurahan", "");
@@ -2642,13 +2712,18 @@ export default function DaftarMitraPage() {
 
     if (districtId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/villages/${districtId}.json`)
-        .then((res) => res.json())
-        .then((data) => setVillages(data))
-        .catch(() => console.error("Gagal memuat data kelurahan"));
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data kelurahan");
+          return res.json();
+        })
+        .then((data) => setVillages(Array.isArray(data) ? data : []))
+        .catch(() => {
+          console.error("Gagal memuat data kelurahan");
+          setVillages([]);
+        });
     }
   };
 
-  // Handler saat titik pada Map di-klik
   const handleLocationSelect = (loc: {
     lat: number;
     lng: number;
@@ -2662,11 +2737,11 @@ export default function DaftarMitraPage() {
       ...prev,
       lat: Number(loc.lat),
       lng: Number(loc.lng),
-      detail_alamat: prev.detail_alamat || loc.alamat.toUpperCase(),
-      provinsi: prev.provinsi || loc.provinsi,
-      kota: prev.kota || loc.kota_kabupaten,
-      kecamatan: prev.kecamatan || loc.kecamatan,
-      kelurahan: prev.kelurahan || loc.kelurahan,
+      detail_alamat: loc.alamat ? loc.alamat.toUpperCase() : prev.detail_alamat,
+      provinsi: loc.provinsi || prev.provinsi,
+      kota: loc.kota_kabupaten || prev.kota,
+      kecamatan: loc.kecamatan || prev.kecamatan,
+      kelurahan: loc.kelurahan || prev.kelurahan,
     }));
   };
 
@@ -2773,7 +2848,7 @@ export default function DaftarMitraPage() {
       return;
     }
 
-    // Step 3: Validasi Form Profil
+    // Step 3: Validasi Form Profil Mitra
     const errors: FieldErrors = {};
     if (!form.nama_mitra.trim()) errors.nama_mitra = "Nama mitra wajib diisi.";
     if (!isValidNikNib(form.nik_nib)) errors.nik_nib = validationMessages.nikNib;
@@ -2781,7 +2856,6 @@ export default function DaftarMitraPage() {
     if (!form.foto_nik) {
       errors.foto_nik = "Foto NIK/NPWP wajib diupload.";
     } else if (form.foto_nik.size > 5 * 1024 * 1024) {
-      // Validasi Ukuran File Sisi Klien (Maksimal 5MB)
       errors.foto_nik = "Ukuran gambar terlalu besar. Maksimal 5MB.";
     }
 
@@ -2809,12 +2883,66 @@ export default function DaftarMitraPage() {
     setStatus("loading");
     try {
       const supabase = createSupabaseBrowserClient();
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
       const user = session?.user ?? (await supabase.auth.getUser()).data.user;
 
       if (!user) throw new Error("no-session");
+
+      // === PENGECEKAN KETAT HARUS DARI IDENTITAS DETAIL (NIK/NIB, TELEPON, USER_ID) ===
+
+      // 1. Cek di tabel blacklists
+      const { data: blacklisted } = await supabase
+        .from("blacklists")
+        .select("nik_nib, telepon, alasan")
+        .or(`nik_nib.eq.${form.nik_nib},telepon.eq.${form.telepon},user_id.eq.${user.id}`)
+        .maybeSingle();
+
+      if (blacklisted) {
+        const reason = blacklisted.alasan || "Terdaftar dalam daftar hitam penangguhan akun.";
+        
+        // Daftarkan user_id & email ini ke blacklists agar tidak bisa login lagi
+        await supabase.from("blacklists").upsert({
+          user_id: user.id,
+          email: user.email,
+          nik_nib: form.nik_nib,
+          telepon: form.telepon,
+          alasan: `Pendaftaran ditolak otomatis: ${reason}`
+        });
+
+        setStatus("idle");
+        setError(`Pendaftaran ditolak: NIK/NIB (${form.nik_nib}) atau Nomor Telepon (${form.telepon}) Anda terdaftar dalam daftar hitam penangguhan akun. Alasan: ${reason}`);
+        await supabase.auth.signOut();
+        return;
+      }
+
+      // 2. Cek apakah ada profil mitra lain berstatus banned yang pakai NIK/NIB atau Telepon sama
+      const { data: bannedProfile } = await supabase
+        .from("mitra_profiles")
+        .select("nik_nib, telepon, alasan_ban")
+        .eq("status_akun", "banned")
+        .or(`nik_nib.eq.${form.nik_nib},telepon.eq.${form.telepon}`)
+        .maybeSingle();
+
+      if (bannedProfile) {
+        const reason = bannedProfile.alasan_ban || "Pelanggaran ketentuan layanan.";
+
+        // Daftarkan user_id & email ini ke blacklists agar tidak bisa login lagi
+        await supabase.from("blacklists").upsert({
+          user_id: user.id,
+          email: user.email,
+          nik_nib: form.nik_nib,
+          telepon: form.telepon,
+          alasan: `Pendaftaran ditolak otomatis: ${reason}`
+        });
+
+        setStatus("idle");
+        setError(`Pendaftaran ditolak: NIK/NIB atau Nomor Telepon ini terhubung dengan akun mitra yang telah di-ban! Alasan: ${reason}`);
+        await supabase.auth.signOut();
+        return;
+      }
 
       let fotoUrl = "";
       if (form.foto_nik) {
@@ -2847,6 +2975,7 @@ export default function DaftarMitraPage() {
           lat: form.lat !== null ? Number(form.lat) : null,
           lng: form.lng !== null ? Number(form.lng) : null,
           foto_nik_url: fotoUrl,
+          status_akun: "aktif",
         },
         { onConflict: "user_id" }
       );
@@ -2921,7 +3050,7 @@ export default function DaftarMitraPage() {
                 {step === 1 && (
                   <>
                     <p className="text-sm text-ink/55 mb-4">
-                      Kode dikirim ke <span className="text-forest font-medium">{form.email}</span> ·{" "}
+                      Kode dikirim ke <span className="text-forest font-medium">{form.email}</span> Â·{" "}
                       <button type="button" onClick={goBack} className="text-green hover:underline">
                         ganti
                       </button>
@@ -2947,7 +3076,7 @@ export default function DaftarMitraPage() {
                       type="password"
                       value={form.password}
                       onChange={(e) => update("password", e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                       required
                       autoFocus
                     />
@@ -3001,9 +3130,7 @@ export default function DaftarMitraPage() {
                       )}
                     </div>
 
-                    {/* SELECT WILAYAH BERJENJANG */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                      {/* Provinsi */}
                       <div className="text-left">
                         <label className="block text-sm font-medium mb-1.5 text-ink">Provinsi</label>
                         <select
@@ -3022,7 +3149,6 @@ export default function DaftarMitraPage() {
                         </select>
                       </div>
 
-                      {/* Kota/Kabupaten */}
                       <div className="text-left">
                         <label className="block text-sm font-medium mb-1.5 text-ink">
                           Kota / Kabupaten
@@ -3044,7 +3170,6 @@ export default function DaftarMitraPage() {
                         </select>
                       </div>
 
-                      {/* Kecamatan */}
                       <div className="text-left">
                         <label className="block text-sm font-medium mb-1.5 text-ink">Kecamatan</label>
                         <select
@@ -3064,7 +3189,6 @@ export default function DaftarMitraPage() {
                         </select>
                       </div>
 
-                      {/* Kelurahan */}
                       <div className="text-left">
                         <label className="block text-sm font-medium mb-1.5 text-ink">
                           Kelurahan / Desa
@@ -3074,7 +3198,7 @@ export default function DaftarMitraPage() {
                             fieldErrors.kelurahan ? "border-red-500" : "border-ink/20"
                           } rounded-md p-2.5 bg-white disabled:bg-ink/5`}
                           onChange={(e) =>
-                            update("kelurahan", e.target.options[e.target.selectedIndex].text)
+                            update("kelurahan", e.target.options[e.target.selectedIndex]?.text || "")
                           }
                           disabled={villages.length === 0}
                           required
@@ -3089,7 +3213,6 @@ export default function DaftarMitraPage() {
                       </div>
                     </div>
 
-                    {/* INTERAKSI PETA */}
                     <div className="mb-4 text-left">
                       <label className="block text-sm font-medium mb-1.5 text-ink">
                         Pilih Titik Lokasi Usaha/Bangunan
@@ -3140,7 +3263,11 @@ export default function DaftarMitraPage() {
 
             <div className="flex gap-3">
               {step > 0 && <BackButton onClick={goBack} />}
-              <SubmitButton type="submit" disabled={status === "loading"}>
+              <SubmitButton
+                type="submit"
+                disabled={status === "loading"}
+                isSubmitting={status === "loading"}
+              >
                 {status === "loading"
                   ? "Memproses..."
                   : step === 0
@@ -3162,7 +3289,7 @@ export default function DaftarMitraPage() {
 
 ## FILE: app/daftar/page.tsx
 
-```ts
+```tsx
 import Link from "next/link";
 import { AuthShell } from "@/components/auth/auth-shell";
 
@@ -3200,7 +3327,7 @@ export default function DaftarPage() {
     <AuthShell
       eyebrow="Bergabung dengan LENTERA"
       title="Daftar sebagai apa?"
-      subtitle="Pilih jenis akun yang sesuai — form pendaftarannya berbeda untuk masing-masing."
+      subtitle="Pilih jenis akun yang sesuai â€” form pendaftarannya berbeda untuk masing-masing."
       wide
       footer={
         <p className="text-sm text-ink/60">
@@ -3249,7 +3376,7 @@ export default function DaftarPage() {
 
 ## FILE: app/daftar-mitra-industri/page.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -3383,13 +3510,13 @@ export default function DaftarMitraIndustriPage() {
                       </div>
 
                       <div className="text-xs text-ink/70 flex items-start gap-1.5">
-                        <span className="shrink-0">📍</span>
+                        <span className="shrink-0">ðŸ“</span>
                         <span className="break-words">{item.alamat}</span>
                       </div>
 
                       <div className="pt-2 border-t border-forest/5 flex items-center justify-between text-[11px] text-ink/50">
                         <span>Bergabung:</span>
-                        <span>📅 {item.tanggalBergabung}</span>
+                        <span>ðŸ“… {item.tanggalBergabung}</span>
                       </div>
                     </div>
                   ))}
@@ -3425,10 +3552,10 @@ export default function DaftarMitraIndustriPage() {
                               </span>
                             </td>
                             <td className="py-4 px-6 text-ink/70">
-                              📍 {item.alamat}
+                              ðŸ“ {item.alamat}
                             </td>
                             <td className="py-4 px-6 text-ink/60 text-xs">
-                              📅 {item.tanggalBergabung}
+                              ðŸ“… {item.tanggalBergabung}
                             </td>
                           </tr>
                         ))}
@@ -3453,8 +3580,9 @@ export default function DaftarMitraIndustriPage() {
 
 ## FILE: app/dashboard/layout.tsx
 
-```ts
+```tsx
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import Script from 'next/script';
 
 export default function DashboardLayout({
   children,
@@ -3463,6 +3591,15 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-cream">
+      
+      {/* TARUH MESIN MIDTRANS DI SINI BANG ðŸ‘‡ */}
+      <Script 
+        src="https://app.sandbox.midtrans.com/snap/snap.js" 
+        data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY} 
+        strategy="afterInteractive" 
+      />
+      {/* ðŸ‘† ================================== ðŸ‘† */}
+
       <DashboardSidebar />
       <main className="flex-1 min-w-0 w-full">{children}</main>
     </div>
@@ -3472,14 +3609,15 @@ export default function DashboardLayout({
 
 ## FILE: app/dashboard/page.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-import { ProductCard } from "./product-card";
+import { ProductCard } from "@/components/dashboard/product-card";
 import { AIAssistant } from "@/components/ai-assistant";
+import Script from "next/script";
 
 interface MitraProfile {
   nama_mitra: string;
@@ -3487,13 +3625,16 @@ interface MitraProfile {
   alamat: string;
   telepon: string;
   provinsi?: string;
-  kota?: string;
+  kota_kabupaten?: string;
+  status_akun?: string;
+  alasan_ban?: string;
   created_at: string;
 }
 
 interface DisplayProduct {
   id: string;
   nama: string;
+  nama_produk: string;
   deskripsi: string;
   price: number;
   unit: string;
@@ -3519,6 +3660,15 @@ interface RawProduct {
   regional_product_prices?: RegionalPrice[];
 }
 
+interface Order {
+  id: string;
+  status: string;
+  total_harga: number;
+  created_at: string;
+  bukti_pengiriman_url?: string | null; 
+  nama_produk?: string; 
+}
+
 function InfoRow({
   label,
   value,
@@ -3531,7 +3681,9 @@ function InfoRow({
   return (
     <div className={className}>
       <p className="text-xs text-ink/45 mb-1">{label}</p>
-      <p className="text-forest font-medium text-sm sm:text-base">{value || "-"}</p>
+      <p className="text-forest font-medium text-sm sm:text-base">
+        {value || "-"}
+      </p>
     </div>
   );
 }
@@ -3539,9 +3691,95 @@ function InfoRow({
 export default function DashboardMitraPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<MitraProfile | null>(null);
   const [products, setProducts] = useState<DisplayProduct[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
+
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nama_mitra: "",
+    nik_nib: "",
+    telepon: "",
+    provinsi: "",
+    kota_kabupaten: "",
+    alamat: "",
+  });
+
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
+
+  const fetchOrdersOnly = async (currentUserId: string) => {
+    const supabase = createSupabaseBrowserClient();
+    
+    const [ordersRes, pmRes, productsRes] = await Promise.all([
+      supabase.from("orders").select("*").order("created_at", { ascending: false }),
+      supabase.from("pesanan_mitra").select("*").order("created_at", { ascending: false }),
+      supabase.from("products").select("id, nama_produk") 
+    ]);
+
+    const productMap = new Map<string, string>();
+    if (productsRes.data) {
+      productsRes.data.forEach((p: any) => productMap.set(p.id, p.nama_produk));
+    }
+
+    const combinedOrders: Order[] = [];
+
+    if (ordersRes.data) {
+      ordersRes.data.forEach((o) => {
+        const oUser = o.user_id || o.mitra_id;
+        if (!oUser || oUser === currentUserId) {
+          
+          let prodName = "Produk Energi";
+          let prodId = null;
+          if (o.items) {
+            prodId = Array.isArray(o.items) ? o.items[0]?.product_id : o.items.product_id;
+          }
+          if (prodId) prodName = productMap.get(prodId) || prodName;
+
+          combinedOrders.push({
+            id: String(o.id),
+            status: String(o.status || "diproses").toLowerCase(),
+            total_harga: Number(o.total_harga || o.total || 0),
+            created_at: o.created_at || new Date().toISOString(),
+            bukti_pengiriman_url: o.bukti_pengiriman_url || null, 
+            nama_produk: prodName, 
+          });
+        }
+      });
+    }
+
+    if (pmRes.data) {
+      pmRes.data.forEach((pm) => {
+        const pmUser = pm.user_id || pm.mitra_id;
+        if (!pmUser || pmUser === currentUserId) {
+          if (!combinedOrders.some((o) => o.id === String(pm.id))) {
+            
+            let prodName = "Produk Energi";
+            if (pm.produk_id) prodName = productMap.get(pm.produk_id) || prodName;
+
+            combinedOrders.push({
+              id: String(pm.id),
+              status: String(pm.status || "diproses").toLowerCase(),
+              total_harga: Number(pm.total_harga || pm.jumlah * 15000 || 0),
+              created_at: pm.created_at || new Date().toISOString(),
+              bukti_pengiriman_url: pm.bukti_pengiriman_url || null, 
+              nama_produk: prodName, 
+            });
+          }
+        }
+      });
+    }
+
+    combinedOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    setOrders(combinedOrders);
+  };
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -3552,78 +3790,91 @@ export default function DashboardMitraPage() {
         router.replace("/masuk");
         return;
       }
+      setUserId(authData.user.id);
       setEmail(authData.user.email ?? null);
 
-      // 1. Ambil Profil Mitra
-      const { data: profileData } = await supabase
-        .from("mitra_profiles")
-        .select("nama_mitra, nik_nib, alamat, telepon, provinsi, kota, created_at")
+      const { data: blacklisted } = await supabase
+        .from("blacklists")
+        .select("alasan")
         .eq("user_id", authData.user.id)
         .maybeSingle();
 
-      setProfile(profileData);
+      if (blacklisted) {
+        alert(`Akses Ditolak: Akun Anda diblokir!\nAlasan: ${blacklisted.alasan}`);
+        await supabase.auth.signOut();
+        router.replace("/masuk");
+        return;
+      }
 
-      // 2. Ambil Produk & Harga Regional
-      const { data: rawProducts, error: prodError } = await supabase
+      const { data: profileData } = await supabase
+        .from("mitra_profiles")
+        .select(
+          "nama_mitra, nik_nib, alamat, telepon, provinsi, kota_kabupaten, status_akun, alasan_ban, created_at"
+        )
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (!profileData) {
+        alert("Akses Ditolak: Profil mitra Anda tidak ditemukan atau pendaftaran sebelumnya ditolak.");
+        await supabase.auth.signOut();
+        router.replace("/masuk");
+        return;
+      }
+
+      if (profileData.status_akun === "banned") {
+        alert(
+          `Akun Anda telah di-ban oleh Administrator!\nAlasan: ${
+            profileData.alasan_ban || "Pelanggaran ketentuan layanan."
+          }`
+        );
+        await supabase.auth.signOut();
+        router.replace("/masuk");
+        return;
+      }
+
+      setProfile(profileData);
+      setEditForm({
+        nama_mitra: profileData.nama_mitra || "",
+        nik_nib: profileData.nik_nib || "",
+        telepon: profileData.telepon || "",
+        provinsi: profileData.provinsi || "",
+        kota_kabupaten: profileData.kota_kabupaten || "",
+        alamat: profileData.alamat || "",
+      });
+
+      const { data: rawProducts } = await supabase
         .from("products")
-        .select(`
-          id,
-          nama_produk,
-          deskripsi,
-          satuan,
-          harga_default,
-          stok_dummy,
-          regional_product_prices(*)
-        `)
+        .select(`id, nama_produk, deskripsi, satuan, harga_default, stok_dummy, regional_product_prices(*)`)
         .order("created_at", { ascending: false });
 
       const { data: allRegionalPrices } = await supabase
         .from("regional_product_prices")
         .select("*");
 
-      if (prodError) {
-        console.error("Gagal mengambil data produk:", prodError.message);
-      }
-
       if (rawProducts) {
         const cleanCityName = (str: string) => {
           if (!str) return "";
-          return str
-            .toUpperCase()
-            .replace(/KOTA/g, "")
-            .replace(/KABUPATEN/g, "")
-            .replace(/KAB\./g, "")
-            .replace(/KAB/g, "")
-            .replace(/[^A-Z0-9]/g, "")
-            .trim();
+          return str.toUpperCase().replace(/KOTA/g, "").replace(/KABUPATEN/g, "").replace(/KAB\./g, "").replace(/KAB/g, "").replace(/[^A-Z0-9]/g, "").trim();
         };
 
-        const rawLocationText = profileData?.kota || profileData?.alamat || "";
+        const rawLocationText = profileData?.kota_kabupaten || profileData?.alamat || "";
         const userKotaClean = cleanCityName(rawLocationText);
 
         const filteredProducts: DisplayProduct[] = [];
 
         rawProducts.forEach((p: RawProduct) => {
-          const regionalPricesList = [
-            ...(p.regional_product_prices || []),
-            ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) || []),
-          ];
-
+          const regionalPricesList = [...(p.regional_product_prices || []), ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) || [])];
           const regionalMatch = regionalPricesList.find((rp: RegionalPrice) => {
             const rpKotaClean = cleanCityName(rp.kota || "");
             if (!rpKotaClean || !userKotaClean) return false;
-
-            return (
-              rpKotaClean === userKotaClean ||
-              userKotaClean.includes(rpKotaClean) ||
-              rpKotaClean.includes(userKotaClean)
-            );
+            return rpKotaClean === userKotaClean || userKotaClean.includes(rpKotaClean) || rpKotaClean.includes(userKotaClean);
           });
 
           if (regionalMatch) {
             filteredProducts.push({
               id: p.id,
               nama: p.nama_produk,
+              nama_produk: p.nama_produk,
               deskripsi: p.deskripsi,
               unit: p.satuan,
               price: Number(regionalMatch.harga ?? regionalMatch.harga_min ?? p.harga_default),
@@ -3636,12 +3887,110 @@ export default function DashboardMitraPage() {
 
         setProducts(filteredProducts);
       }
-
       setLoading(false);
     };
 
     fetchDashboardData();
   }, [router]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    fetchOrdersOnly(userId);
+
+    const supabase = createSupabaseBrowserClient();
+    const channel = supabase
+      .channel('realtime-orders-channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        () => fetchOrdersOnly(userId)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pesanan_mitra' },
+        () => fetchOrdersOnly(userId)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
+
+  const handleConfirmOrder = async (orderId: string) => {
+    setConfirmingOrderId(orderId);
+    const supabase = createSupabaseBrowserClient();
+
+    const { error } = await supabase.from("orders").update({ status: "selesai" }).eq("id", orderId);
+    await supabase.from("pesanan_mitra").update({ status: "SELESAI" }).eq("id", orderId);
+
+    setConfirmingOrderId(null);
+
+    if (error) {
+      alert("Gagal mengonfirmasi pesanan: " + error.message);
+    } else {
+      alert("Terima kasih! Pesanan telah dikonfirmasi diterima.");
+      fetchOrdersOnly(userId!);
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+    setEditLoading(true);
+
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase
+      .from("mitra_profiles")
+      .update({
+        nama_mitra: editForm.nama_mitra,
+        nik_nib: editForm.nik_nib,
+        telepon: editForm.telepon,
+        provinsi: editForm.provinsi,
+        kota_kabupaten: editForm.kota_kabupaten,
+        alamat: editForm.alamat,
+      })
+      .eq("user_id", userId);
+
+    setEditLoading(false);
+
+    if (!error) {
+      setProfile((prev) => prev ? { ...prev, ...editForm } : null);
+      setIsEditOpen(false);
+    } else {
+      alert("Gagal memperbarui profil: " + error.message);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!userId) return;
+    setDeleteLoading(true);
+
+    try {
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert("Gagal menghapus akun: " + data.error);
+        setDeleteLoading(false);
+        return;
+      }
+
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+      alert("Akun berhasil dihapus permanen.");
+      router.push("/masuk");
+    } catch {
+      alert("Terjadi kesalahan jaringan saat menghapus akun.");
+      setDeleteLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -3655,254 +4004,329 @@ export default function DashboardMitraPage() {
   }
 
   const joinedLabel = profile?.created_at
-    ? new Date(profile.created_at).toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
+    ? new Date(profile.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
     : "-";
 
   return (
-    <div className="px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-5xl w-full mx-auto relative">
-      {/* Ringkasan */}
-      <section id="ringkasan" className="scroll-mt-8 mb-10 md:mb-16">
-        <p className="font-mono text-xs tracking-widest uppercase text-green mb-2 sm:mb-3">
-          Ringkasan
-        </p>
-        <h1 className="font-display font-semibold text-xl sm:text-2xl md:text-3xl text-forest mb-2">
-          Selamat datang, {profile?.nama_mitra ?? "Mitra"}
-        </h1>
-        <p className="text-ink/60 text-sm sm:text-base mb-6 md:mb-8">
-          Pantau stok dan kelola profil kemitraan kamu di sini.
-        </p>
+    <>
+      <Script
+        src="https://app.sandbox.midtrans.com/snap/snap.js"
+        data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
+        strategy="afterInteractive"
+      />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
-            <p className="text-xs text-ink/45 mb-1">Status akun</p>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
-              <p className="font-display font-semibold text-forest text-base sm:text-lg">Aktif</p>
+      <div className="px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-5xl w-full mx-auto relative">
+        
+        {/* Ringkasan */}
+        <section id="ringkasan" className="scroll-mt-8 mb-10 md:mb-16">
+          <p className="font-mono text-xs tracking-widest uppercase text-green mb-2 sm:mb-3">Ringkasan</p>
+          <h1 className="font-display font-semibold text-xl sm:text-2xl md:text-3xl text-forest mb-2">
+            Selamat datang, {profile?.nama_mitra ?? "Mitra"}
+          </h1>
+          <p className="text-ink/60 text-sm sm:text-base mb-6 md:mb-8">Pantau stok dan kelola profil kemitraan kamu di sini.</p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
+              <p className="text-xs text-ink/45 mb-1">Status akun</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <svg className="w-4 h-4 text-forest opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="font-display font-semibold text-forest text-base sm:text-lg">Aktif</p>
+              </div>
+            </div>
+            <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
+              <p className="text-xs text-ink/45 mb-1">Bergabung sejak</p>
+              <p className="font-display font-semibold text-forest text-base sm:text-lg">{joinedLabel}</p>
             </div>
           </div>
-          <div className="bg-paper rounded-2xl border border-forest/10 p-4 sm:p-5 shadow-xs">
-            <p className="text-xs text-ink/45 mb-1">Bergabung sejak</p>
-            <p className="font-display font-semibold text-forest text-base sm:text-lg">
-              {joinedLabel}
-            </p>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Pesan Stok */}
-      <section id="pesan-stok" className="scroll-mt-8 mb-10 md:mb-16">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 sm:mb-3 gap-2">
-          <div>
-            <p className="font-mono text-xs tracking-widest uppercase text-gold mb-1">
-              Pesan stok
-            </p>
-            <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest">
-              Pesan bahan energi
-            </h2>
+        {/* Pesan Stok */}
+        <section id="pesan-stok" className="scroll-mt-8 mb-10 md:mb-16">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 sm:mb-3 gap-2">
+            <div>
+              <p className="font-mono text-xs tracking-widest uppercase text-gold mb-1">Pesan stok</p>
+              <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest">Pesan bahan energi</h2>
+            </div>
+            {(profile?.kota_kabupaten || profile?.alamat) && (
+              <span className="text-xs bg-forest/10 text-forest font-medium px-3 py-1 rounded-full border border-forest/20">
+                Wilayah: {profile.kota_kabupaten ? profile.kota_kabupaten.toUpperCase() : "BELUM DISET"}
+              </span>
+            )}
           </div>
-          {(profile?.kota || profile?.alamat) && (
-            <span className="text-xs bg-forest/10 text-forest font-medium px-3 py-1 rounded-full border border-forest/20">
-              Wilayah: {profile.kota || "PALEMBANG"}
-            </span>
+          <p className="text-ink/60 text-sm sm:text-base mb-6 md:mb-8 max-w-lg">
+            Pantau stok yang ada di titikmu dan ajukan permintaan stok langsung ke LENTERA.
+          </p>
+
+          {products.length === 0 ? (
+            <div className="bg-paper rounded-2xl border border-forest/10 p-8 text-center">
+              <p className="text-ink/60 text-sm">Tidak ada produk yang dialokasikan untuk wilayah ini.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+              {products.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
+            </div>
           )}
-        </div>
-        <p className="text-ink/60 text-sm sm:text-base mb-6 md:mb-8 max-w-lg">
-          Pantau stok yang ada di titikmu dan ajukan permintaan stok langsung ke LENTERA.
-        </p>
+        </section>
 
-        {products.length === 0 ? (
-          <div className="bg-paper rounded-2xl border border-forest/10 p-8 text-center">
-            <p className="text-ink/60 text-sm">Tidak ada produk yang dialokasikan untuk wilayah ini.</p>
+        {/* Status Pengiriman (GRID 2 KOLOM) */}
+        <section id="pesanan-saya" className="scroll-mt-8 mb-10 md:mb-16">
+          <p className="font-mono text-xs tracking-widest uppercase text-forest mb-1">Daftar Pesanan</p>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest">
+              Status Pengiriman & Penerimaan
+            </h2>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-forest/5 border border-forest/10 text-[10px] text-forest/70 font-semibold tracking-wide uppercase">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Sistem tersinkronisasi
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-            {products.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
+
+          {orders.length === 0 ? (
+            <div className="bg-paper rounded-2xl border border-forest/10 p-6 text-center">
+              <p className="text-ink/60 text-sm">Belum ada pesanan aktif saat ini.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+              {orders.map((order) => (
+                <div key={order.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all">
+                  
+                  {/* Header Card: Nama Produk & Status */}
+                  <div className="flex justify-between items-start border-b border-forest/10 pb-3 mb-3">
+                    <div>
+                      <h3 className="font-display font-bold text-forest text-lg">
+                        {order.nama_produk || "Produk Energi"}
+                      </h3>
+                      <p className="font-mono text-[10px] text-ink/40 uppercase tracking-widest mt-0.5">
+                        ID: {order.id.split('-')[0]}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full capitalize text-center whitespace-nowrap ${
+                        order.status === "dikirim"
+                          ? "bg-amber-100 text-amber-800 border border-amber-300"
+                          : order.status === "selesai"
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                          : "bg-blue-100 text-blue-800 border border-blue-300"
+                      }`}
+                    >
+                      {order.status === "dikirim" ? "Pengiriman" : order.status === "selesai" ? "Selesai" : "Diproses"}
+                    </span>
+                  </div>
+
+                  {/* Info Tengah: Harga & Tanggal */}
+                  <div className="flex justify-between items-end mb-4">
+                    <div>
+                      <p className="text-[10px] text-ink/50 uppercase tracking-wider mb-0.5">Total Pembayaran</p>
+                      <p className="font-semibold text-green text-base">
+                        Rp {order.total_harga?.toLocaleString("id-ID")}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-ink/50 uppercase tracking-wider mb-0.5">Tanggal</p>
+                      <p className="text-xs font-medium text-forest">
+                        {new Date(order.created_at).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Area Tombol Aksi */}
+                  {(order.bukti_pengiriman_url || order.status === "dikirim") && (
+                    <div className="flex gap-2 pt-3 border-t border-forest/5 mt-auto">
+                      {order.bukti_pengiriman_url && (
+                        <button
+                          onClick={() => {
+                            setSelectedProofUrl(order.bukti_pengiriman_url!);
+                            setProofModalOpen(true);
+                          }}
+                          className="flex-1 flex items-center justify-center text-xs font-semibold py-2.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
+                        >
+                          <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                          </svg>
+                          Lihat Bukti
+                        </button>
+                      )}
+
+                      {order.status === "dikirim" && (
+                        <button
+                          onClick={() => handleConfirmOrder(order.id)}
+                          disabled={confirmingOrderId === order.id}
+                          className="flex-1 text-xs font-semibold py-2.5 bg-green text-white rounded-xl hover:bg-forest transition-colors shadow-xs disabled:opacity-50 cursor-pointer text-center"
+                        >
+                          {confirmingOrderId === order.id ? "Memproses..." : "Konfirmasi Terima"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Profil Mitra */}
+        <section id="profil-mitra" className="scroll-mt-8 mb-10">
+          <div className="flex justify-between items-end mb-4 sm:mb-6">
+            <div>
+              <p className="font-mono text-xs tracking-widest uppercase text-clay mb-1 sm:mb-2">Profil mitra</p>
+              <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest">Informasi mitra</h2>
+            </div>
+            <button onClick={() => setIsEditOpen(true)} className="text-xs font-semibold px-4 py-2 bg-forest text-cream rounded-xl hover:bg-forest/90 transition-colors cursor-pointer">
+              Ubah Profil
+            </button>
+          </div>
+
+          <div className="bg-paper rounded-2xl border border-forest/10 p-5 sm:p-6 md:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 shadow-xs">
+            <InfoRow label="Nama mitra" value={profile?.nama_mitra} />
+            <InfoRow label="Email" value={email} />
+            <InfoRow label="NIK / NIB" value={profile?.nik_nib} />
+            <InfoRow label="Nomor telepon" value={profile?.telepon} />
+            <InfoRow label="Wilayah Operasional" value={profile?.kota_kabupaten ? `${profile.kota_kabupaten}, ${profile.provinsi}` : "BELUM DISET"} />
+            <InfoRow label="Alamat lengkap" value={profile?.alamat} className="sm:col-span-2" />
+          </div>
+        </section>
+
+        {/* Hapus Akun */}
+        <section className="bg-red-50/50 border border-red-200/60 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h3 className="font-display font-semibold text-red-900 text-base sm:text-lg">Hapus Akun Kemitraan</h3>
+            <p className="text-xs sm:text-sm text-red-700/80 mt-0.5">Tindakan ini permanen. Seluruh data profil dan alokasi wilayah kamu akan dihapus.</p>
+          </div>
+          <button onClick={() => setIsDeleteOpen(true)} className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors shrink-0 cursor-pointer">
+            Hapus Akun
+          </button>
+        </section>
+
+        {/* MODAL UBAH PROFIL */}
+        {isEditOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+            <div className="bg-paper border border-forest/10 rounded-2xl max-w-lg w-full p-6 shadow-lg max-h-[90vh] overflow-y-auto">
+              <h3 className="font-display font-semibold text-xl text-forest mb-4">Ubah Data Profil</h3>
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Nama Mitra</label>
+                  <input type="text" required value={editForm.nama_mitra} onChange={(e) => setEditForm({ ...editForm, nama_mitra: e.target.value })} className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-ink/60 mb-1">NIK / NIB</label>
+                    <input type="text" required value={editForm.nik_nib} onChange={(e) => setEditForm({ ...editForm, nik_nib: e.target.value })} className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-ink/60 mb-1">Nomor Telepon</label>
+                    <input type="text" required value={editForm.telepon} onChange={(e) => setEditForm({ ...editForm, telepon: e.target.value })} className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-ink/60 mb-1">Provinsi</label>
+                    <input type="text" value={editForm.provinsi} onChange={(e) => setEditForm({ ...editForm, provinsi: e.target.value })} className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-ink/60 mb-1">Kota / Kabupaten</label>
+                    <input type="text" value={editForm.kota_kabupaten} onChange={(e) => setEditForm({ ...editForm, kota_kabupaten: e.target.value })} className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Alamat Lengkap</label>
+                  <textarea rows={3} value={editForm.alamat} onChange={(e) => setEditForm({ ...editForm, alamat: e.target.value })} className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest resize-none" />
+                </div>
+                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                  <button type="button" onClick={() => setIsEditOpen(false)} className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink cursor-pointer">Batal</button>
+                  <button type="submit" disabled={editLoading} className="text-xs font-semibold px-4 py-2.5 bg-forest text-cream rounded-xl hover:bg-forest/90 disabled:opacity-50 cursor-pointer">
+                    {editLoading ? "Menyimpan..." : "Simpan Perubahan"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
-      </section>
 
-      {/* Profil Mitra */}
-      <section id="profil-mitra" className="scroll-mt-8">
-        <p className="font-mono text-xs tracking-widest uppercase text-clay mb-2 sm:mb-3">
-          Profil mitra
-        </p>
-        <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest mb-4 sm:mb-6">
-          Informasi mitra
-        </h2>
-        <div className="bg-paper rounded-2xl border border-forest/10 p-5 sm:p-6 md:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 shadow-xs">
-          <InfoRow label="Nama mitra" value={profile?.nama_mitra} />
-          <InfoRow label="Email" value={email} />
-          <InfoRow label="NIK / NIB" value={profile?.nik_nib} />
-          <InfoRow label="Nomor telepon" value={profile?.telepon} />
-          <InfoRow
-            label="Wilayah Operasional"
-            value={profile?.kota ? `${profile.kota}, ${profile.provinsi}` : "PALEMBANG"}
-          />
-          <InfoRow
-            label="Alamat lengkap"
-            value={profile?.alamat}
-            className="sm:col-span-2"
-          />
-        </div>
-      </section>
-
-      {/* AI Assistant Floating Widget */}
-      <AIAssistant />
-    </div>
-  );
-}
-```
-
-## FILE: app/dashboard/product-card.tsx
-
-```ts
-"use client";
-
-import { useState } from "react";
-
-interface ProductCardProps {
-  product: {
-    id: string;
-    nama?: string;
-    nama_produk?: string;
-    deskripsi?: string;
-    price?: number;
-    harga_default?: number;
-    unit?: string;
-    satuan?: string;
-    stock?: number;
-    stok?: number;
-    stok_dummy?: number;
-    isRegional?: boolean;
-  };
-}
-
-export function ProductCard({ product }: ProductCardProps) {
-  const [quantity, setQuantity] = useState(1);
-
-  const title = product.nama || product.nama_produk || "Produk Energi";
-  const price = product.price ?? product.harga_default ?? 0;
-  const unit = product.unit || product.satuan || "unit";
-
-  // Ambil stok dari regional_product_prices (stock / stok)
-  const currentStock = product.stock ?? product.stok ?? product.stok_dummy ?? 0;
-
-  const handleDecrease = () => {
-    if (quantity > 1) setQuantity(quantity - 1);
-  };
-
-  const handleIncrease = () => {
-    if (quantity < currentStock) setQuantity(quantity + 1);
-  };
-
-  return (
-    <div className="bg-paper p-5 rounded-2xl border border-forest/10 flex flex-col justify-between shadow-xs relative">
-      <div>
-        <div className="flex justify-between items-start mb-2 gap-2">
-          <h3 className="font-display font-semibold text-forest text-lg">{title}</h3>
-          <span className="text-[11px] font-mono font-medium bg-gold/15 text-gold-dark px-2.5 py-1 rounded-md shrink-0">
-            {currentStock} {unit}
-          </span>
-        </div>
-        <p className="text-xs text-ink/60 mb-4 line-clamp-2">
-          {product.deskripsi || "Bahan bakar energi terbarukan."}
-        </p>
-      </div>
-
-      <div className="border-t border-forest/10 pt-4 space-y-4">
-        <div>
-          <p className="text-[10px] text-ink/45 uppercase tracking-wider">Harga Wilayah</p>
-          <p className="font-semibold text-green text-base">
-            Rp {price.toLocaleString("id-ID")}{" "}
-            <span className="text-xs font-normal text-ink/50">/{unit}</span>
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 pt-1">
-          <div className="flex items-center border border-forest/20 rounded-xl bg-white overflow-hidden shrink-0">
-            <button
-              type="button"
-              onClick={handleDecrease}
-              disabled={quantity <= 1}
-              className="px-2.5 py-1.5 text-forest hover:bg-forest/5 disabled:opacity-30 text-xs font-bold transition-colors cursor-pointer"
-            >
-              -
-            </button>
-            <span className="px-2 py-1.5 text-xs font-semibold text-forest min-w-[1.75rem] text-center">
-              {quantity}
-            </span>
-            <button
-              type="button"
-              onClick={handleIncrease}
-              disabled={quantity >= currentStock}
-              className="px-2.5 py-1.5 text-forest hover:bg-forest/5 disabled:opacity-30 text-xs font-bold transition-colors cursor-pointer"
-            >
-              +
-            </button>
+        {/* MODAL KONFIRMASI HAPUS AKUN */}
+        {isDeleteOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+            <div className="bg-paper border border-red-200 rounded-2xl max-w-md w-full p-6 shadow-lg">
+              <h3 className="font-display font-semibold text-xl text-red-900 mb-2">Konfirmasi Hapus Akun</h3>
+              <p className="text-sm text-ink/70 mb-6">Apakah kamu yakin ingin menghapus akun kemitraan ini? Semua data profil akan dihapus dan kamu akan dikembalikan ke halaman awal.</p>
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setIsDeleteOpen(false)} className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink cursor-pointer">Batal</button>
+                <button type="button" onClick={handleDeleteAccount} disabled={deleteLoading} className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 cursor-pointer">
+                  {deleteLoading ? "Menghapus..." : "Ya, Hapus Akun"}
+                </button>
+              </div>
+            </div>
           </div>
+        )}
 
-          <button
-            type="button"
-            disabled={currentStock <= 0}
-            className="flex-1 bg-forest text-cream py-2 px-3 rounded-xl text-xs font-medium hover:bg-forest/90 disabled:bg-gray-200 disabled:text-gray-400 transition-colors shadow-xs cursor-pointer"
+        {/* MODAL TAMPILKAN BUKTI PENGIRIMAN */}
+        {proofModalOpen && selectedProofUrl && (
+          <div 
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"
+            onClick={() => setProofModalOpen(false)}
           >
-            {currentStock > 0 ? "Pesan" : "Stok Habis"}
-          </button>
-        </div>
+            <div 
+              className="relative bg-paper rounded-2xl shadow-2xl max-w-2xl w-full p-2 animate-in zoom-in-95 duration-200" 
+              onClick={(e) => e.stopPropagation()} 
+            >
+              <div className="flex justify-between items-center p-3 border-b border-forest/10 mb-2">
+                <h3 className="font-display font-semibold text-forest text-sm">Foto Bukti Pengiriman</h3>
+                <button 
+                  onClick={() => setProofModalOpen(false)} 
+                  className="text-ink/50 hover:text-ink font-bold w-8 h-8 flex items-center justify-center rounded-full bg-forest/5 hover:bg-forest/10 transition-colors cursor-pointer"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
+                <img 
+                  src={selectedProofUrl} 
+                  alt="Bukti Pengiriman Barang" 
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                />
+              </div>
+              <div className="p-3 text-center">
+                <a 
+                  href={selectedProofUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-[11px] font-medium text-blue-600 hover:underline"
+                >
+                  Buka gambar resolusi penuh di tab baru
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <AIAssistant />
       </div>
-    </div>
+    </>
   );
 }
 ```
 
 ## FILE: app/dashboard-admin/layout.tsx
 
-```ts
+```tsx
 "use client";
-
-import { useState } from "react";
-import { AdminSidebar } from "@/components/dashboard/admin-sidebar";
 
 export default function DashboardAdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-
   return (
-    <div className="flex min-h-screen bg-cream relative">
-      {/* Top Header Khusus Mobile */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10">
-        <div className="flex flex-col">
-          <span className="font-display font-bold tracking-tight text-base">LENTERA</span>
-          <span className="text-[10px] text-cream/50">Portal Admin</span>
-        </div>
-        <button
-          onClick={() => setIsMobileOpen(true)}
-          className="p-2 text-cream hover:bg-cream/10 rounded-lg transition-colors focus:outline-none"
-          aria-label="Buka Navigasi"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Sidebar Admin dengan fitur Slide-in Mobile */}
-      <AdminSidebar
-        isOpen={isMobileOpen}
-        onClose={() => setIsMobileOpen(false)}
-      />
-
-      {/* Area Konten Utama */}
-      <main className="flex-1 min-w-0 pt-16 md:pt-0">{children}</main>
+    <div className="min-h-screen bg-cream w-full">
+      {children}
     </div>
   );
 }
@@ -3910,12 +4334,14 @@ export default function DashboardAdminLayout({
 
 ## FILE: app/dashboard-admin/page.tsx
 
-```ts
+```tsx
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { AdminSidebar } from "@/components/dashboard/admin-sidebar";
 
 interface Shipment {
   id: string;
@@ -3946,13 +4372,66 @@ interface RegionalProductPrice {
   products?: { nama_produk: string; satuan: string };
 }
 
+interface Order {
+  id: string;
+  created_at: string;
+  total_harga: number;
+  status: string;
+  bukti_pengiriman_url?: string | null; 
+}
+
+interface UserAccount {
+  id: string;
+  user_id: string;
+  nama: string;
+  email?: string;
+  nik_nib: string;
+  telepon: string;
+  provinsi?: string;
+  kota_kabupaten?: string;
+  kecamatan?: string;
+  kelurahan?: string;
+  alamat?: string;
+  lat?: number | null;
+  lng?: number | null;
+  foto_doc_url?: string;
+  tipe: "mitra" | "industri";
+  status_akun: "aktif" | "banned";
+  alasan_ban?: string;
+  kuota_pemesanan?: number;
+  total_pemesanan?: number;
+}
+
 export default function DashboardAdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
 
+  const [activeTab, setActiveTab] = useState("ringkasan");
+
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [regionalPrices, setRegionalPrices] = useState<RegionalProductPrice[]>([]);
+  const [usersList, setUsersList] = useState<UserAccount[]>([]);
+
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedUserDetail, setSelectedUserDetail] = useState<UserAccount | null>(null);
+
+  const [ordersModalOpen, setOrdersModalOpen] = useState(false);
+  const [userOrders, setUserOrders] = useState<Order[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [newQuota, setNewQuota] = useState<number>(30);
+
+  const [orderStatusModalOpen, setOrderStatusModalOpen] = useState(false);
+  const [selectedOrderUpdate, setSelectedOrderUpdate] = useState<Order | null>(null);
+  const [newOrderStatus, setNewOrderStatus] = useState("");
+  const [proofFile, setProofFile] = useState<File | null>(null);
+
+  const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
+
+  const [banModalOpen, setBanModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
+  const [banReason, setBanReason] = useState("");
 
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
@@ -3964,21 +4443,26 @@ export default function DashboardAdminPage() {
     provinsi: "",
     kota: "",
     harga: "",
-    stok: ""
+    stok: "",
   });
 
   const [productModalOpen, setProductModalOpen] = useState(false);
-  const [formProduct, setFormProduct] = useState({ nama_produk: "", deskripsi: "", satuan: "karung", harga_default: "", stok: "50" });
+  const [formProduct, setFormProduct] = useState({
+    nama_produk: "",
+    deskripsi: "",
+    satuan: "karung",
+    harga_default: "",
+    stok: "50",
+  });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   const [provinces, setProvinces] = useState<{ id: string; name: string }[]>([]);
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     fetch("https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json")
       .then((res) => res.json())
-      .then((data) => setProvinces(data))
+      .then((data) => setProvinces(Array.isArray(data) ? data : []))
       .catch((err) => console.error("Error fetch provinsi:", err));
   }, []);
 
@@ -4021,15 +4505,223 @@ export default function DashboardAdminPage() {
         .order("kota", { ascending: true });
       if (priceData) setRegionalPrices(priceData as unknown as RegionalProductPrice[]);
 
+      const { data: mitraData } = await supabase.from("mitra_profiles").select("*");
+      const { data: industriData } = await supabase.from("industri_profiles").select("*");
+      const { data: ordersCount } = await supabase.from("orders").select("user_id");
+
+      const orderCountMap: Record<string, number> = {};
+      (ordersCount || []).forEach((o: { user_id: string }) => {
+        orderCountMap[o.user_id] = (orderCountMap[o.user_id] || 0) + 1;
+      });
+
+      const combinedUsers: UserAccount[] = [
+        ...(mitraData || []).map((m: Record<string, unknown>, idx: number) => ({
+          id: (m.id as string) || (m.user_id as string) || `mitra-${idx}`,
+          user_id: (m.user_id as string) || `uid-mitra-${idx}`,
+          nama: (m.nama_mitra as string) || "Tanpa Nama",
+          nik_nib: (m.nik_nib as string) || "-",
+          telepon: (m.telepon as string) || "-",
+          provinsi: (m.provinsi as string) || "-",
+          kota_kabupaten: (m.kota_kabupaten as string) || "-",
+          kecamatan: (m.kecamatan as string) || "-",
+          kelurahan: (m.kelurahan as string) || "-",
+          alamat: (m.alamat as string) || "-",
+          lat: m.lat as number | null,
+          lng: m.lng as number | null,
+          foto_doc_url: m.foto_nik_url as string,
+          tipe: "mitra" as const,
+          status_akun: (m.status_akun as "aktif" | "banned") || "aktif",
+          alasan_ban: m.alasan_ban as string,
+          kuota_pemesanan: (m.kuota_pemesanan as number) ?? 30,
+          total_pemesanan: orderCountMap[m.user_id as string] || 0,
+        })),
+        ...(industriData || []).map((i: Record<string, unknown>, idx: number) => ({
+          id: (i.id as string) || (i.user_id as string) || `industri-${idx}`,
+          user_id: (i.user_id as string) || `uid-industri-${idx}`,
+          nama: (i.nama_perusahaan as string) || "Tanpa Nama",
+          nik_nib: (i.nik_nib as string) || (i.npwp as string) || "-",
+          telepon: (i.telepon as string) || "-",
+          provinsi: (i.provinsi as string) || "-",
+          kota_kabupaten: (i.kota_kabupaten as string) || "-",
+          kecamatan: (i.kecamatan as string) || "-",
+          kelurahan: (i.kelurahan as string) || "-",
+          alamat: (i.alamat as string) || "-",
+          lat: i.lat as number | null,
+          lng: i.lng as number | null,
+          foto_doc_url: i.foto_npwp_url as string,
+          tipe: "industri" as const,
+          status_akun: (i.status_akun as "aktif" | "banned") || "aktif",
+          alasan_ban: i.alasan_ban as string,
+        })),
+      ];
+
+      setUsersList(combinedUsers);
       setLoading(false);
     };
 
     fetchAdminData();
   }, [router]);
 
+  const handleOpenOrdersModal = async (usr: UserAccount) => {
+    setSelectedUserDetail(usr);
+    setNewQuota(usr.kuota_pemesanan ?? 30);
+    setOrdersModalOpen(true);
+    setLoadingOrders(true);
+
+    const supabase = createSupabaseBrowserClient();
+    const { data } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("user_id", usr.user_id)
+      .order("created_at", { ascending: false });
+
+    setUserOrders(data || []);
+    setLoadingOrders(false);
+  };
+
+  const handleSaveOrderStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrderUpdate) return;
+    setIsSubmitting(true);
+
+    const supabase = createSupabaseBrowserClient();
+    let finalProofUrl = selectedOrderUpdate.bukti_pengiriman_url;
+
+    try {
+      if (proofFile) {
+        const fileExt = proofFile.name.split('.').pop();
+        const fileName = `bukti-${selectedOrderUpdate.id}-${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("bukti_pengiriman")
+          .upload(fileName, proofFile);
+
+        if (uploadError) throw new Error("Gagal upload gambar: " + uploadError.message);
+
+        const { data: publicUrlData } = supabase.storage
+          .from("bukti_pengiriman")
+          .getPublicUrl(fileName);
+
+        finalProofUrl = publicUrlData.publicUrl;
+      }
+
+      const { error: updateError } = await supabase
+        .from("orders")
+        .update({
+          status: newOrderStatus,
+          ...(finalProofUrl ? { bukti_pengiriman_url: finalProofUrl } : {})
+        })
+        .eq("id", selectedOrderUpdate.id);
+
+      if (updateError) throw new Error("Gagal update status: " + updateError.message);
+
+      setUserOrders((prev) =>
+        prev.map((o) =>
+          o.id === selectedOrderUpdate.id
+            ? { ...o, status: newOrderStatus, bukti_pengiriman_url: finalProofUrl }
+            : o
+        )
+      );
+
+      alert("Status & Bukti berhasil diperbarui!");
+      setOrderStatusModalOpen(false);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateQuota = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserDetail) return;
+    setIsSubmitting(true);
+
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase
+      .from("mitra_profiles")
+      .update({ kuota_pemesanan: Number(newQuota) })
+      .eq("user_id", selectedUserDetail.user_id);
+
+    if (!error) {
+      setUsersList((prev) =>
+        prev.map((u) =>
+          u.user_id === selectedUserDetail.user_id
+            ? { ...u, kuota_pemesanan: Number(newQuota) }
+            : u
+        )
+      );
+      alert(`Kuota pemesanan berhasil diubah menjadi ${newQuota}!`);
+    } else {
+      alert("Gagal memperbarui kuota: " + error.message);
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleBanUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser || !banReason.trim()) return;
+    setIsSubmitting(true);
+
+    const supabase = createSupabaseBrowserClient();
+    const table = selectedUser.tipe === "mitra" ? "mitra_profiles" : "industri_profiles";
+
+    await supabase.from("blacklists").insert({
+      nik_nib: selectedUser.nik_nib,
+      user_id: selectedUser.user_id,
+      alasan: banReason,
+      tipe_akun: selectedUser.tipe,
+    });
+
+    await supabase
+      .from(table)
+      .update({ status_akun: "banned", alasan_ban: banReason })
+      .eq("user_id", selectedUser.user_id);
+
+    setUsersList(
+      usersList.map((u) =>
+        u.user_id === selectedUser.user_id
+          ? { ...u, status_akun: "banned", alasan_ban: banReason }
+          : u
+      )
+    );
+
+    alert(`Akun ${selectedUser.nama} berhasil di-ban!`);
+    setBanModalOpen(false);
+    setBanReason("");
+    setIsSubmitting(false);
+  };
+
+  const handleUnbanUser = async (user: UserAccount) => {
+    if (!confirm(`Apakah Anda yakin ingin melepas ban untuk akun ${user.nama}?`)) return;
+
+    const supabase = createSupabaseBrowserClient();
+    const table = user.tipe === "mitra" ? "mitra_profiles" : "industri_profiles";
+
+    await supabase.from("blacklists").delete().eq("user_id", user.user_id);
+
+    const { error } = await supabase
+      .from(table)
+      .update({ status_akun: "aktif", alasan_ban: null })
+      .eq("user_id", user.user_id);
+
+    if (!error) {
+      setUsersList(
+        usersList.map((u) =>
+          u.user_id === user.user_id
+            ? { ...u, status_akun: "aktif", alasan_ban: undefined }
+            : u
+        )
+      );
+      alert(`Ban untuk akun ${user.nama} berhasil dilepas! Akun kini aktif kembali.`);
+    } else {
+      alert("Gagal melepas ban: " + error.message);
+    }
+  };
+
   const handleProvinsiChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const provId = e.target.value;
-    const provName = e.target.options[e.target.selectedIndex].text;
+    const provName = e.target.options[e.target.selectedIndex]?.text || "";
 
     setFormPrice((prev) => ({ ...prev, provinsi: provName, kota: "" }));
     setCities([]);
@@ -4037,7 +4729,7 @@ export default function DashboardAdminPage() {
     if (provId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`)
         .then((res) => res.json())
-        .then((data) => setCities(data))
+        .then((data) => setCities(Array.isArray(data) ? data : []))
         .catch((err) => console.error("Error fetch kota:", err));
     }
   };
@@ -4046,11 +4738,20 @@ export default function DashboardAdminPage() {
     e.preventDefault();
     if (!selectedShipment) return;
     setIsSubmitting(true);
+    
     const supabase = createSupabaseBrowserClient();
-    await supabase.from("waste_shipments").update({ status: newStatus }).eq("id", selectedShipment.id);
+    const { error } = await supabase.from("waste_shipments").update({ status: newStatus }).eq("id", selectedShipment.id);
+    
+    setIsSubmitting(false);
+
+    if (error) {
+      alert("Gagal mengubah status pengiriman: " + error.message);
+      return;
+    }
+
     setShipments(shipments.map((s) => (s.id === selectedShipment.id ? { ...s, status: newStatus } : s)));
     setStatusModalOpen(false);
-    setIsSubmitting(false);
+    alert("Status pengiriman berhasil diubah!");
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -4129,227 +4830,726 @@ export default function DashboardAdminPage() {
   }
 
   return (
-    <div className="px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl mx-auto w-full relative">
-      <div className="mb-10">
-        <p className="font-mono text-xs tracking-widest uppercase text-green mb-2">Administrator</p>
-        <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest mb-1.5">Pusat Kendali LENTERA</h1>
-        <p className="text-ink/60 text-sm">Kelola katalog produk, penyesuaian harga wilayah, dan pengiriman limbah industri.</p>
-      </div>
+    <div className="flex min-h-screen bg-cream relative overflow-x-hidden">
+      
+      {/* ðŸš€ KITA PANGGIL SATU-SATUNYA SIDEBAR DI SINI SECARA BERSIH */}
+      <AdminSidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+      />
 
-      {/* MANAJEMEN PRODUK */}
-      <section id="ringkasan" className="mb-12 scroll-mt-8">
-        <div className="flex justify-between items-end mb-4">
-          <h2 className="font-display font-semibold text-xl text-forest">Katalog Produk Utama</h2>
-          <button onClick={() => setProductModalOpen(true)} className="bg-forest text-paper px-4 py-2 rounded-xl text-sm font-medium hover:bg-forest/90 shadow-xs">
-            + Tambah Produk
-          </button>
+      {/* KONTEN UTAMA */}
+      <main className="flex-1 min-w-0 px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-24 md:pt-12">
+        <div className="mb-8">
+          <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">Administrator Portal</p>
+          <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest capitalize">
+            {activeTab.replace("-", " ")}
+          </h1>
         </div>
-        <div className="grid sm:grid-cols-3 gap-4">
-          {products.map((p) => (
-            <div key={p.id} className="bg-paper border border-forest/10 p-5 rounded-2xl flex flex-col relative group shadow-xs">
-              <button
-                onClick={() => handleDeleteProduct(p.id)}
-                className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium"
-              >
-                Hapus
-              </button>
-              <h3 className="font-display font-semibold text-forest text-lg pr-10">{p.nama_produk}</h3>
-              <p className="text-xs text-ink/60 mb-3 leading-relaxed">{p.deskripsi}</p>
-              <div className="mt-auto border-t border-forest/10 pt-3">
-                <p className="text-[10px] text-ink/50 uppercase tracking-widest">Harga Nasional (Default)</p>
-                <p className="font-semibold text-green">Rp {p.harga_default?.toLocaleString("id-ID")} <span className="text-xs font-normal text-ink/50">/{p.satuan}</span></p>
-              </div>
+
+        {activeTab === "ringkasan" && (
+          <div className="space-y-5">
+            <div className="bg-paper p-5 md:p-6 rounded-2xl border border-forest/10 shadow-xs">
+              <h3 className="font-display font-semibold text-lg text-forest mb-1.5">Selamat Datang di Portal Kendali</h3>
+              <p className="text-sm text-ink/60 leading-relaxed">
+                Pantau statistik utama, kelola akun, dan navigasikan katalog produk serta pengiriman dari satu tempat.
+              </p>
             </div>
-          ))}
-        </div>
-      </section>
 
-      {/* HARGA & STOK SPESIFIK DAERAH */}
-      <section id="harga-wilayah" className="mb-12 scroll-mt-8">
-        <div className="flex justify-between items-end mb-4">
-          <h2 className="font-display font-semibold text-xl text-forest">Harga & Stok Produk per Wilayah</h2>
-          <button onClick={() => setPriceModalOpen(true)} className="bg-forest text-paper px-4 py-2 rounded-xl text-sm font-medium hover:bg-forest/90 shadow-xs">
-            + Set Harga & Stok Wilayah
-          </button>
-        </div>
-        <div className="grid sm:grid-cols-3 gap-4">
-          {regionalPrices.length === 0 && <div className="col-span-3 p-6 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">Belum ada pengaturan wilayah.</div>}
-          {regionalPrices.map((rp) => (
-            <div key={rp.id} className="bg-paper rounded-2xl border border-forest/10 p-5 relative group shadow-xs">
-              <button
-                onClick={() => handleDeleteRegionalPrice(rp.id)}
-                className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium"
-              >
-                Hapus
-              </button>
-              <p className="text-[10px] uppercase text-ink/50 mb-1 pr-10">{rp.kota}, {rp.provinsi}</p>
-              <h3 className="font-semibold text-forest text-lg mb-1">{rp.products?.nama_produk}</h3>
-              <div className="text-sm text-ink/70 space-y-1 mt-2 border-t border-forest/10 pt-2">
-                <p>
-                  Harga:{" "}
-                  <span className="font-bold text-green">
-                    Rp {rp.harga?.toLocaleString("id-ID")}
-                  </span>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Mitra</p>
+                <p className="font-display font-semibold text-xl md:text-2xl text-forest">
+                  {usersList.filter((u) => u.tipe === "mitra").length}
                 </p>
-                <p>Stok Gudang: <span className="font-bold text-forest">{rp.stok} {rp.products?.satuan || "kilograms"}</span></p>
+              </div>
+              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Industri</p>
+                <p className="font-display font-semibold text-xl md:text-2xl text-forest">
+                  {usersList.filter((u) => u.tipe === "industri").length}
+                </p>
+              </div>
+              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Pengiriman Limbah</p>
+                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{shipments.length}</p>
+              </div>
+              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Produk Katalog</p>
+                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{products.length}</p>
               </div>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* PENGIRIMAN LIMBAH */}
-      <section id="pengiriman" className="mb-12 scroll-mt-8">
-        <div className="flex justify-between items-end mb-4">
-          <h2 className="font-display font-semibold text-xl text-forest">Semua Pengiriman Limbah</h2>
-        </div>
-        <div className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse">
-              <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
-                <tr>
-                  <th className="p-4">Industri</th>
-                  <th className="p-4">Limbah & Berat</th>
-                  <th className="p-4">Lokasi</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4 text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-forest/10">
-                {shipments.map((ship) => (
-                  <tr key={ship.id} className="hover:bg-forest/[0.02] transition-colors">
-                    <td className="p-4 font-medium text-forest">{ship.industri_profiles?.nama_perusahaan || "-"}</td>
-                    <td className="p-4">{ship.nama_limbah} ({ship.perkiraan_berat}kg)</td>
-                    <td className="p-4 text-xs max-w-xs truncate">{ship.lokasi_penjemputan}</td>
-                    <td className="p-4 font-bold text-xs">
-                      <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] ${
-                        ship.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
-                        : ship.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
-                        : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {ship.status}
-                      </span>
-                    </td>
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }}
-                        className="text-green hover:underline text-xs font-medium"
-                      >
-                        Ubah Status
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
-        </div>
-      </section>
+        )}
 
-      {/* MODAL SET HARGA & STOK */}
-      {priceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-          <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-display font-semibold text-forest mb-4">Set Harga & Stok Wilayah</h3>
-            <form onSubmit={handleSavePrice} className="space-y-4">
+        {(activeTab === "manajemen-pengguna" || activeTab === "manajemen-akun") && (
+          <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-forest/10 bg-forest/5 flex justify-between items-center">
               <div>
-                <label className="block text-xs font-medium text-ink mb-1">Pilih Produk</label>
-                <select className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" required value={formPrice.product_id} onChange={(e) => setFormPrice({ ...formPrice, product_id: e.target.value })}>
-                  <option value="">-- Pilih Produk --</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.nama_produk}</option>
+                <h3 className="font-display font-semibold text-forest text-base">Daftar Akun Mitra & Industri</h3>
+                <p className="text-xs text-ink/60">Inspeksi profil lengkap, foto KTP/NPWP, dan set kuota transaksi.</p>
+              </div>
+            </div>
+
+            <div className="block md:hidden p-4 space-y-4 bg-cream/30">
+              {usersList.map((usr, index) => (
+                <div key={`${usr.tipe}-${usr.user_id}-${index}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-semibold text-forest text-sm">{usr.nama}</h4>
+                      <p className="text-xs text-ink/60 uppercase font-mono mt-0.5">{usr.tipe} â€¢ {usr.nik_nib}</p>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${
+                      usr.status_akun === "banned" ? "bg-red-100 text-red-700" : "bg-green/10 text-green"
+                    }`}>
+                      {usr.status_akun}
+                    </span>
+                  </div>
+
+                  {usr.tipe === "mitra" && (
+                    <div className="text-xs text-ink/70">
+                      Penggunaan Kuota: <span className="font-mono font-medium text-forest">{usr.total_pemesanan} / {usr.kuota_pemesanan ?? 30}</span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-forest/5 mt-1">
+                    <button onClick={() => { setSelectedUserDetail(usr); setDetailModalOpen(true); }} className="flex-1 text-xs font-medium py-2 bg-forest/5 text-forest rounded-lg hover:bg-forest/10 transition-colors text-center cursor-pointer">
+                      Detail
+                    </button>
+                    {usr.tipe === "mitra" && (
+                      <button onClick={() => handleOpenOrdersModal(usr)} className="flex-1 text-xs font-medium py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-center cursor-pointer">
+                        Pesanan
+                      </button>
+                    )}
+                    {usr.status_akun === "banned" ? (
+                      <button onClick={() => handleUnbanUser(usr)} className="flex-1 text-xs font-semibold py-2 bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 transition-colors text-center cursor-pointer">
+                        Lepas Ban
+                      </button>
+                    ) : (
+                      <button onClick={() => { setSelectedUser(usr); setBanModalOpen(true); }} className="flex-1 text-xs font-semibold py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-center cursor-pointer">
+                        Ban
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
+                  <tr>
+                    <th className="p-4">Nama / Perusahaan</th>
+                    <th className="p-4">Tipe</th>
+                    <th className="p-4">NIK / NIB / NPWP</th>
+                    <th className="p-4">Penggunaan Kuota</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-forest/10">
+                  {usersList.map((usr, index) => (
+                    <tr
+                      key={`desktop-${usr.tipe}-${usr.user_id}-${index}`}
+                      className="hover:bg-forest/[0.02] transition-colors"
+                    >
+                      <td className="p-4 font-medium text-forest">{usr.nama}</td>
+                      <td className="p-4 capitalize text-xs font-mono">{usr.tipe}</td>
+                      <td className="p-4 text-xs font-mono">{usr.nik_nib}</td>
+                      <td className="p-4 text-xs">
+                        {usr.tipe === "mitra" ? (
+                          <span className="font-mono font-medium text-forest">
+                            {usr.total_pemesanan} / {usr.kuota_pemesanan ?? 30}
+                          </span>
+                        ) : (
+                          <span className="text-ink/40 italic">-</span>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <span
+                          className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold ${
+                            usr.status_akun === "banned"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-green/10 text-green"
+                          }`}
+                        >
+                          {usr.status_akun}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedUserDetail(usr);
+                              setDetailModalOpen(true);
+                            }}
+                            className="text-xs font-medium px-2.5 py-1.5 bg-forest/10 text-forest rounded-lg hover:bg-forest/20 transition-colors cursor-pointer"
+                          >
+                            Detail
+                          </button>
+
+                          {usr.tipe === "mitra" && (
+                            <button
+                              onClick={() => handleOpenOrdersModal(usr)}
+                              className="text-xs font-medium px-2.5 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors cursor-pointer"
+                            >
+                              Pesanan
+                            </button>
+                          )}
+
+                          {usr.status_akun === "banned" ? (
+                            <button
+                              onClick={() => handleUnbanUser(usr)}
+                              className="text-xs font-semibold px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer"
+                            >
+                              Lepas Ban
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setSelectedUser(usr);
+                                setBanModalOpen(true);
+                              }}
+                              className="text-xs font-semibold px-2.5 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors cursor-pointer"
+                            >
+                              Ban
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
                   ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Provinsi</label>
-                  <select className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase outline-none bg-white" onChange={handleProvinsiChange} required>
-                    <option value="">PROVINSI</option>
-                    {provinces.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Kota / Kab</label>
-                  <select
-                    className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase disabled:bg-gray-100 outline-none bg-white"
-                    value={formPrice.kota}
-                    onChange={(e) => setFormPrice((prev) => ({ ...prev, kota: e.target.options[e.target.selectedIndex].text }))}
-                    disabled={cities.length === 0}
-                    required
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {activeTab === "katalog-produk" && (
+          <section className="space-y-4">
+            <div className="flex justify-between items-center mb-2">
+              <p className="text-xs text-ink/60">Daftar produk energi yang terdaftar secara nasional.</p>
+              <button
+                onClick={() => setProductModalOpen(true)}
+                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer"
+              >
+                + Tambah Produk Baru
+              </button>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-4">
+              {products.map((p) => (
+                <div key={p.id} className="bg-paper border border-forest/10 p-5 rounded-2xl flex flex-col relative group shadow-xs">
+                  <button
+                    onClick={() => handleDeleteProduct(p.id)}
+                    className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer"
                   >
-                    <option value="">KOTA/KAB</option>
-                    {cities.map((c) => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
+                    Hapus
+                  </button>
+                  <h3 className="font-display font-semibold text-forest text-lg pr-10">{p.nama_produk}</h3>
+                  <p className="text-xs text-ink/60 mb-3 leading-relaxed">{p.deskripsi}</p>
+                  <div className="mt-auto border-t border-forest/10 pt-3">
+                    <p className="text-[10px] text-ink/50 uppercase tracking-widest">Harga Nasional (Default)</p>
+                    <p className="font-semibold text-green">
+                      Rp {p.harga_default?.toLocaleString("id-ID")}{" "}
+                      <span className="text-xs font-normal text-ink/50">/{p.satuan}</span>
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeTab === "harga-wilayah" && (
+          <section className="space-y-4">
+            <div className="flex justify-between items-center mb-2">
+              <p className="text-xs text-ink/60">Penyesuaian harga dan ketersediaan stok produk per daerah.</p>
+              <button
+                onClick={() => setPriceModalOpen(true)}
+                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer"
+              >
+                + Set Harga Wilayah
+              </button>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-4">
+              {regionalPrices.length === 0 && (
+                <div className="col-span-3 p-8 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">
+                  Belum ada penyesuaian harga spesifik daerah.
+                </div>
+              )}
+              {regionalPrices.map((rp) => (
+                <div key={rp.id} className="bg-paper rounded-2xl border border-forest/10 p-5 relative group shadow-xs">
+                  <button
+                    onClick={() => handleDeleteRegionalPrice(rp.id)}
+                    className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer"
+                  >
+                    Hapus
+                  </button>
+                  <p className="text-[10px] uppercase text-ink/50 mb-1 pr-10">{rp.kota}, {rp.provinsi}</p>
+                  <h3 className="font-semibold text-forest text-lg mb-1">{rp.products?.nama_produk}</h3>
+                  <div className="text-sm text-ink/70 space-y-1 mt-2 border-t border-forest/10 pt-2">
+                    <p>
+                      Harga: <span className="font-bold text-green">Rp {rp.harga?.toLocaleString("id-ID")}</span>
+                    </p>
+                    <p>Stok: <span className="font-bold text-forest">{rp.stok} {rp.products?.satuan || "karung"}</span></p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeTab === "pengiriman" && (
+          <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
+            
+            <div className="block md:hidden p-4 space-y-4 bg-cream/30">
+              {shipments.map((ship) => (
+                <div key={`mobile-ship-${ship.id}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-semibold text-forest text-sm">{ship.industri_profiles?.nama_perusahaan || "-"}</h4>
+                      <p className="text-xs text-ink/70 mt-1">{ship.nama_limbah} <span className="font-semibold">({ship.perkiraan_berat}kg)</span></p>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${
+                      ship.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
+                      : ship.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
+                      : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {ship.status}
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-ink/60 bg-forest/5 p-2 rounded-lg">
+                    <span className="block font-medium text-ink/80 mb-0.5">Lokasi Penjemputan:</span>
+                    {ship.lokasi_penjemputan}
+                  </div>
+
+                  <div className="pt-2 border-t border-forest/5 mt-1">
+                    <button onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }} className="w-full text-xs font-semibold py-2 bg-green/10 text-green rounded-lg hover:bg-green/20 transition-colors text-center cursor-pointer">
+                      Ubah Status
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
+                  <tr>
+                    <th className="p-4">Industri</th>
+                    <th className="p-4">Limbah & Berat</th>
+                    <th className="p-4">Lokasi Penjemputan</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-forest/10">
+                  {shipments.map((ship) => (
+                    <tr key={`desktop-ship-${ship.id}`} className="hover:bg-forest/[0.02] transition-colors">
+                      <td className="p-4 font-medium text-forest">{ship.industri_profiles?.nama_perusahaan || "-"}</td>
+                      <td className="p-4">{ship.nama_limbah} ({ship.perkiraan_berat}kg)</td>
+                      <td className="p-4 text-xs max-w-xs truncate">{ship.lokasi_penjemputan}</td>
+                      <td className="p-4 font-bold text-xs">
+                        <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] ${
+                          ship.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
+                          : ship.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
+                          : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {ship.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }}
+                          className="text-green hover:underline text-xs font-medium cursor-pointer"
+                        >
+                          Ubah Status
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {detailModalOpen && selectedUserDetail && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start mb-4 border-b border-forest/10 pb-3">
+                <div>
+                  <span className="text-[10px] uppercase font-mono tracking-widest text-green">Profil {selectedUserDetail.tipe}</span>
+                  <h3 className="font-display font-semibold text-xl text-forest">{selectedUserDetail.nama}</h3>
+                </div>
+                <button onClick={() => setDetailModalOpen(false)} className="text-ink/40 hover:text-ink text-sm font-bold cursor-pointer">âœ•</button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mb-6">
+                <div className="bg-white p-3 rounded-xl border border-forest/10 space-y-1.5">
+                  <p className="text-ink/50 uppercase font-mono text-[10px]">Identitas Resmi</p>
+                  <p><span className="font-semibold">NIK / NIB / NPWP:</span> {selectedUserDetail.nik_nib}</p>
+                  <p><span className="font-semibold">Telepon:</span> {selectedUserDetail.telepon}</p>
+                  <p><span className="font-semibold">Status Akun:</span> <span className="capitalize font-bold">{selectedUserDetail.status_akun}</span></p>
+                  {selectedUserDetail.alasan_ban && (
+                    <p className="text-red-600"><span className="font-semibold">Alasan Ban:</span> {selectedUserDetail.alasan_ban}</p>
+                  )}
+                </div>
+
+                <div className="bg-white p-3 rounded-xl border border-forest/10 space-y-1.5">
+                  <p className="text-ink/50 uppercase font-mono text-[10px]">Alamat & Wilayah Operasional</p>
+                  <p><span className="font-semibold">Provinsi:</span> {selectedUserDetail.provinsi}</p>
+                  <p><span className="font-semibold">Kota / Kab:</span> {selectedUserDetail.kota_kabupaten}</p>
+                  <p><span className="font-semibold">Kec / Kel:</span> {selectedUserDetail.kecamatan}, {selectedUserDetail.kelurahan}</p>
+                  <p><span className="font-semibold">Detail Alamat:</span> {selectedUserDetail.alamat}</p>
+                  <p><span className="font-semibold">Koordinat GPS:</span> {selectedUserDetail.lat && selectedUserDetail.lng ? `${selectedUserDetail.lat}, ${selectedUserDetail.lng}` : "Belum di-set"}</p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-xs font-semibold text-forest mb-2">Dokumen Verifikasi (Foto KTP / NPWP):</p>
+                {selectedUserDetail.foto_doc_url ? (
+                  <div className="bg-black/5 rounded-xl p-2 border border-forest/10 overflow-hidden text-center">
+                    <a href={selectedUserDetail.foto_doc_url} target="_blank" rel="noopener noreferrer">
+                      <Image
+                        src={selectedUserDetail.foto_doc_url}
+                        alt="Foto Dokumen"
+                        width={800}
+                        height={600}
+                        className="max-h-64 object-contain mx-auto rounded-lg hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-6 text-center text-ink/40 text-xs">
+                    Foto dokumen tidak diunggah atau belum tersedia.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-3 border-t border-forest/10">
+                <button type="button" onClick={() => setDetailModalOpen(false)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 cursor-pointer">
+                  Tutup Profil
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {ordersModalOpen && selectedUserDetail && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start mb-4 border-b border-forest/10 pb-3">
+                <div>
+                  <span className="text-[10px] uppercase font-mono tracking-widest text-blue-600">Riwayat & Status Pesanan Mitra</span>
+                  <h3 className="font-display font-semibold text-xl text-forest">{selectedUserDetail.nama}</h3>
+                </div>
+                <button onClick={() => setOrdersModalOpen(false)} className="text-ink/40 hover:text-ink text-sm font-bold cursor-pointer">âœ•</button>
+              </div>
+
+              <form onSubmit={handleUpdateQuota} className="bg-blue-50/50 border border-blue-200/60 rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-end gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-blue-900 mb-1">Atur Batas Kuota Pemesanan Akun Ini:</label>
+                  <input type="number" min={0} required value={newQuota} onChange={(e) => setNewQuota(Number(e.target.value))} className="w-full border border-blue-300 p-2 rounded-xl text-sm bg-white outline-none font-mono" />
+                </div>
+                <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-blue-700 transition-colors cursor-pointer">
+                  {isSubmitting ? "Menyimpan..." : "Simpan Kuota Baru"}
+                </button>
+              </form>
+
+              <div className="mb-4">
+                <h4 className="font-semibold text-forest text-sm mb-2">Daftar Transaksi Pemesanan</h4>
+                {loadingOrders ? (
+                  <p className="text-xs text-ink/50 py-4 text-center">Memuat riwayat transaksi...</p>
+                ) : userOrders.length === 0 ? (
+                  <div className="bg-white border border-forest/10 rounded-xl p-6 text-center text-xs text-ink/50">Mitra ini belum pernah melakukan pemesanan produk.</div>
+                ) : (
+                  <div className="border border-forest/10 rounded-xl overflow-hidden bg-white">
+                    <table className="w-full text-left text-xs block md:table overflow-x-auto">
+                      <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10 hidden md:table-header-group">
+                        <tr>
+                          <th className="p-3">ID Pesanan</th>
+                          <th className="p-3">Tanggal</th>
+                          <th className="p-3">Total Biaya</th>
+                          <th className="p-3">Status Pengiriman</th>
+                          <th className="p-3 text-center">Ubah Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-forest/10 block md:table-row-group">
+                        {userOrders.map((ord) => (
+                          <tr key={ord.id} className="block md:table-row p-4 md:p-0">
+                            <td className="p-1 md:p-3 font-mono font-medium text-forest truncate block md:table-cell mb-2 md:mb-0">
+                              <span className="inline-block md:hidden text-ink/50 mr-2">ID:</span>
+                              {ord.id.slice(0, 8)}...
+                            </td>
+                            <td className="p-1 md:p-3 text-ink/60 block md:table-cell mb-2 md:mb-0">
+                              <span className="inline-block md:hidden text-ink/50 mr-2">Tgl:</span>
+                              {new Date(ord.created_at).toLocaleDateString("id-ID")}
+                            </td>
+                            <td className="p-1 md:p-3 font-semibold text-green block md:table-cell mb-3 md:mb-0">
+                              <span className="inline-block md:hidden text-ink/50 mr-2">Total:</span>
+                              Rp {ord.total_harga?.toLocaleString("id-ID")}
+                            </td>
+                            <td className="p-1 md:p-3 block md:table-cell mb-4 md:mb-0">
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                                  ord.status === 'dikirim' ? 'bg-amber-100 text-amber-800'
+                                  : ord.status === 'selesai' ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {ord.status}
+                                </span>
+                                {ord.bukti_pengiriman_url && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setSelectedProofUrl(ord.bukti_pengiriman_url!);
+                                      setProofModalOpen(true);
+                                    }}
+                                    className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-1 cursor-pointer font-medium"
+                                  >
+                                    ðŸ“Ž Lihat Bukti
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-1 md:p-3 text-center block md:table-cell border-t md:border-0 border-forest/10 pt-3 md:pt-0 mt-2 md:mt-0">
+                              <button
+                                onClick={() => {
+                                  setSelectedOrderUpdate(ord);
+                                  setNewOrderStatus(ord.status);
+                                  setProofFile(null); 
+                                  setOrderStatusModalOpen(true);
+                                }}
+                                className="w-full md:w-auto text-green hover:underline text-xs font-medium cursor-pointer bg-green/10 md:bg-transparent py-2 md:py-0 rounded-lg md:rounded-none"
+                              >
+                                Ubah Status & Bukti
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-3 border-t border-forest/10">
+                <button type="button" onClick={() => setOrdersModalOpen(false)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 cursor-pointer">
+                  Tutup Modal
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {orderStatusModalOpen && selectedOrderUpdate && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
+              <h3 className="font-display font-semibold text-forest mb-4">Ubah Status & Upload Bukti</h3>
+              <form onSubmit={handleSaveOrderStatus} className="space-y-4">
+                
+                <div>
+                  <label className="block text-xs font-medium text-ink mb-1">Status Pesanan</label>
+                  <select 
+                    value={newOrderStatus} 
+                    onChange={(e) => setNewOrderStatus(e.target.value)} 
+                    className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer"
+                  >
+                    <option value={newOrderStatus} className="hidden">{newOrderStatus}</option>
+                    <option value="menunggu_pembayaran">Menunggu Pembayaran</option>
+                    <option value="diproses">Diproses</option>
+                    <option value="dikirim">Dikirim (Dalam Pengiriman)</option>
+                    <option value="selesai">Selesai</option>
+                    <option value="dibatalkan">Dibatalkan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-ink mb-1">Foto Bukti Pengiriman (Opsional)</label>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-ink/70 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-forest/10 file:text-forest hover:file:bg-forest/20 cursor-pointer border border-ink/20 rounded-xl p-1 bg-white"
+                  />
+                  {selectedOrderUpdate.bukti_pengiriman_url && !proofFile && (
+                    <p className="text-[10px] text-green mt-1">âœ“ Bukti sudah pernah diupload sebelumnya.</p>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                  <button type="button" onClick={() => setOrderStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                  <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">
+                    {isSubmitting ? "Menyimpan..." : "Simpan Perubahan"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {banModalOpen && selectedUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
+              <h3 className="font-display font-semibold text-red-800 mb-2">Blokir / Ban Akun</h3>
+              <p className="text-xs text-ink/70 mb-4">
+                Anda akan memblokir <span className="font-bold">{selectedUser.nama}</span> ({selectedUser.nik_nib}). NIK/NIB ini akan dimasukkan ke daftar hitam.
+              </p>
+              <form onSubmit={handleBanUser} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-ink mb-1">Alasan Pemblokiran</label>
+                  <textarea required rows={3} placeholder="Misal: Pengiriman data fiktif / deskripsi limbah tidak sesuai." value={banReason} onChange={(e) => setBanReason(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none resize-none" />
+                </div>
+                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                  <button type="button" onClick={() => setBanModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                  <button type="submit" disabled={isSubmitting} className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Memproses..." : "Ya, Ban Akun"}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {priceModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
+              <h3 className="font-display font-semibold text-forest mb-4">Set Harga & Stok Wilayah</h3>
+              <form onSubmit={handleSavePrice} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-ink mb-1">Pilih Produk</label>
+                  <select className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white cursor-pointer" required value={formPrice.product_id} onChange={(e) => setFormPrice({ ...formPrice, product_id: e.target.value })}>
+                    <option value="">-- Pilih Produk --</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nama_produk}</option>
                     ))}
                   </select>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Harga (Rp)</label>
-                  <input type="number" placeholder="18000" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.harga} onChange={(e) => setFormPrice({ ...formPrice, harga: e.target.value })} />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">Provinsi</label>
+                    <select className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase outline-none bg-white cursor-pointer" onChange={handleProvinsiChange} required>
+                      <option value="">PROVINSI</option>
+                      {provinces.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">Kota / Kab</label>
+                    <select className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase disabled:bg-gray-100 outline-none bg-white cursor-pointer" value={formPrice.kota} onChange={(e) => setFormPrice((prev) => ({ ...prev, kota: e.target.options[e.target.selectedIndex]?.text || "" }))} disabled={cities.length === 0} required>
+                      <option value="">KOTA/KAB</option>
+                      {cities.map((c) => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Stok Gudang</label>
-                  <input type="number" placeholder="50" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.stok} onChange={(e) => setFormPrice({ ...formPrice, stok: e.target.value })} />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">Harga (Rp)</label>
+                    <input type="number" placeholder="18000" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.harga} onChange={(e) => setFormPrice({ ...formPrice, harga: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">Stok Gudang</label>
+                    <input type="number" placeholder="50" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.stok} onChange={(e) => setFormPrice({ ...formPrice, stok: e.target.value })} />
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                <button type="button" onClick={() => setPriceModalOpen(false)} className="px-4 py-2 text-xs text-ink/60">Batal</button>
-                <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium">{isSubmitting ? "Menyimpan..." : "Simpan Data"}</button>
-              </div>
-            </form>
+                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                  <button type="button" onClick={() => setPriceModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                  <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Data"}</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* MODAL TAMBAH PRODUK */}
-      {productModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-          <div className="bg-paper rounded-2xl shadow-xl w-full max-w-lg p-6">
-            <h3 className="font-display font-semibold text-forest mb-4">Tambah Produk Utama</h3>
-            <form onSubmit={handleSaveProduct} className="space-y-4">
-              <input type="text" placeholder="Nama Produk" required value={formProduct.nama_produk} onChange={(e) => setFormProduct({ ...formProduct, nama_produk: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-              <input type="text" placeholder="Deskripsi Singkat" required value={formProduct.deskripsi} onChange={(e) => setFormProduct({ ...formProduct, deskripsi: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-              <div className="grid grid-cols-2 gap-4">
-                <input type="text" placeholder="Satuan (karung/liter)" required value={formProduct.satuan} onChange={(e) => setFormProduct({ ...formProduct, satuan: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                <input type="number" placeholder="Stok Default" required value={formProduct.stok} onChange={(e) => setFormProduct({ ...formProduct, stok: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-              </div>
-              <input type="number" placeholder="Harga Default Nasional (Rp)" required value={formProduct.harga_default} onChange={(e) => setFormProduct({ ...formProduct, harga_default: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-              <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                <button type="button" onClick={() => setProductModalOpen(false)} className="px-4 py-2 text-xs text-ink/60">Batal</button>
-                <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium">{isSubmitting ? "Menyimpan..." : "Simpan Produk"}</button>
-              </div>
-            </form>
+        {productModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-lg p-6">
+              <h3 className="font-display font-semibold text-forest mb-4">Tambah Produk Utama</h3>
+              <form onSubmit={handleSaveProduct} className="space-y-4">
+                <input type="text" placeholder="Nama Produk" required value={formProduct.nama_produk} onChange={(e) => setFormProduct({ ...formProduct, nama_produk: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                <input type="text" placeholder="Deskripsi Singkat" required value={formProduct.deskripsi} onChange={(e) => setFormProduct({ ...formProduct, deskripsi: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                <div className="grid grid-cols-2 gap-4">
+                  <input type="text" placeholder="Satuan (karung/liter)" required value={formProduct.satuan} onChange={(e) => setFormProduct({ ...formProduct, satuan: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                  <input type="number" placeholder="Stok Default" required value={formProduct.stok} onChange={(e) => setFormProduct({ ...formProduct, stok: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                </div>
+                <input type="number" placeholder="Harga Default Nasional (Rp)" required value={formProduct.harga_default} onChange={(e) => setFormProduct({ ...formProduct, harga_default: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                  <button type="button" onClick={() => setProductModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                  <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Produk"}</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* MODAL UBAH STATUS */}
-      {statusModalOpen && selectedShipment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-          <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="font-display font-semibold text-forest mb-4">Ubah Status Pengiriman</h3>
-            <form onSubmit={handleUpdateStatus} className="space-y-4">
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none">
-                <option value="Menunggu Penjemputan">Menunggu Penjemputan</option>
-                <option value="Diperjalanan">Diperjalanan</option>
-                <option value="Selesai">Selesai</option>
-                <option value="Dibatalkan">Dibatalkan</option>
-              </select>
-              <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                <button type="button" onClick={() => setStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60">Batal</button>
-                <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium">{isSubmitting ? "Menyimpan..." : "Simpan Status"}</button>
-              </div>
-            </form>
+        {statusModalOpen && selectedShipment && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
+              <h3 className="font-display font-semibold text-forest mb-4">Ubah Status Pengiriman Limbah</h3>
+              <form onSubmit={handleUpdateStatus} className="space-y-4">
+                <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer">
+                  <option value={newStatus} className="hidden">{newStatus}</option>
+                  <option value="MENUNGGU PEMBAYARAN">Menunggu Pembayaran</option>
+                  <option value="Menunggu Penjemputan">Menunggu Penjemputan</option>
+                  <option value="Diperjalanan">Diperjalanan</option>
+                  <option value="Selesai">Selesai</option>
+                  <option value="Dibatalkan">Dibatalkan</option>
+                </select>
+                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                  <button type="button" onClick={() => setStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                  <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Status"}</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ðŸš€ MODAL BARU: TAMPILKAN BUKTI PENGIRIMAN DI ADMIN */}
+        {proofModalOpen && selectedProofUrl && (
+          <div 
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"
+            onClick={() => setProofModalOpen(false)}
+          >
+            <div 
+              className="relative bg-paper rounded-2xl shadow-2xl max-w-2xl w-full p-2 animate-in zoom-in-95 duration-200" 
+              onClick={(e) => e.stopPropagation()} 
+            >
+              <div className="flex justify-between items-center p-3 border-b border-forest/10 mb-2">
+                <h3 className="font-display font-semibold text-forest text-sm">Foto Bukti Pengiriman</h3>
+                <button 
+                  onClick={() => setProofModalOpen(false)} 
+                  className="text-ink/50 hover:text-ink font-bold w-8 h-8 flex items-center justify-center rounded-full bg-forest/5 hover:bg-forest/10 transition-colors cursor-pointer"
+                >
+                  âœ•
+                </button>
+              </div>
+              <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
+                <img 
+                  src={selectedProofUrl} 
+                  alt="Bukti Pengiriman Barang" 
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                />
+              </div>
+              <div className="p-3 text-center">
+                <a 
+                  href={selectedProofUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-[11px] font-medium text-blue-600 hover:underline"
+                >
+                  Buka gambar resolusi penuh di tab baru
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </main>
     </div>
   );
 }
@@ -4357,7 +5557,7 @@ export default function DashboardAdminPage() {
 
 ## FILE: app/dashboard-industri/layout.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useState } from "react";
@@ -4371,32 +5571,22 @@ export default function DashboardIndustriLayout({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-cream relative">
-      {/* Top Header Khusus Mobile (Satu-satunya header di atas) */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10">
-        <div className="flex flex-col">
-          <span className="font-display font-bold tracking-tight text-base">LENTERA</span>
-          <span className="text-[10px] text-cream/50">Portal Industri</span>
-        </div>
-        <button
-          onClick={() => setIsMobileOpen(true)}
-          className="p-2 text-cream hover:bg-cream/10 rounded-lg transition-colors focus:outline-none"
-          aria-label="Buka Navigation"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Sidebar Component langsung mengontrol posisi slide-in dan backdrop-nya */}
+    <div className="min-h-screen bg-cream flex flex-col md:flex-row relative">
+      {/* 
+        Komponen IndustriSidebar sudah menangani:
+        1. Top Bar Mobile
+        2. Drawer Slide-Down / Slide-In Mobile
+        3. Sidebar Desktop
+      */}
       <IndustriSidebar
         isOpen={isMobileOpen}
         onClose={() => setIsMobileOpen(false)}
       />
 
       {/* Area Konten Utama */}
-      <main className="flex-1 min-w-0 pt-16 md:pt-0">{children}</main>
+      <main className="flex-1 w-full min-w-0 max-w-full overflow-x-hidden">
+        {children}
+      </main>
     </div>
   );
 }
@@ -4404,7 +5594,7 @@ export default function DashboardIndustriLayout({
 
 ## FILE: app/dashboard-industri/page.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -4417,7 +5607,11 @@ interface IndustriProfile {
   npwp: string;
   alamat: string;
   telepon: string;
+  provinsi?: string;
+  kota_kabupaten?: string;
   created_at: string;
+  status_akun?: string;
+  alasan_ban?: string;
 }
 
 interface WasteShipment {
@@ -4426,6 +5620,9 @@ interface WasteShipment {
   perkiraan_berat: number;
   lokasi_penjemputan: string;
   status: string;
+  is_b3?: boolean;
+  kategori_b3?: string;
+  biaya_pengolahan?: number;
   created_at: string;
 }
 
@@ -4448,9 +5645,18 @@ function InfoRow({
 
 const KREDIT_PER_KG = 100;
 
+const KATEGORI_B3 = [
+  { id: "cair_kimia", nama: "Limbah Cair & Kimia Industri", tarif: 15000 },
+  { id: "oli_pelumas", nama: "Oli Bekas & Pelumas Sintetis", tarif: 12000 },
+  { id: "baterai_elektronik", nama: "Baterai & E-Waste B3", tarif: 20000 },
+  { id: "medis_farmasi", nama: "Limbah Medis & Farmasi", tarif: 25000 },
+  { id: "sludge_lumpur", nama: "Sludge / Lumpur Berbahaya", tarif: 18000 },
+];
+
 export default function DashboardIndustriPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<IndustriProfile | null>(null);
 
@@ -4458,7 +5664,7 @@ export default function DashboardIndustriPage() {
   const [totalKredit, setTotalKredit] = useState(0);
   const [shipments, setShipments] = useState<WasteShipment[]>([]);
 
-  // State Modal Penjemputan Limbah
+  // State Modal Penjemputan Limbah Biasa
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -4468,6 +5674,21 @@ export default function DashboardIndustriPage() {
     lokasi: "",
     foto: null as File | null,
   });
+
+  // State Modal Penjemputan Limbah B3
+  const [isB3ModalOpen, setIsB3ModalOpen] = useState(false);
+  const [formB3, setFormB3] = useState({
+    nama_limbah: "",
+    kategori_id: "cair_kimia",
+    berat: "",
+    lokasi: "",
+    foto: null as File | null,
+  });
+
+  // State Modal Pembayaran B3
+  const [selectedPayShipment, setSelectedPayShipment] = useState<WasteShipment | null>(null);
+  const [buktiBayarFile, setBuktiBayarFile] = useState<File | null>(null);
+  const [isPaying, setIsPaying] = useState(false);
 
   // State Modal Pencairan (Withdrawal)
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
@@ -4479,23 +5700,37 @@ export default function DashboardIndustriPage() {
     nomor_rekening: "",
   });
 
+  // State Modal Edit Profil Industri
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nama_perusahaan: "",
+    npwp: "",
+    telepon: "",
+    provinsi: "",
+    kota_kabupaten: "",
+    alamat: "",
+  });
+
+  // State Modal Hapus Akun Industri
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     const supabase = createSupabaseBrowserClient();
 
-    const fetchTrackingData = async (userId: string) => {
-      // 1. Ambil data pengiriman limbah
+    const fetchTrackingData = async (uid: string) => {
       const { data: shipmentData } = await supabase
         .from("waste_shipments")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_id", uid)
         .order("created_at", { ascending: false });
 
-      // 2. Ambil riwayat pencairan dana
       const { data: withdrawData } = await supabase
         .from("pencairan_dana")
         .select("jumlah_tarik_tunai")
-        .eq("id_agen", userId);
+        .eq("id_agen", uid);
 
       if (shipmentData) {
         setShipments(shipmentData);
@@ -4516,28 +5751,45 @@ export default function DashboardIndustriPage() {
     };
 
     supabase.auth.getUser().then(async ({ data }) => {
-      // Jika belum login, redirect ke halaman masuk
       if (!data.user) {
         router.replace("/masuk");
         return;
       }
+      setUserId(data.user.id);
       setEmail(data.user.email ?? null);
 
-      // Cek apakah data profil industri sudah diisi lengkap
       const { data: profileData } = await supabase
         .from("industri_profiles")
-        .select("nama_perusahaan, npwp, alamat, telepon, created_at")
+        .select("nama_perusahaan, npwp, alamat, telepon, provinsi, kota_kabupaten, created_at, status_akun, alasan_ban")
         .eq("user_id", data.user.id)
         .maybeSingle();
 
-      // JIKA PROFIL BELUM ADA (User re-fresh di tengah pendaftaran step profil)
-      // Kembalikan ke halaman pendaftaran industri untuk melengkapi data
       if (!profileData) {
         router.replace("/daftar/industri");
         return;
       }
 
+      if (profileData.status_akun === "banned") {
+        alert(
+          `Akun Anda telah di-ban oleh Administrator!\nAlasan: ${
+            profileData.alasan_ban || "Pelanggaran ketentuan layanan."
+          }`
+        );
+        await supabase.auth.signOut();
+        router.replace("/masuk");
+        return;
+      }
+
       setProfile(profileData);
+      setEditForm({
+        nama_perusahaan: profileData.nama_perusahaan || "",
+        npwp: profileData.npwp || "",
+        telepon: profileData.telepon || "",
+        provinsi: profileData.provinsi || "",
+        kota_kabupaten: profileData.kota_kabupaten || "",
+        alamat: profileData.alamat || "",
+      });
+
       fetchTrackingData(data.user.id);
       setLoading(false);
 
@@ -4551,6 +5803,67 @@ export default function DashboardIndustriPage() {
     };
   }, [router]);
 
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+    setEditLoading(true);
+
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase
+      .from("industri_profiles")
+      .update({
+        nama_perusahaan: editForm.nama_perusahaan,
+        npwp: editForm.npwp,
+        telepon: editForm.telepon,
+        provinsi: editForm.provinsi,
+        kota_kabupaten: editForm.kota_kabupaten,
+        alamat: editForm.alamat,
+      })
+      .eq("user_id", userId);
+
+    setEditLoading(false);
+
+    if (!error) {
+      setProfile((prev) =>
+        prev ? { ...prev, ...editForm } : null
+      );
+      setIsEditOpen(false);
+      alert("Profil industri berhasil diperbarui!");
+    } else {
+      alert("Gagal memperbarui profil: " + error.message);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!userId) return;
+    setDeleteLoading(true);
+
+    try {
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert("Gagal menghapus akun: " + data.error);
+        setDeleteLoading(false);
+        return;
+      }
+
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+
+      alert("Akun industri berhasil dihapus permanen.");
+      router.push("/masuk");
+    } catch {
+      alert("Terjadi kesalahan jaringan saat menghapus akun.");
+      setDeleteLoading(false);
+    }
+  };
+
   async function handleKirimLimbah(e: React.FormEvent) {
     e.preventDefault();
     setIsSubmitting(true);
@@ -4558,22 +5871,20 @@ export default function DashboardIndustriPage() {
 
     try {
       const supabase = createSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
 
-      if (!user) throw new Error("Sesi Anda telah berakhir, silakan login kembali.");
+      if (!session) throw new Error("Sesi Anda telah berakhir, silakan login kembali.");
 
       let fotoUrl = "";
       if (formLimbah.foto) {
         const fileExt = formLimbah.foto.name.split('.').pop();
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('waste_images')
-          .upload(`limbah/${fileName}`, formLimbah.foto);
+          .upload(`limbah/${fileName}`, formLimbah.foto, { upsert: true });
 
-        if (uploadError) {
-          throw new Error(`Gagal mengunggah foto: ${uploadError.message}.`);
-        }
+        if (uploadError) throw new Error(`Gagal mengunggah foto: ${uploadError.message}`);
 
         const { data: publicUrlData } = supabase.storage
           .from('waste_images')
@@ -4582,14 +5893,18 @@ export default function DashboardIndustriPage() {
         fotoUrl = publicUrlData.publicUrl;
       }
 
-      const response = await fetch("/api/limbah/setoran-limbah", {
+      const response = await fetch("/api/setoran-limbah", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
         body: JSON.stringify({
           deskripsi_input: formLimbah.nama_limbah,
           berat_kg: Number(formLimbah.berat),
           lokasi: formLimbah.lokasi.toUpperCase(),
           foto_url: fotoUrl,
+          is_b3: false,
         }),
       });
       const responseData = await response.json();
@@ -4601,7 +5916,7 @@ export default function DashboardIndustriPage() {
       const { data: newData } = await supabase
         .from("waste_shipments")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", session.user.id)
         .order("created_at", { ascending: false });
 
       if (newData) setShipments(newData);
@@ -4613,6 +5928,118 @@ export default function DashboardIndustriPage() {
       setIsSubmitting(false);
     }
   }
+
+  async function handleKirimLimbahB3(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setErrorMsg(null);
+
+    const katSelected = KATEGORI_B3.find((k) => k.id === formB3.kategori_id);
+    const tarifPerKg = katSelected ? katSelected.tarif : 15000;
+    const totalBiaya = Number(formB3.berat || 0) * tarifPerKg;
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) throw new Error("Sesi Anda telah berakhir, silakan login kembali.");
+
+      let fotoUrl = "";
+      if (formB3.foto) {
+        const fileExt = formB3.foto.name.split('.').pop();
+        const fileName = `b3-${session.user.id}-${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('waste_images')
+          .upload(`limbah_b3/${fileName}`, formB3.foto, { upsert: true });
+
+        if (uploadError) throw new Error(`Gagal mengunggah foto: ${uploadError.message}`);
+
+        const { data: publicUrlData } = supabase.storage
+          .from('waste_images')
+          .getPublicUrl(`limbah_b3/${fileName}`);
+
+        fotoUrl = publicUrlData.publicUrl;
+      }
+
+      const response = await fetch("/api/setoran-limbah", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          deskripsi_input: `[B3] ${formB3.nama_limbah}`,
+          berat_kg: Number(formB3.berat),
+          lokasi: formB3.lokasi.toUpperCase(),
+          foto_url: fotoUrl,
+          is_b3: true,
+          kategori_b3: katSelected?.nama,
+          biaya_pengolahan: totalBiaya,
+          status: "Menunggu Pembayaran",
+        }),
+      });
+
+      const responseData = await response.json();
+      if (!response.ok) throw new Error(responseData.error || "Gagal mendaftarkan limbah B3.");
+
+      alert(`Pendaftaran Berhasil!\nLimbah B3 kamu telah didaftarkan. Silakan lakukan konfirmasi pembayaran pada tabel 'Status Pembayaran Limbah B3' di bawah.`);
+      setFormB3({ nama_limbah: "", kategori_id: "cair_kimia", berat: "", lokasi: "", foto: null });
+      setIsB3ModalOpen(false);
+
+      const { data: newData } = await supabase
+        .from("waste_shipments")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
+
+      if (newData) setShipments(newData);
+
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : "Terjadi kesalahan saat mendaftarkan data.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const handleKonfirmasiPembayaran = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPayShipment || !buktiBayarFile) return;
+
+    setIsPaying(true);
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      
+      const { error: updateError } = await supabase
+        .from("waste_shipments")
+        .update({ status: "Menunggu Verifikasi" })
+        .eq("id", selectedPayShipment.id);
+
+      if (updateError) throw updateError;
+
+      alert("Bukti pembayaran berhasil dikirim! Tim kami akan melakukan verifikasi.");
+      setSelectedPayShipment(null);
+      setBuktiBayarFile(null);
+
+      if (userId) {
+        const { data: newData } = await supabase
+          .from("waste_shipments")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
+
+        if (newData) setShipments(newData);
+      }
+
+    } catch (err) {
+      console.error(err);
+      alert("Gagal mengirim konfirmasi pembayaran.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
 
   const handlePencairan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4675,7 +6102,11 @@ export default function DashboardIndustriPage() {
     : "-";
 
   const estimasiKredit = Number(formLimbah.berat || 0) * KREDIT_PER_KG;
+  const selectedKatB3 = KATEGORI_B3.find((k) => k.id === formB3.kategori_id);
+  const estimasiBiayaB3 = Number(formB3.berat || 0) * (selectedKatB3?.tarif || 0);
   const estimasiRupiah = Number(formWithdraw.jumlah_token || 0) * 500;
+
+  const b3Shipments = shipments.filter((s) => s.is_b3);
 
   return (
     <div className="px-4 sm:px-8 md:px-12 py-6 md:py-10 max-w-6xl mx-auto w-full relative">
@@ -4694,8 +6125,10 @@ export default function DashboardIndustriPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
             <p className="text-xs text-ink/45 mb-1">Status akun</p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
+            <div className="flex items-center gap-1.5 mt-2">
+              <svg className="w-4 h-4 text-forest opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
               <p className="font-display font-semibold text-forest text-lg">Aktif</p>
             </div>
           </div>
@@ -4706,7 +6139,6 @@ export default function DashboardIndustriPage() {
             </p>
           </div>
 
-          {/* KARTU KREDIT DENGAN TOMBOL CAIRKAN */}
           <div className="bg-gradient-to-br from-forest to-forest/90 rounded-2xl border border-forest p-5 shadow-sm flex flex-col justify-between relative overflow-hidden group">
             <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
             <div className="flex justify-between items-start relative z-10">
@@ -4734,36 +6166,44 @@ export default function DashboardIndustriPage() {
         </div>
       </section>
 
-      {/* Profil Industri */}
-      <section id="profil-industri" className="scroll-mt-8 mb-10">
-        <h2 className="font-display font-semibold text-xl text-forest mb-4">
-          Informasi Industri
-        </h2>
-        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6 shadow-xs">
-          <InfoRow label="Nama Perusahaan" value={profile?.nama_perusahaan} />
-          <InfoRow label="Email Kontak" value={email} />
-          <InfoRow label="NPWP" value={profile?.npwp} />
-          <InfoRow label="Nomor Telepon" value={profile?.telepon} />
-          <InfoRow label="Alamat Lengkap" value={profile?.alamat} className="sm:col-span-2" />
-        </div>
-      </section>
-
       {/* Lacak Pengiriman */}
-      <section id="lacak-pengiriman" className="scroll-mt-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <section id="lacak-pengiriman" className="scroll-mt-8 mb-10">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
-            <h2 className="font-display font-semibold text-xl text-forest mb-0.5">Status Pengiriman</h2>
-            <p className="text-xs text-ink/60">Sistem diperbarui otomatis (Auto-update: Aktif)</p>
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="font-display font-semibold text-xl text-forest">Status Pengiriman</h2>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-forest/5 border border-forest/10 text-[10px] text-forest/70 font-semibold tracking-wide uppercase">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Sistem tersinkronisasi
+              </div>
+            </div>
+            <p className="text-xs text-ink/60">Pantau pergerakan limbah yang sedang diproses secara real-time.</p>
           </div>
-          <button
-            onClick={() => {
-              setErrorMsg(null);
-              setIsModalOpen(true);
-            }}
-            className="w-full sm:w-auto bg-forest text-paper px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors shadow-xs text-center flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <span>+</span> Buat Jadwal Penjemputan
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto">
+            <button
+              onClick={() => {
+                setErrorMsg(null);
+                setIsModalOpen(true);
+              }}
+              className="bg-forest text-paper px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium hover:bg-forest/90 transition-colors shadow-xs text-center flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
+              Penjemputan Limbah Biasa
+            </button>
+
+            <button
+              onClick={() => {
+                setErrorMsg(null);
+                setIsB3ModalOpen(true);
+              }}
+              className="bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold hover:bg-amber-700 transition-colors shadow-xs text-center flex items-center justify-center gap-1.5 cursor-pointer border border-amber-700"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              Daftar Pengolahan B3
+            </button>
+          </div>
         </div>
 
         {shipments.length === 0 ? (
@@ -4772,39 +6212,417 @@ export default function DashboardIndustriPage() {
           </div>
         ) : (
           <div className="grid md:grid-cols-2 gap-4">
-            {shipments.map((shipment) => (
-              <div key={shipment.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col justify-between shadow-xs hover:border-forest/20 transition-colors">
-                <div>
-                  <div className="flex justify-between items-start mb-3 gap-2">
-                    <h3 className="font-semibold text-forest text-base leading-snug">{shipment.nama_limbah}</h3>
-                    <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 ${
-                      shipment.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
-                      : shipment.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
-                      : 'bg-amber-100 text-amber-800'
-                    }`}>
-                      {shipment.status}
-                    </span>
+            {shipments.map((shipment) => {
+              const isPendingPayment = shipment.status.toLowerCase() === "menunggu pembayaran";
+
+              return (
+                <div key={shipment.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col justify-between shadow-xs hover:border-forest/20 transition-colors">
+                  <div>
+                    <div className="flex justify-between items-start mb-3 gap-2">
+                      <div>
+                        <h3 className="font-semibold text-forest text-base leading-snug">{shipment.nama_limbah}</h3>
+                        {shipment.is_b3 && (
+                          <span className="inline-block mt-0.5 text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
+                            Kategori B3
+                          </span>
+                        )}
+                      </div>
+                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 ${
+                        shipment.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
+                        : isPendingPayment ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                        : shipment.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
+                        : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {shipment.status}
+                      </span>
+                    </div>
+
+                    <div className="text-sm text-ink/70 space-y-1.5 mb-4">
+                      <p><strong className="font-medium text-ink">Berat:</strong> {shipment.perkiraan_berat} kg</p>
+                      <p className="line-clamp-2"><strong className="font-medium text-ink">Lokasi:</strong> {shipment.lokasi_penjemputan}</p>
+
+                      {shipment.is_b3 && shipment.biaya_pengolahan && (
+                        <p className="text-xs font-semibold text-amber-900 pt-1">
+                          Biaya Pengolahan: Rp {shipment.biaya_pengolahan.toLocaleString("id-ID")}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-sm text-ink/70 space-y-1.5 mb-4">
-                    <p><strong className="font-medium text-ink">Berat:</strong> {shipment.perkiraan_berat} kg</p>
-                    <p className="line-clamp-2"><strong className="font-medium text-ink">Lokasi:</strong> {shipment.lokasi_penjemputan}</p>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center border-t border-forest/10 pt-3 mt-auto">
-                  <p className="text-xs text-ink/40">
-                    Dibuat: {new Date(shipment.created_at).toLocaleDateString("id-ID")}
-                  </p>
-                  {shipment.status.toLowerCase() === 'selesai' && (
-                    <p className="text-[10px] font-medium text-gold bg-gold/10 px-2 py-0.5 rounded-md">
-                      +{Number(shipment.perkiraan_berat) * KREDIT_PER_KG} Token
+
+                  <div className="flex justify-between items-center border-t border-forest/10 pt-3 mt-auto">
+                    <p className="text-xs text-ink/40">
+                      Dibuat: {new Date(shipment.created_at).toLocaleDateString("id-ID")}
                     </p>
-                  )}
+
+                    {!shipment.is_b3 && shipment.status.toLowerCase() === 'selesai' && (
+                      <p className="text-[10px] font-medium text-gold bg-gold/10 px-2 py-0.5 rounded-md">
+                        +{Number(shipment.perkiraan_berat) * KREDIT_PER_KG} Token
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
+
+      {/* SECTION: STATUS PEMBAYARAN LIMBAH B3 & KONFIRMASI */}
+      {b3Shipments.length > 0 && (
+        <section id="pembayaran-b3" className="scroll-mt-8 mb-10">
+          <div className="mb-4">
+            <p className="font-mono text-xs tracking-widest uppercase text-amber-700 mb-1">
+              Tagihan & Transaksi
+            </p>
+            <h2 className="font-display font-semibold text-xl text-forest">
+              Status Pembayaran Limbah B3
+            </h2>
+            <p className="text-xs text-ink/60 mt-0.5">
+              Lakukan pembayaran dan upload konfirmasi untuk pesanan B3 yang masih menunggu.
+            </p>
+          </div>
+
+          <div className="bg-paper rounded-2xl border border-amber-200 overflow-hidden shadow-xs p-4 md:p-0">
+            {/* TAMPILAN CARD - KHUSUS MOBILE (sm ke bawah) */}
+            <div className="block md:hidden space-y-3">
+              {b3Shipments.map((b3) => {
+                const isPending = b3.status.toLowerCase() === "menunggu pembayaran";
+
+                return (
+                  <div key={b3.id} className="bg-amber-50/50 border border-amber-200 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <h4 className="font-semibold text-forest text-sm leading-tight">{b3.nama_limbah}</h4>
+                        <p className="text-xs text-ink/60 mt-1">Berat: {b3.perkiraan_berat} kg</p>
+                      </div>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full shrink-0 ${
+                        isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : b3.status.toLowerCase() === "menunggu verifikasi" ? "bg-blue-100 text-blue-800"
+                        : "bg-green/10 text-green"
+                      }`}>
+                        {b3.status}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-amber-200/60 pt-2.5">
+                      <div>
+                        <p className="text-[10px] text-ink/50 uppercase font-medium">Total Biaya</p>
+                        <p className="text-sm font-bold text-amber-900">
+                          Rp {(b3.biaya_pengolahan || 0).toLocaleString("id-ID")}
+                        </p>
+                      </div>
+
+                      {isPending ? (
+                        <button
+                          onClick={() => setSelectedPayShipment(b3)}
+                          className="text-xs font-bold px-3 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
+                        >
+                          Konfirmasi Bayar
+                        </button>
+                      ) : (
+                        <span className="text-xs text-ink/40 italic">Lunas / Diproses</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* TAMPILAN TABEL - KHUSUS DESKTOP (md ke atas) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="bg-amber-50/80 border-b border-amber-200 text-xs font-bold text-amber-900 uppercase tracking-wider">
+                    <th className="p-4">Deskripsi Limbah</th>
+                    <th className="p-4">Berat Total</th>
+                    <th className="p-4">Total Biaya</th>
+                    <th className="p-4">Status Pembayaran</th>
+                    <th className="p-4 text-right">Aksi Konfirmasi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-forest/10">
+                  {b3Shipments.map((b3) => {
+                    const isPending = b3.status.toLowerCase() === "menunggu pembayaran";
+
+                    return (
+                      <tr key={b3.id} className="hover:bg-cream/40 transition-colors">
+                        <td className="p-4 font-medium text-forest">{b3.nama_limbah}</td>
+                        <td className="p-4 text-ink/70">{b3.perkiraan_berat} kg</td>
+                        <td className="p-4 font-semibold text-amber-900">
+                          Rp {(b3.biaya_pengolahan || 0).toLocaleString("id-ID")}
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full ${
+                            isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
+                            : b3.status.toLowerCase() === "menunggu verifikasi" ? "bg-blue-100 text-blue-800"
+                            : "bg-green/10 text-green"
+                          }`}>
+                            {b3.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          {isPending ? (
+                            <button
+                              onClick={() => setSelectedPayShipment(b3)}
+                              className="text-xs font-bold px-3.5 py-1.5 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer"
+                            >
+                              Konfirmasi Bayar
+                            </button>
+                          ) : (
+                            <span className="text-xs text-ink/40 italic">Lunas / Diproses</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Profil Industri */}
+      <section id="profil-industri" className="scroll-mt-8 mb-10">
+        <div className="flex justify-between items-end mb-4">
+          <div>
+            <p className="font-mono text-xs tracking-widest uppercase text-clay mb-1">
+              Profil industri
+            </p>
+            <h2 className="font-display font-semibold text-xl text-forest">
+              Informasi Industri
+            </h2>
+          </div>
+          <button
+            onClick={() => setIsEditOpen(true)}
+            className="text-xs font-semibold px-4 py-2 bg-forest text-cream rounded-xl hover:bg-forest/90 transition-colors cursor-pointer"
+          >
+            Ubah Profil
+          </button>
+        </div>
+
+        <div className="bg-paper rounded-2xl border border-forest/10 p-6 md:p-8 grid sm:grid-cols-2 gap-6 shadow-xs">
+          <InfoRow label="Nama Perusahaan" value={profile?.nama_perusahaan} />
+          <InfoRow label="Email Kontak" value={email} />
+          <InfoRow label="NPWP" value={profile?.npwp} />
+          <InfoRow label="Nomor Telepon" value={profile?.telepon} />
+          <InfoRow
+            label="Wilayah Operasional"
+            value={
+              profile?.kota_kabupaten
+                ? `${profile.kota_kabupaten}, ${profile.provinsi}`
+                : "BELUM DISET"
+            }
+          />
+          <InfoRow label="Alamat Lengkap" value={profile?.alamat} className="sm:col-span-2" />
+        </div>
+      </section>
+
+      {/* Danger Zone: Hapus Akun */}
+      <section className="bg-red-50/50 border border-red-200/60 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h3 className="font-display font-semibold text-red-900 text-base sm:text-lg">
+            Hapus Akun Industri
+          </h3>
+          <p className="text-xs sm:text-sm text-red-700/80 mt-0.5">
+            Tindakan ini permanen. Seluruh profil perusahaan dan riwayat pengiriman kamu akan dihapus.
+          </p>
+        </div>
+        <button
+          onClick={() => setIsDeleteOpen(true)}
+          className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors shrink-0 cursor-pointer"
+        >
+          Hapus Akun
+        </button>
+      </section>
+
+      {/* MODAL KONFIRMASI PEMBAYARAN B3 */}
+      {selectedPayShipment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-amber-200 rounded-2xl max-w-md w-full p-6 shadow-xl">
+            <h3 className="font-display font-semibold text-lg text-amber-900 mb-1">
+              Konfirmasi Pembayaran Limbah B3
+            </h3>
+            <p className="text-xs text-ink/60 mb-4">
+              Silakan transfer sesuai tagihan dan unggah foto bukti transfer.
+            </p>
+
+            <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-xs space-y-1.5 mb-4">
+              <p><strong>Item:</strong> {selectedPayShipment.nama_limbah}</p>
+              <p><strong>Total Tagihan:</strong> Rp {(selectedPayShipment.biaya_pengolahan || 0).toLocaleString("id-ID")}</p>
+              <p><strong>Rekening Bank:</strong> BCA 123-456-7890 a.n. LENTERA BERKAH</p>
+            </div>
+
+            <form onSubmit={handleKonfirmasiPembayaran} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium mb-1.5 text-ink">Upload Bukti Transfer</label>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg"
+                  required
+                  onChange={(e) => setBuktiBayarFile(e.target.files?.[0] || null)}
+                  className="block w-full text-xs text-ink/80 border border-ink/20 rounded-xl p-2 bg-white file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:bg-amber-100 file:text-amber-800"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPayShipment(null)}
+                  className="text-xs font-semibold px-4 py-2 text-ink/60 hover:text-ink cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPaying || !buktiBayarFile}
+                  className="text-xs font-bold px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 disabled:opacity-50 cursor-pointer"
+                >
+                  {isPaying ? "Mengirim..." : "Kirim Bukti Pembayaran"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL UBAH PROFIL INDUSTRI */}
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-forest/10 rounded-2xl max-w-lg w-full p-6 shadow-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="font-display font-semibold text-xl text-forest mb-4">
+              Ubah Data Industri
+            </h3>
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              <div>
+                <label className="block text-xs text-ink/60 mb-1">Nama Perusahaan</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.nama_perusahaan}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, nama_perusahaan: e.target.value })
+                  }
+                  className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">NPWP</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.npwp}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, npwp: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Nomor Telepon</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.telepon}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, telepon: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Provinsi</label>
+                  <input
+                    type="text"
+                    value={editForm.provinsi}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, provinsi: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink/60 mb-1">Kota / Kabupaten</label>
+                  <input
+                    type="text"
+                    value={editForm.kota_kabupaten}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, kota_kabupaten: e.target.value })
+                    }
+                    className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-ink/60 mb-1">Alamat Lengkap</label>
+                <textarea
+                  rows={3}
+                  value={editForm.alamat}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, alamat: e.target.value })
+                  }
+                  className="w-full text-sm bg-cream/50 border border-forest/20 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-forest resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                <button
+                  type="button"
+                  onClick={() => setIsEditOpen(false)}
+                  className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="text-xs font-semibold px-4 py-2.5 bg-forest text-cream rounded-xl hover:bg-forest/90 disabled:opacity-50 cursor-pointer"
+                >
+                  {editLoading ? "Menyimpan..." : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS AKUN */}
+      {isDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/40 backdrop-blur-xs p-4">
+          <div className="bg-paper border border-red-200 rounded-2xl max-w-md w-full p-6 shadow-lg">
+            <h3 className="font-display font-semibold text-xl text-red-900 mb-2">
+              Konfirmasi Hapus Akun
+            </h3>
+            <p className="text-sm text-ink/70 mb-6">
+              Apakah kamu yakin ingin menghapus akun industri ini? Semua data profil dan riwayat penjemputan limbah kamu akan dihapus permanen.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteOpen(false)}
+                className="text-xs font-semibold px-4 py-2.5 text-ink/60 hover:text-ink cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading}
+                className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 cursor-pointer"
+              >
+                {deleteLoading ? "Menghapus..." : "Ya, Hapus Akun"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL PENCAIRAN KREDIT */}
       {isWithdrawModalOpen && (
@@ -4815,7 +6633,7 @@ export default function DashboardIndustriPage() {
               <>
                 <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center bg-forest text-cream">
                   <h3 className="font-display font-semibold text-lg">Pencairan Token</h3>
-                  <button onClick={() => setIsWithdrawModalOpen(false)} className="hover:text-gold transition-colors">
+                  <button onClick={() => setIsWithdrawModalOpen(false)} className="hover:text-gold transition-colors cursor-pointer">
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -4906,16 +6724,16 @@ export default function DashboardIndustriPage() {
         </div>
       )}
 
-      {/* POP-UP MODAL KIRIM LIMBAH */}
+      {/* POP-UP MODAL KIRIM LIMBAH BIASA */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
           <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
 
             <div className="px-6 py-4 border-b border-forest/10 flex justify-between items-center shrink-0">
-              <h3 className="font-display font-semibold text-forest text-lg">Formulir Penjemputan</h3>
+              <h3 className="font-display font-semibold text-forest text-lg">Formulir Penjemputan Limbah Biasa</h3>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-forest/5 text-ink/40 hover:text-ink transition-colors"
+                className="p-1 rounded-lg hover:bg-forest/5 text-ink/40 hover:text-ink transition-colors cursor-pointer"
                 aria-label="Tutup"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -4998,14 +6816,14 @@ export default function DashboardIndustriPage() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors"
+                  className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="bg-forest text-cream px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="bg-forest text-cream px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-forest/90 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>
@@ -5014,6 +6832,138 @@ export default function DashboardIndustriPage() {
                     </>
                   ) : (
                     "Kirim Jadwal"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP MODAL PENGOLAHAN LIMBAH B3 */}
+      {isB3ModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+
+            <div className="px-6 py-4 border-b border-amber-200 bg-amber-50 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-display font-semibold text-amber-900 text-lg">Formulir Pendaftaran Limbah B3</h3>
+                <p className="text-xs text-amber-700">Daftarkan limbah B3 terlebih dahulu untuk mendapatkan rincian tagihan.</p>
+              </div>
+              <button
+                onClick={() => setIsB3ModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-amber-100 text-amber-700 transition-colors cursor-pointer"
+                aria-label="Tutup"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleKirimLimbahB3} className="p-6 space-y-4 overflow-y-auto">
+              {errorMsg && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs leading-relaxed">
+                  {errorMsg}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Pilih Kategori Limbah B3</label>
+                <select
+                  value={formB3.kategori_id}
+                  onChange={(e) => setFormB3({ ...formB3, kategori_id: e.target.value })}
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                >
+                  {KATEGORI_B3.map((kat) => (
+                    <option key={kat.id} value={kat.id}>
+                      {kat.nama} (Rp {kat.tarif.toLocaleString("id-ID")}/kg)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Nama / Deskripsi Spesifik Limbah</label>
+                <input
+                  type="text"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                  placeholder="Contoh: Sludge Hasil Filtrasi Pabrik"
+                  value={formB3.nama_limbah}
+                  onChange={(e) => setFormB3({ ...formB3, nama_limbah: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Perkiraan Berat Total (kg)</label>
+                <input
+                  type="number"
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                  placeholder="0"
+                  value={formB3.berat}
+                  onChange={(e) => setFormB3({ ...formB3, berat: e.target.value })}
+                  required
+                  min="1"
+                />
+
+                <div className="mt-2 p-3 rounded-xl border bg-amber-50/80 border-amber-200 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-800 mb-0.5">Estimasi Biaya Pengolahan</p>
+                    <p className="text-xs text-amber-900/70">Dapat dibayar setelah pendaftaran</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-display font-bold text-lg text-amber-900">
+                      Rp {estimasiBiayaB3.toLocaleString("id-ID")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Detail Lokasi Penjemputan</label>
+                <textarea
+                  className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white resize-none"
+                  rows={3}
+                  placeholder="Jalan, No. Gedung, Patokan (Otomatis Kapital)"
+                  value={formB3.lokasi}
+                  onChange={(e) => setFormB3({ ...formB3, lokasi: e.target.value.toUpperCase() })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Dokumentasi Limbah B3</label>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg"
+                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200"
+                  onChange={(e) => setFormB3({ ...formB3, foto: e.target.files?.[0] || null })}
+                  required
+                />
+                <p className="text-[11px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
+              </div>
+
+              <div className="pt-4 mt-2 border-t border-forest/10 flex justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsB3ModalOpen(false)}
+                  className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-amber-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Mendaftarkan...</span>
+                    </>
+                  ) : (
+                    "Daftarkan Sekarang"
                   )}
                 </button>
               </div>
@@ -5031,15 +6981,30 @@ export default function DashboardIndustriPage() {
 
 ## FILE: app/edukasi/page.tsx
 
-```ts
+```tsx
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { motion } from "motion/react";
 import { Navbar } from "@/components/navbar";
 import Link from "next/link";
 
+interface BeritaItem {
+  id: number;
+  kategori: string;
+  tanggal: string;
+  baca: string;
+  judul: string;
+  ringkasan: string;
+  kontenLengkap: string;
+  icon: string;
+  tagColor: string;
+}
+
 export default function EdukasiPage() {
+  const [selectedBerita, setSelectedBerita] = useState<BeritaItem | null>(null);
+
   const fadeUp = {
     hidden: { opacity: 0, y: 30 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
@@ -5053,13 +7018,49 @@ export default function EdukasiPage() {
     },
   };
 
+  const artikelBerita: BeritaItem[] = [
+    {
+      id: 1,
+      kategori: "Inovasi Bioenergi",
+      tanggal: "28 Agustus 2026",
+      baca: "3 min baca",
+      judul: "Pemanfaatan Biomassa Kelapa Sawit untuk Co-Firing PLTU Nasional",
+      ringkasan: "Cangkang dan janjang kosong kelapa sawit terbukti memiliki nilai kalor hingga 4.000 kcal/kg, menjadi substitusi efektif batu bara.",
+      kontenLengkap: "Berdasarkan data Kementerian ESDM, substitusi batu bara dengan biomassa (co-firing) pada PLTU mampu menurunkan emisi karbon secara signifikan tanpa mengubah struktur dasar boiler. Cangkang sawit dan pelet kayu memiliki kadar abu (ash content) yang jauh lebih rendah dibanding batu bara mentah, sehingga mereduksi akumulasi kerak pada mesin pembakaran industri.",
+      icon: "âš¡",
+      tagColor: "bg-green/10 text-green",
+    },
+    {
+      id: 2,
+      kategori: "Regulasi Lingkungan",
+      tanggal: "20 Agustus 2026",
+      baca: "4 min baca",
+      judul: "Digitalisasi Manifes Limbah B3 Sesuai Standar Permen LHK No. 6/2021",
+      ringkasan: "Pengawasan pengolahan limbah industri kini berbasis digital melalui pelaporan integratif guna memastikan transparansi audit lingkungan.",
+      kontenLengkap: "Penerapan Permen LHK No. 6 Tahun 2021 mewajibkan setiap penghasil dan pengolah limbah Bahan Berbahaya dan Beracun (B3) mencatat alur limbah secara akurat dari titik asal hingga pemusnahan akhir. Platform LENTERA menyelaraskan pencatatan internal industri dengan standar manifes elektronik untuk mempermudah kesiapan sertifikasi dan audit ESG.",
+      icon: "ðŸ“œ",
+      tagColor: "bg-amber-100 text-amber-800",
+    },
+    {
+      id: 3,
+      kategori: "Ekonomi Sirkular",
+      tanggal: "12 Agustus 2026",
+      baca: "5 min baca",
+      judul: "Peluang Nilai Ekonomi Karbon (NEK) Bagi Industri Pengolah Residu",
+      ringkasan: "Implementasi Perpres No. 98/2021 membuka peluang bagi manufaktur untuk mengubah pengurangan emisi menjadi aset kredit karbon.",
+      kontenLengkap: "Melalui skema Ekonomi Sirkular, limbah kayu dan residu organik tidak lagi dianggap sebagai beban biaya operasional (cost center). Pengolahan limbah menjadi bahan bakar alternatif memungkinkan perusahaan mengklaim reduksi emisi gas rumah kaca (GRK) yang terekam dalam Sistem Registri Nasional (SRN-PPI), meningkatkan pemeringkatan sertifikasi hijau industri.",
+      icon: "ðŸŒ±",
+      tagColor: "bg-gold/15 text-gold-dark",
+    },
+  ];
+
   return (
     <>
       <Navbar />
 
       <main className="min-h-screen bg-cream pt-28 md:pt-36 pb-20 overflow-hidden">
         {/* HERO SECTION */}
-        <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-28">
+        <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-24">
           <div className="flex flex-col md:flex-row items-center gap-10 md:gap-16">
 
             {/* Teks Hero */}
@@ -5070,18 +7071,21 @@ export default function EdukasiPage() {
               className="flex-1 text-center md:text-left z-10"
             >
               <motion.div variants={fadeUp} className="inline-flex items-center gap-2 bg-green/10 text-green font-mono text-xs px-4 py-2 rounded-full uppercase tracking-wider mb-5">
-                <span>📚</span> Pusat Edukasi
+                <span>ðŸ“š</span> Pusat Edukasi & Literasi
               </motion.div>
               <motion.h1 variants={fadeUp} className="font-display font-semibold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-forest mb-5 leading-tight">
                 Pahami Limbah, <br className="hidden md:block" />
                 <span className="text-green">Ciptakan Energi.</span>
               </motion.h1>
               <motion.p variants={fadeUp} className="text-ink/70 text-sm sm:text-base md:text-lg max-w-xl mx-auto md:mx-0 leading-relaxed mb-8">
-                Tidak semua limbah industri harus berakhir di pembuangan. Pelajari bagaimana LENTERA memproses sisa produksi menjadi sumber energi terbarukan yang aman dan bermanfaat.
+                Tidak semua limbah industri harus berakhir di pembuangan. Pelajari bagaimana LENTERA memproses sisa produksi menjadi sumber energi terbarukan yang aman, efisien, dan bermanfaat bagi masyarakat.
               </motion.p>
               <motion.div variants={fadeUp} className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-4">
                 <a href="#materi" className="bg-forest text-cream font-medium px-8 py-3.5 rounded-full hover:bg-forest/90 transition-colors w-full sm:w-auto text-center shadow-sm">
                   Mulai Belajar
+                </a>
+                <a href="#wawasan" className="bg-transparent border border-forest/20 text-forest font-medium px-8 py-3.5 rounded-full hover:bg-forest/5 transition-colors w-full sm:w-auto text-center">
+                  Baca Berita
                 </a>
               </motion.div>
             </motion.div>
@@ -5093,10 +7097,8 @@ export default function EdukasiPage() {
               transition={{ duration: 0.8, ease: "easeOut" }}
               className="flex-1 relative flex flex-col items-center justify-center w-full max-w-[320px] sm:max-w-[380px] md:max-w-full mx-auto"
             >
-              {/* Efek Glow */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[260px] h-[260px] md:w-[400px] md:h-[400px] bg-gold/20 blur-[70px] rounded-full z-0"></div>
 
-              {/* Container Gambar Karakter */}
               <motion.div
                 animate={{ y: [0, -12, 0] }}
                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
@@ -5112,19 +7114,63 @@ export default function EdukasiPage() {
                 />
               </motion.div>
 
-              {/* Float Card Hiasan (Diposisikan aman di bawah karakter pada mobile, absolute di desktop) */}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4, duration: 0.5 }}
                 className="mt-4 md:mt-0 md:absolute md:bottom-2 md:right-4 bg-paper/95 backdrop-blur-md p-3.5 rounded-2xl border border-forest/10 shadow-lg z-20 w-full max-w-[240px] md:max-w-[150px] text-center md:text-left"
               >
-                <p className="font-display font-bold text-forest text-xs">Fakta Menarik 💡</p>
-                <p className="text-[11px] text-ink/60 mt-0.5 leading-tight">1 ton limbah sawit bisa terangi 50 rumah.</p>
+                <p className="font-display font-bold text-forest text-xs">Fakta Kalori ðŸ’¡</p>
+                <p className="text-[11px] text-ink/60 mt-0.5 leading-tight">Biomassa sawit memiliki nilai kalor ~4.000 kcal/kg.</p>
               </motion.div>
             </motion.div>
 
           </div>
+        </section>
+
+        {/* SECTION PARAGRAF EDUKASI TAMBAHAN */}
+        <section className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-28">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-50px" }}
+            variants={staggerContainer}
+            className="grid md:grid-cols-2 gap-8 items-center bg-paper rounded-3xl p-8 md:p-12 border border-forest/10 shadow-xs"
+          >
+            <motion.div variants={fadeUp} className="space-y-4">
+              <span className="font-mono text-xs uppercase tracking-widest text-green font-semibold">
+                Mengapa Harus Bio-Energi?
+              </span>
+              <h2 className="font-display font-semibold text-2xl sm:text-3xl text-forest leading-snug">
+                Solusi Berkelanjutan untuk Mengatasi Krisis Energi & Residu Industri
+              </h2>
+              <p className="text-ink/70 text-sm md:text-base leading-relaxed">
+                Setiap tahunnya, jutaan ton limbah industri organik dan limbah kayu dibuang begitu saja tanpa pengolahan optimal. Padahal, residu ini menyimpan potensi energi panas dan listrik yang sangat tinggi jika diproses dengan teknologi konversi yang tepat.
+              </p>
+              <p className="text-ink/70 text-sm md:text-base leading-relaxed">
+                Melalui rantai **Ekonomi Sirkular**, LENTERA membantu manufaktur mengubah biaya pembuangan limbah menjadi nilai tambah ekonomi. Kami tidak hanya mengurangi ketergantungan pada batu bara, tetapi juga menciptakan ekosistem energi alternatif yang terjangkau bagi para mitra agen di daerah.
+              </p>
+            </motion.div>
+
+            <motion.div variants={fadeUp} className="grid grid-cols-2 gap-4">
+              <div className="bg-cream p-5 rounded-2xl border border-forest/10">
+                <p className="font-display font-bold text-3xl text-forest mb-1">~4.000</p>
+                <p className="text-xs text-ink/60 leading-relaxed">kcal/kg estimasi nilai kalor pelet biomassa sawit terstandardisasi.</p>
+              </div>
+              <div className="bg-cream p-5 rounded-2xl border border-forest/10">
+                <p className="font-display font-bold text-3xl text-green mb-1">Low-Ash</p>
+                <p className="text-xs text-ink/60 leading-relaxed">Residu abu pembakaran lebih rendah dibanding batu bara mentah.</p>
+              </div>
+              <div className="bg-cream p-5 rounded-2xl border border-forest/10">
+                <p className="font-display font-bold text-3xl text-gold-dark mb-1">SRN-PPI</p>
+                <p className="text-xs text-ink/60 leading-relaxed">Kesesuaian skema pencatatan reduksi emisi karbon nasional.</p>
+              </div>
+              <div className="bg-cream p-5 rounded-2xl border border-forest/10">
+                <p className="font-display font-bold text-3xl text-clay-dark mb-1">100%</p>
+                <p className="text-xs text-ink/60 leading-relaxed">Alur pengolahan terverifikasi pada sistem digital LENTERA.</p>
+              </div>
+            </motion.div>
+          </motion.div>
         </section>
 
         {/* SECTION MATERI: JENIS LIMBAH */}
@@ -5152,19 +7198,19 @@ export default function EdukasiPage() {
                 title: "Biomassa Pertanian",
                 desc: "Sisa panen, cangkang sawit, dan ampas tebu yang diubah menjadi bio-pelet berkalori tinggi.",
                 color: "bg-green/10 text-green",
-                icon: "🌿"
+                icon: "ðŸŒ¿"
               },
               {
                 title: "Limbah Kayu & Kertas",
                 desc: "Serbuk gergaji, potongan kayu, dan sisa bubur kertas yang dipadatkan untuk bahan bakar boiler pabrik.",
                 color: "bg-gold/10 text-gold-dark",
-                icon: "🪵"
+                icon: "ðŸªµ"
               },
               {
                 title: "Limbah Organik Pabrik",
                 desc: "Sisa pengolahan makanan atau lumpur organik (sludge) yang diproses melalui reaktor biogas.",
                 color: "bg-clay/10 text-clay-dark",
-                icon: "🏭"
+                icon: "ðŸ­"
               }
             ].map((item, i) => (
               <motion.div
@@ -5222,6 +7268,75 @@ export default function EdukasiPage() {
           </motion.div>
         </section>
 
+        {/* SECTION BERITA & ARTIKEL EDUKASI */}
+        <section id="wawasan" className="px-6 md:px-12 lg:px-24 max-w-7xl mx-auto mb-16 md:mb-28 scroll-mt-28">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-50px" }}
+            variants={fadeUp}
+            className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 md:mb-12 gap-4"
+          >
+            <div>
+              <p className="font-mono text-xs uppercase tracking-widest text-green mb-1">Artikel & Berita</p>
+              <h2 className="font-display font-semibold text-2xl sm:text-3xl md:text-4xl text-forest">
+                Kabar Terkini seputar Energi & Lingkungan
+              </h2>
+            </div>
+            <p className="text-xs text-ink/50 max-w-xs">
+              Rangkuman informasi dan wawasan terkini industri bio-energi yang dikemas secara terpercaya.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={staggerContainer}
+            className="grid md:grid-cols-3 gap-6"
+          >
+            {artikelBerita.map((art) => (
+              <motion.article
+                key={art.id}
+                variants={fadeUp}
+                onClick={() => setSelectedBerita(art)}
+                className="bg-paper rounded-3xl p-6 border border-forest/10 shadow-xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group"
+              >
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${art.tagColor}`}>
+                      {art.kategori}
+                    </span>
+                    <span className="text-[11px] text-ink/40 font-mono">{art.baca}</span>
+                  </div>
+
+                  <h3 className="font-display font-semibold text-base md:text-lg text-forest mb-2.5 leading-snug group-hover:text-green transition-colors">
+                    {art.judul}
+                  </h3>
+
+                  <p className="text-xs text-ink/70 leading-relaxed line-clamp-3 mb-6">
+                    {art.ringkasan}
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-forest/10 flex justify-between items-center text-xs text-ink/50">
+                  <span>{art.tanggal}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedBerita(art);
+                    }}
+                    className="text-forest font-semibold hover:text-green transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    Baca Selengkapnya <span>â†’</span>
+                  </button>
+                </div>
+              </motion.article>
+            ))}
+          </motion.div>
+        </section>
+
         {/* CTA SECTION */}
         <section className="px-6 max-w-3xl mx-auto text-center">
           <motion.div
@@ -5246,6 +7361,57 @@ export default function EdukasiPage() {
             </div>
           </motion.div>
         </section>
+
+        {/* POP-UP MODAL DETAIL BERITA */}
+        {selectedBerita && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-paper border border-forest/10 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative max-h-[85vh] overflow-y-auto"
+            >
+              <button
+                onClick={() => setSelectedBerita(null)}
+                className="absolute top-6 right-6 p-2 rounded-full hover:bg-forest/5 text-ink/40 hover:text-ink transition-colors cursor-pointer"
+                aria-label="Tutup Modal"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${selectedBerita.tagColor}`}>
+                  {selectedBerita.kategori}
+                </span>
+                <span className="text-xs text-ink/40 font-mono">â€¢ {selectedBerita.tanggal}</span>
+                <span className="text-xs text-ink/40 font-mono">â€¢ {selectedBerita.baca}</span>
+              </div>
+
+              <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest mb-4 leading-snug">
+                {selectedBerita.judul}
+              </h2>
+
+              <div className="space-y-4 text-ink/80 text-sm leading-relaxed border-t border-forest/10 pt-4">
+                <p className="font-medium text-forest italic">
+                  &quot;{selectedBerita.ringkasan}&quot;
+                </p>
+                <p>{selectedBerita.kontenLengkap}</p>
+              </div>
+
+              <div className="mt-8 pt-4 border-t border-forest/10 flex justify-between items-center">
+                <span className="text-xs text-ink/40">Sumber: Data Kementerian LHK & ESDM</span>
+                <button
+                  onClick={() => setSelectedBerita(null)}
+                  className="bg-forest text-cream px-6 py-2.5 rounded-full text-xs font-medium hover:bg-forest/90 transition-colors cursor-pointer"
+                >
+                  Tutup Artikel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
 
       </main>
     </>
@@ -5296,7 +7462,7 @@ body {
 
 ## FILE: app/kebijakan-privasi/page.tsx
 
-```ts
+```tsx
 import { LegalShell, LegalSection } from "@/components/legal/legal-shell";
 
 export default function KebijakanPrivasiPage() {
@@ -5334,7 +7500,7 @@ export default function KebijakanPrivasiPage() {
 
 ## FILE: app/kontak/page.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useState } from "react";
@@ -5405,7 +7571,7 @@ export default function KontakPage() {
             className="text-center max-w-3xl mx-auto mb-12 md:mb-16"
           >
             <div className="inline-flex items-center gap-2 bg-green/10 text-green font-mono text-xs px-4 py-2 rounded-full uppercase tracking-wider mb-5">
-              <span>💬</span> Hubungi Kami
+              <span>ðŸ’¬</span> Hubungi Kami
             </div>
             <h1 className="font-display font-semibold text-3xl sm:text-4xl md:text-5xl text-forest mb-5 leading-tight">
               Ada Pertanyaan? <br />
@@ -5432,7 +7598,7 @@ export default function KontakPage() {
                 <div className="space-y-6 text-sm relative z-10">
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 rounded-xl bg-cream/10 border border-cream/20 flex items-center justify-center shrink-0 text-lg">
-                      ✉️
+                      âœ‰ï¸
                     </div>
                     <div>
                       <p className="text-cream/60 text-xs mb-1">Email Resmi</p>
@@ -5444,7 +7610,7 @@ export default function KontakPage() {
 
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 rounded-xl bg-cream/10 border border-cream/20 flex items-center justify-center shrink-0 text-lg">
-                      📍
+                      ðŸ“
                     </div>
                     <div>
                       <p className="text-cream/60 text-xs mb-1">Lokasi Kantor</p>
@@ -5456,7 +7622,7 @@ export default function KontakPage() {
 
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 rounded-xl bg-cream/10 border border-cream/20 flex items-center justify-center shrink-0 text-lg">
-                      ⏰
+                      â°
                     </div>
                     <div>
                       <p className="text-cream/60 text-xs mb-1">Jam Operasional</p>
@@ -5487,7 +7653,7 @@ export default function KontakPage() {
               {submitted ? (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 bg-green/10 text-green rounded-full flex items-center justify-center text-3xl mx-auto mb-4">
-                    ✓
+                    âœ“
                   </div>
                   <h3 className="font-display font-semibold text-2xl text-forest mb-2">Pesan Terkirim!</h3>
                   <p className="text-ink/70 text-sm max-w-md mx-auto mb-6">
@@ -5574,7 +7740,7 @@ export default function KontakPage() {
 
 ## FILE: app/layout.tsx
 
-```ts
+```tsx
 import type { Metadata } from "next";
 import { Space_Grotesk, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
@@ -5598,7 +7764,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LENTERA — Limbah Energi Terjangkau Rakyat",
+  title: "LENTERA â€” Limbah Energi Terjangkau Rakyat",
   description:
     "LENTERA mengolah limbah industri dan pabrik menjadi energi terjangkau, disalurkan melalui jaringan mitra dan agen di seluruh Indonesia.",
 };
@@ -5622,7 +7788,7 @@ export default function RootLayout({
 
 ## FILE: app/lupa-sandi/page.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useState } from "react";
@@ -5779,7 +7945,7 @@ export default function LupaSandiPage() {
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
               required
             />
             <PasswordRequirements value={newPassword} />
@@ -5804,7 +7970,7 @@ export default function LupaSandiPage() {
               }}
               className="text-xs text-ink/50 hover:text-forest transition-colors text-center"
             >
-              ← Ubah Email
+              â† Ubah Email
             </button>
           </div>
         </form>
@@ -5816,7 +7982,7 @@ export default function LupaSandiPage() {
 
 ## FILE: app/masuk/page.tsx
 
-```ts
+```tsx
 "use client";
 
 
@@ -6037,7 +8203,7 @@ export default function MasukPage() {
 
             onChange={(e) => setPassword(e.target.value)}
 
-            placeholder="••••••••"
+            placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
 
             required
 
@@ -6086,7 +8252,7 @@ export default function MasukPage() {
 
 ## FILE: app/page.tsx
 
-```ts
+```tsx
 import { Navbar } from "@/components/navbar";
 import { Hero } from "@/components/hero";
 import { HowItWorks } from "@/components/how-it-works";
@@ -6096,6 +8262,7 @@ import { Leaderboard } from "@/components/leaderboard";
 import { PartnersMarquee } from "@/components/partners-marquee";
 import { CtaFooter } from "@/components/cta-footer";
 import { getLeaderboardEntries } from "@/lib/get-leaderboard";
+import { CookieConsent } from "@/components/cookie-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -6104,6 +8271,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen w-full max-w-[100vw] overflow-x-hidden relative bg-cream">
+      <CookieConsent />
       <Navbar />
       <Hero />
       <HowItWorks />
@@ -6117,9 +8285,32 @@ export default async function Home() {
 }
 ```
 
-## FILE: app/syarat-ketentuan/page.tsx
+## FILE: app/pipeline/route.ts
 
 ```ts
+import { NextResponse } from "next/server";
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    return NextResponse.json({ 
+      success: true, 
+      message: "Pipeline mockup active",
+      data: body 
+    });
+  } catch {
+    return NextResponse.json({ success: true });
+  }
+}
+
+export async function GET() {
+  return NextResponse.json({ success: true, message: "Pipeline active" });
+}
+```
+
+## FILE: app/syarat-ketentuan/page.tsx
+
+```tsx
 import { LegalShell, LegalSection } from "@/components/legal/legal-shell";
 
 export default function SyaratKetentuanPage() {
@@ -6159,7 +8350,7 @@ export default function SyaratKetentuanPage() {
 
 ## FILE: app/tentang-kami/page.tsx
 
-```ts
+```tsx
 "use client";
 
 import Link from "next/link";
@@ -6267,15 +8458,15 @@ export default function TentangKamiPage() {
               <h2 className="font-display font-semibold text-2xl text-forest mb-4">Misi Kami</h2>
               <ul className="text-ink/70 space-y-3 leading-relaxed">
                 <li className="flex items-start gap-3">
-                  <span className="text-green mt-1">✦</span>
+                  <span className="text-green mt-1">âœ¦</span>
                   Memfasilitasi penyerapan limbah industri secara optimal.
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-green mt-1">✦</span>
+                  <span className="text-green mt-1">âœ¦</span>
                   Memberdayakan mitra lokal dalam pendistribusian energi alternatif.
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-green mt-1">✦</span>
+                  <span className="text-green mt-1">âœ¦</span>
                   Mengurangi jejak karbon nasional demi lingkungan yang lebih sehat.
                 </li>
               </ul>
@@ -6370,7 +8561,7 @@ export default function TentangKamiPage() {
 
 ## FILE: components/ai-assistant.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -6407,36 +8598,51 @@ export function AIAssistant() {
     if (isOpen) scrollToBottom();
   }, [messages, isTyping, isOpen]);
 
-  // FUNGSI UTAMA KIRIM PESAN TERHUBUNG KE API ROUTE
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || inputMessage;
     if (!text.trim() || isTyping) return;
 
-    // 1. Tambah Pesan User
-    const userMsg: Message = { sender: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, { sender: "user", text }]);
     if (!textToSend) setInputMessage("");
     setIsTyping(true);
 
     try {
-      // 2. Panggil Endpoint Backend Next.js (/api/chat)
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
       });
 
-      const data = await res.json();
+      if (!res.ok) throw new Error("Gagal terhubung");
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: "ai",
-          text: data.reply || "Maaf, AI tidak memberikan respons.",
-        },
-      ]);
+      setIsTyping(false);
+      setMessages((prev) => [...prev, { sender: "ai", text: "" }]);
+
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (!reader) return;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunkText = decoder.decode(value, { stream: true });
+        
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          updated[lastIndex] = {
+            ...updated[lastIndex],
+            text: updated[lastIndex].text + chunkText,
+          };
+          return updated;
+        });
+      }
+
     } catch (error) {
       console.error("Error sending message:", error);
+      setIsTyping(false);
       setMessages((prev) => [
         ...prev,
         {
@@ -6444,18 +8650,14 @@ export function AIAssistant() {
           text: "Gagal terhubung ke server AI. Pastikan koneksi internet kamu stabil.",
         },
       ]);
-    } finally {
-      setIsTyping(false);
     }
   };
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
-      {/* WINDOW CHAT AI */}
       {isOpen && (
         <div className="mb-4 w-80 sm:w-96 bg-paper rounded-2xl border border-forest/10 shadow-2xl overflow-hidden flex flex-col h-[480px] max-h-[80vh] transition-all animate-in fade-in slide-in-from-bottom-4">
 
-          {/* Header */}
           <div className="bg-forest text-cream p-4 flex justify-between items-center shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center border border-gold/40 text-gold font-bold text-xs">
@@ -6478,7 +8680,6 @@ export function AIAssistant() {
             </button>
           </div>
 
-          {/* Area Percakapan */}
           <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-cream/30 text-xs">
             {messages.map((msg, idx) => (
               <div
@@ -6497,7 +8698,6 @@ export function AIAssistant() {
               </div>
             ))}
 
-            {/* Indikator AI Mengetik */}
             {isTyping && (
               <div className="flex justify-start">
                 <div className="bg-white border border-forest/10 p-3 rounded-2xl rounded-tl-none text-ink/50 flex items-center gap-1 shadow-xs">
@@ -6510,7 +8710,6 @@ export function AIAssistant() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick Questions Chips */}
           <div className="px-3 py-2 bg-white border-t border-forest/5 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
             {QUICK_QUESTIONS.map((q, i) => (
               <button
@@ -6524,7 +8723,6 @@ export function AIAssistant() {
             ))}
           </div>
 
-          {/* Input Chat */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -6553,7 +8751,6 @@ export function AIAssistant() {
         </div>
       )}
 
-      {/* TOMBOL FLOATING LOGO AI */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="bg-forest text-gold border border-gold/30 p-3.5 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center cursor-pointer group"
@@ -6570,7 +8767,7 @@ export function AIAssistant() {
 
 ## FILE: components/auth/auth-shell.tsx
 
-```ts
+```tsx
 import { ReactNode } from "react";
 
 export function AuthShell({
@@ -6628,7 +8825,7 @@ export function AuthShell({
 
 ## FILE: components/auth/back-button.tsx
 
-```ts
+```tsx
 export function BackButton({
   children = "Kembali",
   ...props
@@ -6647,7 +8844,7 @@ export function BackButton({
 
 ## FILE: components/auth/form-field.tsx
 
-```ts
+```tsx
 import { InputHTMLAttributes } from "react";
 
 export function FormField({
@@ -6670,7 +8867,7 @@ export function FormField({
 
 ## FILE: components/auth/otp-field.tsx
 
-```ts
+```tsx
 export function OtpField({
   value,
   onChange,
@@ -6707,7 +8904,7 @@ export function OtpField({
 
 ## FILE: components/auth/password-requirements.tsx
 
-```ts
+```tsx
 import { passwordRules } from "@/lib/validation";
 
 export function PasswordRequirements({ value }: { value: string }) {
@@ -6752,7 +8949,7 @@ export function PasswordRequirements({ value }: { value: string }) {
 
 ## FILE: components/auth/progress-steps.tsx
 
-```ts
+```tsx
 export function ProgressSteps({
   steps,
   current,
@@ -6797,7 +8994,7 @@ export function ProgressSteps({
         ))}
       </div>
       <p className="text-center text-xs font-mono uppercase tracking-widest text-ink/40 mt-3">
-        Langkah {current + 1} dari {steps.length} · {steps[current]}
+        Langkah {current + 1} dari {steps.length} Â· {steps[current]}
       </p>
     </div>
   );
@@ -6806,18 +9003,47 @@ export function ProgressSteps({
 
 ## FILE: components/auth/submit-button.tsx
 
-```ts
+```tsx
+import { useRef } from "react";
+
 export function SubmitButton({
   children,
   className = "",
+  disabled,
+  isSubmitting,
+  debounceMs = 600,
+  onClick,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  isSubmitting?: boolean;
+  debounceMs?: number;
+}) {
+  const lastClickRef = useRef(0);
+
+  const isProcessing = Boolean(disabled || isSubmitting);
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const now = Date.now();
+
+    if (isProcessing || now - lastClickRef.current < debounceMs) {
+      event.preventDefault();
+      return;
+    }
+
+    lastClickRef.current = now;
+    onClick?.(event);
+  };
+
   return (
     <button
       {...props}
+      type={props.type ?? "submit"}
+      disabled={isProcessing}
+      aria-busy={isProcessing}
+      onClick={handleClick}
       className={`${className || "w-full"} bg-forest text-cream font-medium rounded-full py-3.5 transition-colors hover:bg-forest-2 disabled:opacity-60 disabled:pointer-events-none`}
     >
-      {children}
+      {isProcessing ? "Memproses..." : children}
     </button>
   );
 }
@@ -6825,7 +9051,7 @@ export function SubmitButton({
 
 ## FILE: components/auth/terms-checkbox.tsx
 
-```ts
+```tsx
 "use client";
 
 import Link from "next/link";
@@ -6887,9 +9113,60 @@ export function TermsCheckbox({
 }
 ```
 
+## FILE: components/cookie-consent.tsx
+
+```tsx
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+
+export function CookieConsent() {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    // Mengecek apakah user sudah klik "Saya Mengerti" sebelumnya
+    const consent = localStorage.getItem("lentera-cookie-consent");
+    if (!consent) {
+      setIsVisible(true);
+    }
+  }, []);
+
+  const handleAccept = () => {
+    // Menyimpan persetujuan di browser agar pop-up tidak muncul lagi
+    localStorage.setItem("lentera-cookie-consent", "true");
+    setIsVisible(false);
+  };
+
+  if (!isVisible) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-forest/60 backdrop-blur-sm p-4">
+      <div className="bg-paper border border-forest/10 p-6 sm:p-8 rounded-2xl shadow-2xl max-w-lg w-full text-center animate-in fade-in zoom-in-95 duration-200">
+        <h2 className="font-display font-bold text-xl text-forest mb-3">
+          Pemberitahuan Penggunaan Cookie
+        </h2>
+        <p className="text-sm text-ink/70 mb-6 leading-relaxed">
+          Kami menggunakan cookie untuk meningkatkan kualitas layanan dan memberikan pengalaman yang lebih baik. Cookie menganalisis bagian website yang kamu kunjungi. Pelajari lebih lanjut mengenai Cookie di{" "}
+          <Link className="text-forest font-bold hover:underline" href="/kebijakan-privasi">
+            Kebijakan Privasi
+          </Link>.
+        </p>
+        <button
+          onClick={handleAccept}
+          className="bg-forest text-cream font-semibold px-8 py-3 rounded-xl hover:bg-forest/90 transition-colors w-full sm:w-auto cursor-pointer shadow-md"
+        >
+          Saya Mengerti
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
 ## FILE: components/cta-footer.tsx
 
-```ts
+```tsx
 import Image from "next/image";
 import { Reveal } from "./ui/reveal";
 import { MagneticButton } from "./ui/magnetic-button";
@@ -6949,7 +9226,7 @@ export function CtaFooter() {
               </a>
             ))}
           </div>
-          <p className="text-cream/40">© 2026 LENTERA. Limbah Energi Terjangkau Rakyat.</p>
+          <p className="text-cream/40">Â© 2026 LENTERA. Limbah Energi Terjangkau Rakyat.</p>
         </div>
       </footer>
     </>
@@ -6959,16 +9236,15 @@ export function CtaFooter() {
 
 ## FILE: components/dashboard/admin-sidebar.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
-const navItems = [
+export const navItems = [
   {
-    href: "#ringkasan",
+    id: "ringkasan",
     label: "Ringkasan Admin",
     icon: (
       <>
@@ -6978,18 +9254,31 @@ const navItems = [
     ),
   },
   {
-    href: "#pengiriman",
-    label: "Semua Pengiriman",
+    id: "manajemen-pengguna",
+    label: "Manajemen Akun",
     icon: (
       <>
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-        <line x1="12" y1="22.08" x2="12" y2="12" />
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </>
     ),
   },
   {
-    href: "#harga-wilayah",
+    id: "katalog-produk",
+    label: "Katalog Produk",
+    icon: (
+      <>
+        <path d="m7.5 4.27 9 5.15" />
+        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <path d="m3.3 7 8.7 5 8.7-5" />
+        <path d="M12 22V12" />
+      </>
+    ),
+  },
+  {
+    id: "harga-wilayah",
     label: "Harga Wilayah",
     icon: (
       <>
@@ -6998,16 +9287,30 @@ const navItems = [
       </>
     ),
   },
+  {
+    id: "pengiriman",
+    label: "Semua Pengiriman",
+    icon: (
+      <>
+        <rect width="8" height="8" x="3" y="3" rx="2" />
+        <path d="M7 11v4a2 2 0 0 0 2 2h4" />
+        <rect width="8" height="8" x="13" y="13" rx="2" />
+      </>
+    ),
+  },
 ];
 
 interface SidebarProps {
-  isOpen?: boolean;
-  onClose?: () => void;
+  activeTab?: string;
+  setActiveTab?: (tab: string) => void;
 }
 
-export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
-  const router = useRouter();
+export function AdminSidebar({
+  activeTab,
+  setActiveTab,
+}: SidebarProps) {
   const [nama, setNama] = useState<string | null>("Administrator");
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -7020,79 +9323,88 @@ export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
   async function handleLogout() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
-    router.push("/masuk");
-    router.refresh();
+    window.location.href = "/masuk";
   }
 
   return (
     <>
-      {/* Backdrop Gelap saat Mobile Sidebar Terbuka */}
+      {/* 1. HEADER MOBILE KHUSUS DROPDOWN */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-[64px] z-50 bg-forest text-cream flex items-center justify-between px-5 border-b border-cream/10 shadow-sm">
+        <div className="flex flex-col">
+          <span className="font-display font-bold tracking-tight text-base leading-none mt-1">
+            LENTERA
+          </span>
+          <span className="text-[10px] text-cream/50 font-mono uppercase tracking-wider">
+            Portal Admin
+          </span>
+        </div>
+
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="p-2 text-cream hover:bg-cream/10 rounded-lg transition-colors cursor-pointer focus:outline-none"
+        >
+          <div className="space-y-1.5 w-6">
+            <span className={`block h-0.5 w-full bg-current rounded-full transition-transform duration-300 ${isOpen ? "rotate-45 translate-y-2" : ""}`} />
+            <span className={`block h-0.5 w-full bg-current rounded-full transition-opacity duration-300 ${isOpen ? "opacity-0" : ""}`} />
+            <span className={`block h-0.5 w-full bg-current rounded-full transition-transform duration-300 ${isOpen ? "-rotate-45 -translate-y-2" : ""}`} />
+          </div>
+        </button>
+      </div>
+
+      {/* 2. OVERLAY GELAP DI BAWAH DROPDOWN */}
       {isOpen && (
         <div
-          onClick={onClose}
-          className="md:hidden fixed inset-0 bg-ink/60 z-40 backdrop-blur-xs transition-opacity"
+          onClick={() => setIsOpen(false)}
+          className="md:hidden fixed inset-0 z-40 bg-ink/60 backdrop-blur-sm"
+          style={{ top: "64px" }}
         />
       )}
 
-      {/* Drawer Sidebar */}
-      <aside
-        className={`fixed md:sticky top-0 left-0 bottom-0 z-50 h-screen w-64 bg-forest text-cream flex flex-col justify-between p-6 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
-          isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+      {/* 3. MENU DROPDOWN MOBILE */}
+      <div
+        className={`md:hidden fixed top-[64px] left-0 right-0 z-40 bg-forest text-cream border-b border-cream/10 px-4 py-5 shadow-2xl transition-all duration-300 ease-in-out transform origin-top max-h-[85vh] overflow-y-auto ${
+          isOpen
+            ? "translate-y-0 opacity-100 scale-y-100 pointer-events-auto"
+            : "-translate-y-4 opacity-0 scale-y-95 pointer-events-none"
         }`}
       >
-        <div>
-          {/* Header Mobile Drawer */}
-          <div className="flex items-center justify-between pb-6 mb-6 border-b border-cream/10">
-            <div>
-              <span className="font-display font-semibold text-lg tracking-tight text-cream">
-                LENTERA
-              </span>
-              <p className="text-xs text-cream/45 mt-0.5">Portal Admin</p>
-            </div>
+        {/* Tombol X Tutup udah dibuang, sisain judul doang biar rapi */}
+        <div className="pb-3 mb-3 border-b border-cream/10">
+          <p className="text-xs font-mono text-gold uppercase tracking-wider">
+            Navigasi Panel Admin
+          </p>
+        </div>
 
-            {/* Tombol Close (X) */}
-            <button
-              onClick={onClose}
-              className="md:hidden p-1.5 rounded-lg hover:bg-cream/10 text-cream/70 hover:text-cream transition-colors"
-              aria-label="Tutup Menu"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Menu Navigasi */}
-          <nav className="space-y-1">
-            {navItems.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/10 transition-colors"
+        <nav className="space-y-1">
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  if (setActiveTab) setActiveTab(item.id);
+                  setIsOpen(false);
+                }}
+                className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium w-full text-left transition-all duration-150 cursor-pointer ${
+                  isActive
+                    ? "bg-cream text-forest font-semibold shadow-xs"
+                    : "text-cream/70 hover:text-cream hover:bg-cream/10"
+                }`}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-4 h-4 shrink-0"
-                >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`w-5 h-5 shrink-0 ${isActive ? "text-forest" : "text-gold/80"}`}>
                   {item.icon}
                 </svg>
                 {item.label}
-              </a>
-            ))}
-          </nav>
-        </div>
+              </button>
+            );
+          })}
+        </nav>
 
-        {/* User Info & Logout */}
-        <div className="pt-6 border-t border-cream/10 space-y-2">
+        <div className="mt-5 pt-4 border-t border-cream/10 space-y-3">
           {nama && (
-            <div className="flex items-center gap-3 px-3 py-2">
-              <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
+            <div className="flex items-center gap-3 px-3 py-1">
+              <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0 border border-gold/30">
                 {nama.charAt(0).toUpperCase()}
               </div>
               <p className="text-sm font-medium text-cream/90 truncate">{nama}</p>
@@ -7100,8 +9412,303 @@ export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
           )}
 
           <button
+            type="button"
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/10 transition-colors w-full text-left cursor-pointer"
+            className="flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl text-xs font-semibold text-red-200 bg-red-500/15 hover:bg-red-500/25 active:bg-red-500/35 transition-all w-full border border-red-500/20 cursor-pointer"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17 21 12 16 7" />
+              <path d="M21 12H9" />
+            </svg>
+            Keluar dari Sesi
+          </button>
+        </div>
+      </div>
+
+      {/* 4. SIDEBAR DESKTOP (LAPTOP/PC) */}
+      <aside className="hidden md:flex md:w-64 shrink-0 bg-forest text-cream flex-col h-screen sticky top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] z-30">
+        <div className="p-6 border-b border-cream/10">
+          <span className="font-display font-semibold text-lg tracking-tight">
+            LENTERA
+          </span>
+          <p className="text-xs text-cream/45 mt-1 font-mono uppercase tracking-wider">
+            Portal Admin
+          </p>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-1">
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  if (setActiveTab) setActiveTab(item.id);
+                }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium w-full text-left transition-colors cursor-pointer ${
+                  isActive
+                    ? "bg-cream text-forest font-semibold shadow-xs"
+                    : "text-cream/65 hover:text-cream hover:bg-cream/10"
+                }`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0">
+                  {item.icon}
+                </svg>
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-cream/10">
+          {nama && (
+            <div className="flex items-center gap-3 px-2 mb-2 pb-3 border-b border-cream/10">
+              <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
+                {nama.charAt(0).toUpperCase()}
+              </div>
+              <p className="text-sm text-cream/80 truncate">{nama}</p>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-red-300 hover:bg-cream/10 transition-colors w-full cursor-pointer text-left"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17 21 12 16 7" />
+              <path d="M21 12H9" />
+            </svg>
+            Keluar
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}
+```
+
+## FILE: components/dashboard/industri-sidebar.tsx
+
+```tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+
+const navItems = [
+  {
+    href: "#ringkasan",
+    label: "Ringkasan",
+    icon: (
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 12 12 3l9 9" />
+        <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
+      </svg>
+    ),
+  },
+  {
+    href: "#lacak-pengiriman",
+    label: "Status Pengiriman",
+    icon: (
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
+      </svg>
+    ),
+  },
+  {
+    href: "#pembayaran-b3",
+    label: "Tagihan B3",
+    icon: (
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" />
+        <path d="M4 6v12c0 1.1.9 2 2 2h14v-4" />
+        <path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" />
+      </svg>
+    ),
+  },
+  {
+    href: "#profil-industri",
+    label: "Profil Industri",
+    icon: (
+      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 21h18M5 21V9l6-4 6 4v12M9 21v-6h6v6" />
+      </svg>
+    ),
+  },
+];
+
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export function IndustriSidebar({ isOpen = false, onClose }: SidebarProps) {
+  const [nama, setNama] = useState<string | null>(null);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: profile } = await supabase
+        .from("industri_profiles")
+        .select("nama_perusahaan")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      setNama(profile?.nama_perusahaan ?? data.user.email ?? null);
+    });
+  }, []);
+
+  async function handleLogout() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    window.location.href = "/masuk";
+  }
+
+  const toggleMobileMenu = () => {
+    setIsMobileOpen(!isMobileOpen);
+    if (onClose) onClose();
+  };
+
+  return (
+    <>
+      {/* 1. MOBILE TOP BAR */}
+      <div className="md:hidden sticky top-0 z-50 bg-forest text-cream flex items-center justify-between px-5 py-3.5 border-b border-cream/10 w-full shadow-sm">
+        <div>
+          <span className="font-display font-semibold text-base tracking-tight block leading-none">
+            LENTERA
+          </span>
+          <span className="text-[10px] text-cream/45 font-mono uppercase tracking-wider">Portal Industri</span>
+        </div>
+
+        {/* Dynamic Animated Hamburger Button */}
+        <button
+          onClick={toggleMobileMenu}
+          aria-label="Toggle menu"
+          className="p-2 text-cream/80 hover:text-cream rounded-xl hover:bg-cream/10 transition-all duration-200 active:scale-95 focus:outline-none cursor-pointer"
+        >
+          <div className="w-5 h-5 flex flex-col justify-center items-center relative">
+            <span
+              className={`h-0.5 w-5 bg-current rounded-full transition-all duration-300 ease-in-out ${
+                isMobileOpen ? "rotate-45 translate-y-[2px]" : "-translate-y-1"
+              }`}
+            />
+            <span
+              className={`h-0.5 w-5 bg-current rounded-full transition-all duration-200 ease-in-out ${
+                isMobileOpen ? "opacity-0" : "opacity-100"
+              }`}
+            />
+            <span
+              className={`h-0.5 w-5 bg-current rounded-full transition-all duration-300 ease-in-out ${
+                isMobileOpen ? "-rotate-45 -translate-y-[2px]" : "translate-y-1"
+              }`}
+            />
+          </div>
+        </button>
+      </div>
+
+      {/* 2. MOBILE OVERLAY & SMOOTH SLIDE-DOWN DROPDOWN */}
+      <div
+        onClick={() => setIsMobileOpen(false)}
+        className={`md:hidden fixed inset-0 z-40 bg-ink/50 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
+          isMobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+      />
+
+      <div
+        className={`md:hidden fixed top-[57px] left-0 right-0 z-40 bg-forest text-cream border-b border-cream/10 px-4 py-5 shadow-2xl transition-all duration-300 ease-in-out transform origin-top ${
+          isMobileOpen
+            ? "translate-y-0 opacity-100 scale-y-100 pointer-events-auto"
+            : "-translate-y-4 opacity-0 scale-y-95 pointer-events-none"
+        }`}
+      >
+        <nav className="space-y-1">
+          {navItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              onClick={() => setIsMobileOpen(false)}
+              className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-all duration-150 active:scale-[0.98]"
+            >
+              <div className="text-gold/80 shrink-0">{item.icon}</div>
+              {item.label}
+            </a>
+          ))}
+        </nav>
+
+        <div className="mt-5 pt-4 border-t border-cream/10 space-y-3">
+          {nama && (
+            <div className="flex items-center gap-3 px-3 py-1">
+              <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0 border border-gold/30">
+                {nama.charAt(0).toUpperCase()}
+              </div>
+              <p className="text-sm font-medium text-cream/90 truncate">{nama}</p>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl text-xs font-semibold text-red-200 bg-red-500/15 hover:bg-red-500/25 active:bg-red-500/35 transition-all duration-150 w-full border border-red-500/20 cursor-pointer"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-4 h-4 shrink-0"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17 21 12 16 7" />
+              <path d="M21 12H9" />
+            </svg>
+            Keluar dari Sesi
+          </button>
+        </div>
+      </div>
+
+      {/* 3. DESKTOP SIDEBAR */}
+      <aside className="hidden md:flex w-64 shrink-0 bg-forest text-cream flex-col h-screen sticky top-0">
+        <div className="p-6 border-b border-cream/10">
+          <span className="font-display font-semibold text-lg tracking-tight">
+            LENTERA
+          </span>
+          <p className="text-xs text-cream/45 mt-1 font-mono uppercase tracking-wider">Portal Industri</p>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-1">
+          {navItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/10 transition-colors"
+            >
+              {item.icon}
+              {item.label}
+            </a>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-cream/10">
+          {nama && (
+            <div className="flex items-center gap-3 px-2 mb-2 pb-3 border-b border-cream/10">
+              <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
+                {nama.charAt(0).toUpperCase()}
+              </div>
+              <p className="text-sm text-cream/80 truncate">{nama}</p>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-red-300 hover:bg-cream/10 transition-colors w-full cursor-pointer text-left"
           >
             <svg
               viewBox="0 0 24 24"
@@ -7125,244 +9732,157 @@ export function AdminSidebar({ isOpen = false, onClose }: SidebarProps) {
 }
 ```
 
-## FILE: components/dashboard/industri-sidebar.tsx
-
-```ts
-"use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
-
-const navItems = [
-  {
-    href: "#ringkasan",
-    label: "Ringkasan",
-    icon: (
-      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 12 12 3l9 9" />
-        <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
-      </svg>
-    ),
-  },
-  {
-    href: "#profil-industri",
-    label: "Profil Industri",
-    icon: (
-      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 21h18M5 21V9l6-4 6 4v12M9 21v-6h6v6" />
-      </svg>
-    ),
-  },
-];
-
-interface SidebarProps {
-  isOpen?: boolean;
-  onClose?: () => void;
-}
-
-export function IndustriSidebar({ isOpen = false, onClose }: SidebarProps) {
-  const router = useRouter();
-  const [nama, setNama] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
-      const { data: profile } = await supabase
-        .from("industri_profiles")
-        .select("nama_perusahaan")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
-      setNama(profile?.nama_perusahaan ?? data.user.email ?? null);
-    });
-  }, []);
-
-  async function handleLogout() {
-    const supabase = createSupabaseBrowserClient();
-    await supabase.auth.signOut();
-    router.push("/masuk");
-    router.refresh();
-  }
-
-  return (
-    <>
-      {/* Backdrop Gelap saat Mobile Sidebar Terbuka */}
-      {isOpen && (
-        <div
-          onClick={onClose}
-          className="md:hidden fixed inset-0 bg-ink/60 z-40 backdrop-blur-xs transition-opacity"
-        />
-      )}
-
-      {/* Drawer Sidebar: Nempel rata dari ujung atas sampai ujung bawah */}
-      <aside
-        className={`fixed md:sticky top-0 left-0 bottom-0 z-50 h-screen w-72 bg-forest text-cream flex flex-col justify-between p-6 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
-          isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
-        }`}
-      >
-        <div>
-          {/* Header Mobile Drawer */}
-          <div className="flex items-center justify-between pb-6 mb-6 border-b border-cream/10">
-            <div>
-              <span className="font-display font-semibold text-lg tracking-tight text-cream">
-                LENTERA
-              </span>
-              <p className="text-xs text-cream/45 mt-0.5">Portal Industri</p>
-            </div>
-
-            {/* Tombol Close (X) */}
-            <button
-              onClick={onClose}
-              className="md:hidden p-1.5 rounded-lg hover:bg-cream/10 text-cream/70 hover:text-cream transition-colors"
-              aria-label="Tutup Menu"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Menu Navigasi */}
-          <nav className="space-y-1">
-            {navItems.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                onClick={onClose}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-colors"
-              >
-                {item.icon}
-                {item.label}
-              </a>
-            ))}
-          </nav>
-        </div>
-
-        {/* User Info & Logout Button */}
-        <div className="pt-6 border-t border-cream/10 space-y-2">
-          {nama && (
-            <div className="flex items-center gap-3 px-3 py-2">
-              <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
-                {nama.charAt(0).toUpperCase()}
-              </div>
-              <p className="text-sm font-medium text-cream/90 truncate">{nama}</p>
-            </div>
-          )}
-
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-colors w-full text-left cursor-pointer"
-          >
-            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <path d="M16 17 21 12 16 7" />
-              <path d="M21 12H9" />
-            </svg>
-            Keluar
-          </button>
-        </div>
-      </aside>
-    </>
-  );
-}
-```
-
 ## FILE: components/dashboard/product-card.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser"; 
 
-interface ProductCardProps {
-  product: {
-    id: string;
-    nama_produk?: string;
-    deskripsi?: string;
-    harga_default?: number;
-    price?: number;
-    satuan?: string;
-    unit?: string;
-    stok_dummy?: number;
-    stok?: number;
-    stock?: number;
-  };
+interface Product {
+  id: string;
+  nama?: string;
+  nama_produk?: string;
+  deskripsi: string;
+  price: number;
+  unit: string;
+  stock: number;
+  stok?: number;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
-  const [quantity, setQuantity] = useState(1);
-  const [status, setStatus] = useState<"idle" | "loading" | "sent">("idle");
+export function ProductCard({ product }: { product: Product }) {
+  const [jumlah, setJumlah] = useState(1);
+  const [loading, setLoading] = useState(false);
 
-  const title = product.nama_produk || "Produk Energi";
-  const price = product.price ?? product.harga_default ?? 0;
-  const unit = product.unit || product.satuan || "unit";
-  const currentStock = product.stock ?? product.stok ?? product.stok_dummy ?? 0;
+  const namaProduk = product.nama || product.nama_produk || "Produk Energi";
+  const stokTersedia = product.stock ?? product.stok ?? 0;
 
-  const handleDecrease = () => quantity > 1 && setQuantity(quantity - 1);
-  const handleIncrease = () => quantity < currentStock && setQuantity(quantity + 1);
+  const handleOrder = async () => {
+    if (jumlah > stokTersedia) {
+      alert("Jumlah pesanan melebihi stok yang tersedia!");
+      return;
+    }
 
-  async function handleOrder() {
-    setStatus("loading");
+    setLoading(true);
+
     try {
+      // ðŸš€ JURUS AMAN: Ambil data user SEKARANG sebelum buka Midtrans
+      const supabase = createSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user?.id) {
+        alert("Gagal: Sesi login kamu tidak terbaca. Silakan refresh halaman.");
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch("/api/transaksi/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          volume_terjual_kg: quantity,
-          produk_id: product.id
-        })
+          produk_id: product.id,
+          volume_terjual_kg: Number(jumlah),
+        }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal memproses pesanan.");
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Respon server bermasalah. Pastikan dev server sudah direstart.");
+      }
 
-      setStatus("sent");
-      alert(`Berhasil memesan ${quantity} ${unit} ${title}!`);
-      window.location.reload(); // Refresh untuk update stok UI
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Gagal terhubung ke server.";
-      alert(msg);
-      setStatus("idle");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal membuat pesanan.");
+
+      const windowSnap = (window as unknown as { snap?: any }).snap;
+
+      if (data.token && windowSnap) {
+        windowSnap.pay(data.token, {
+          onSuccess: async function (result: any) {
+            try {
+              const updateRes = await fetch("/api/transaksi/update_stock", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  product_id: product.id,
+                  quantity: jumlah,
+                  user_id: user.id, // PASTI AMAN KARENA DIAMBIL DI AWAL
+                  total_harga: product.price * jumlah
+                })
+              });
+
+              const updateData = await updateRes.json();
+
+              if (!updateRes.ok) {
+                throw new Error(updateData.error || "Gagal nyatet ke database.");
+              }
+
+              alert("Pembayaran Berhasil! Pesanan tercatat & Stok dikurangi.");
+              window.location.reload(); 
+              
+            } catch (err: any) {
+              console.error(err);
+              // ðŸš¨ MENAMPILKAN ALASAN ASLI KENAPA DATABASE NOLAK
+              alert("ERROR SYSTEM: " + err.message);
+              window.location.reload();
+            }
+          },
+          onPending: function () {
+            alert("Menunggu pembayaran Anda.");
+            window.location.reload();
+          },
+          onError: function () {
+            alert("Pembayaran gagal!");
+            window.location.reload();
+          },
+          onClose: function () {
+            alert("Kamu menutup pop-up pembayaran sebelum selesai.");
+            window.location.reload();
+          },
+        });
+      } else {
+        alert(data.message || "Pesanan berhasil dibuat!");
+        window.location.reload();
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Terjadi kesalahan saat memesan.");
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="bg-paper p-5 rounded-2xl border border-forest/10 flex flex-col justify-between shadow-xs relative">
+    <div className="bg-paper rounded-2xl border border-forest/10 p-5 shadow-xs flex flex-col justify-between">
       <div>
-        <div className="flex justify-between items-start mb-2 gap-2">
-          <h3 className="font-display font-semibold text-forest text-lg">{title}</h3>
-          <span className="text-[11px] font-mono font-medium bg-gold/15 text-gold-dark px-2.5 py-1 rounded-md shrink-0">
-            {currentStock} {unit}
+        <div className="flex justify-between items-start gap-2 mb-2">
+          <h3 className="font-display font-semibold text-lg text-forest leading-snug">
+            {namaProduk}
+          </h3>
+          <span className="text-[10px] font-bold px-2.5 py-1 bg-forest/10 text-forest rounded-full uppercase tracking-wider shrink-0">
+            {stokTersedia} {product.unit}
           </span>
         </div>
-        <p className="text-xs text-ink/60 mb-4 line-clamp-2">
-          {product.deskripsi || "Bahan bakar energi terbarukan."}
-        </p>
+        <p className="text-xs text-ink/60 mb-4 line-clamp-2">{product.deskripsi}</p>
       </div>
 
-      <div className="border-t border-forest/10 pt-4 space-y-4">
-        <div>
-          <p className="text-[10px] text-ink/45 uppercase tracking-wider">Harga Wilayah</p>
-          <p className="font-semibold text-green text-base">
-            Rp {price.toLocaleString("id-ID")} <span className="text-xs font-normal text-ink/50">/{unit}</span>
+      <div>
+        <div className="mb-4">
+          <p className="text-[10px] uppercase font-mono tracking-widest text-ink/40 mb-0.5">Harga Wilayah</p>
+          <p className="font-display font-bold text-forest text-lg">
+            Rp {product.price.toLocaleString("id-ID")}{" "}
+            <span className="text-xs font-normal text-ink/60">/{product.unit}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
-          <div className="flex items-center border border-forest/20 rounded-xl bg-white overflow-hidden shrink-0">
-            <button type="button" onClick={handleDecrease} disabled={quantity <= 1 || status !== "idle"} className="px-2.5 py-1.5 text-forest hover:bg-forest/5 disabled:opacity-30 text-xs font-bold transition-colors cursor-pointer">-</button>
-            <span className="px-2 py-1.5 text-xs font-semibold text-forest min-w-[1.75rem] text-center">{quantity}</span>
-            <button type="button" onClick={handleIncrease} disabled={quantity >= currentStock || status !== "idle"} className="px-2.5 py-1.5 text-forest hover:bg-forest/5 disabled:opacity-30 text-xs font-bold transition-colors cursor-pointer">+</button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center border border-forest/20 rounded-xl bg-cream/50 overflow-hidden">
+            <button type="button" onClick={() => setJumlah((prev) => Math.max(1, prev - 1))} className="px-3 py-1.5 text-xs text-forest font-bold hover:bg-forest/10 transition-colors cursor-pointer">-</button>
+            <span className="px-3 text-xs font-semibold text-forest">{jumlah}</span>
+            <button type="button" onClick={() => setJumlah((prev) => prev + 1)} className="px-3 py-1.5 text-xs text-forest font-bold hover:bg-forest/10 transition-colors cursor-pointer">+</button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleOrder}
-            disabled={currentStock <= 0 || status !== "idle"}
-            className="flex-1 bg-forest text-cream py-2 px-3 rounded-xl text-xs font-medium hover:bg-forest/90 disabled:bg-gray-200 disabled:text-gray-400 transition-colors shadow-xs cursor-pointer"
-          >
-            {status === "loading" ? "Memproses..." : status === "sent" ? "Terkirim ✓" : currentStock > 0 ? "Pesan" : "Stok Habis"}
+          <button type="button" onClick={handleOrder} disabled={loading || stokTersedia <= 0} className="flex-1 bg-forest text-cream py-2 px-4 rounded-xl text-xs font-semibold hover:bg-forest/90 transition-colors disabled:opacity-50 cursor-pointer">
+            {loading ? "Memproses..." : "Pesan Stok"}
           </button>
         </div>
       </div>
@@ -7373,7 +9893,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
 ## FILE: components/dashboard/shipment-tracker.tsx
 
-```ts
+```tsx
 export type ShipmentStatus =
   | "menunggu_konfirmasi"
   | "dijadwalkan"
@@ -7471,11 +9991,10 @@ export function ShipmentTracker({ status }: { status: ShipmentStatus }) {
 
 ## FILE: components/dashboard/sidebar.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const navItems = [
@@ -7501,6 +10020,17 @@ const navItems = [
     ),
   },
   {
+    href: "#status-pesanan",
+    label: "Status Pesanan",
+    icon: (
+      <>
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
+      </>
+    ),
+  },
+  {
     href: "#profil-mitra",
     label: "Profil Mitra",
     icon: (
@@ -7513,7 +10043,6 @@ const navItems = [
 ];
 
 export function DashboardSidebar() {
-  const router = useRouter();
   const [mitraName, setMitraName] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -7557,74 +10086,68 @@ export function DashboardSidebar() {
   async function handleLogout() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
-    router.push("/masuk");
+    window.location.href = "/masuk";
   }
 
   return (
     <>
-      {/* 1. MOBILE TOP BAR (Tampil hanya di HP < md) */}
-      <div className="md:hidden sticky top-0 z-40 bg-forest text-cream flex items-center justify-between px-4 py-3 border-b border-cream/10 w-full">
+      {/* 1. MOBILE TOP BAR */}
+      <div className="md:hidden sticky top-0 z-50 bg-forest text-cream flex items-center justify-between px-5 py-3.5 border-b border-cream/10 w-full shadow-sm">
         <div>
           <span className="font-display font-semibold text-base tracking-tight block leading-none">
             LENTERA
           </span>
-          <span className="text-[10px] text-cream/45">Portal Mitra</span>
+          <span className="text-[10px] text-cream/45 font-mono uppercase tracking-wider">Portal Mitra</span>
         </div>
 
+        {/* Dynamic Animated Hamburger Button */}
         <button
           onClick={() => setIsOpen(!isOpen)}
           aria-label="Toggle menu"
-          className="p-2 text-cream/80 hover:text-cream rounded-lg focus:outline-none"
+          className="p-2 text-cream/80 hover:text-cream rounded-xl hover:bg-cream/10 transition-all duration-200 active:scale-95 focus:outline-none cursor-pointer"
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {isOpen ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-            )}
-          </svg>
+          <div className="w-5 h-5 flex flex-col justify-center items-center relative">
+            <span
+              className={`h-0.5 w-5 bg-current rounded-full transition-all duration-300 ease-in-out ${
+                isOpen ? "rotate-45 translate-y-[2px]" : "-translate-y-1"
+              }`}
+            />
+            <span
+              className={`h-0.5 w-5 bg-current rounded-full transition-all duration-200 ease-in-out ${
+                isOpen ? "opacity-0" : "opacity-100"
+              }`}
+            />
+            <span
+              className={`h-0.5 w-5 bg-current rounded-full transition-all duration-300 ease-in-out ${
+                isOpen ? "-rotate-45 -translate-y-[2px]" : "translate-y-1"
+              }`}
+            />
+          </div>
         </button>
       </div>
 
-      {/* 2. MOBILE MENU DROPDOWN (Tampil saat Hamburger di-klik) */}
-      {isOpen && (
-        <div className="md:hidden sticky top-[53px] z-30 bg-forest text-cream border-b border-cream/10 px-4 py-4 space-y-3 w-full shadow-lg">
-          <nav className="space-y-1">
-            {navItems.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                onClick={() => setIsOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-cream/80 hover:text-cream hover:bg-cream/10"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-4 h-4 shrink-0"
-                >
-                  {item.icon}
-                </svg>
-                {item.label}
-              </a>
-            ))}
-          </nav>
+      {/* 2. MOBILE OVERLAY & SMOOTH SLIDE-DOWN DROPDOWN */}
+      <div
+        onClick={() => setIsOpen(false)}
+        className={`md:hidden fixed inset-0 z-40 bg-ink/50 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+      />
 
-          <div className="pt-3 border-t border-cream/10">
-            {mitraName && (
-              <div className="flex items-center gap-2.5 px-2 mb-3">
-                <div className="w-7 h-7 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0">
-                  {mitraName.charAt(0).toUpperCase()}
-                </div>
-                <p className="text-xs text-cream/80 truncate">{mitraName}</p>
-              </div>
-            )}
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-red-300 hover:bg-cream/10 w-full"
+      <div
+        className={`md:hidden fixed top-[57px] left-0 right-0 z-40 bg-forest text-cream border-b border-cream/10 px-4 py-5 shadow-2xl transition-all duration-300 ease-in-out transform origin-top ${
+          isOpen
+            ? "translate-y-0 opacity-100 scale-y-100 pointer-events-auto"
+            : "-translate-y-4 opacity-0 scale-y-95 pointer-events-none"
+        }`}
+      >
+        <nav className="space-y-1">
+          {navItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium text-cream/70 hover:text-cream hover:bg-cream/10 transition-all duration-150 active:scale-[0.98]"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -7633,25 +10156,54 @@ export function DashboardSidebar() {
                 strokeWidth="1.8"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="w-4 h-4 shrink-0"
+                className="w-5 h-5 shrink-0 text-gold/80"
               >
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <path d="M16 17 21 12 16 7" />
-                <path d="M21 12H9" />
+                {item.icon}
               </svg>
-              Keluar
-            </button>
-          </div>
-        </div>
-      )}
+              {item.label}
+            </a>
+          ))}
+        </nav>
 
-      {/* 3. DESKTOP SIDEBAR (Tampil di Layar Desktop >= md) */}
+        <div className="mt-5 pt-4 border-t border-cream/10 space-y-3">
+          {mitraName && (
+            <div className="flex items-center gap-3 px-3 py-1">
+              <div className="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-display font-semibold text-xs shrink-0 border border-gold/30">
+                {mitraName.charAt(0).toUpperCase()}
+              </div>
+              <p className="text-sm font-medium text-cream/90 truncate">{mitraName}</p>
+            </div>
+          )}
+
+          <button
+            onClick={handleLogout}
+            className="flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl text-xs font-semibold text-red-200 bg-red-500/15 hover:bg-red-500/25 active:bg-red-500/35 transition-all duration-150 w-full border border-red-500/20 cursor-pointer"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-4 h-4 shrink-0"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17 21 12 16 7" />
+              <path d="M21 12H9" />
+            </svg>
+            Keluar dari Sesi
+          </button>
+        </div>
+      </div>
+
+      {/* 3. DESKTOP SIDEBAR */}
       <aside className="hidden md:flex w-64 shrink-0 bg-forest text-cream flex-col h-screen sticky top-0">
         <div className="p-6 border-b border-cream/10">
           <span className="font-display font-semibold text-lg tracking-tight">
             LENTERA
           </span>
-          <p className="text-xs text-cream/45 mt-1">Portal Mitra</p>
+          <p className="text-xs text-cream/45 mt-1 font-mono uppercase tracking-wider">Portal Mitra</p>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
@@ -7659,7 +10211,7 @@ export function DashboardSidebar() {
             <a
               key={item.href}
               href={item.href}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/10 transition-colors"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -7688,7 +10240,7 @@ export function DashboardSidebar() {
           )}
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-cream hover:bg-cream/8 transition-colors w-full"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-red-300 hover:bg-cream/10 transition-colors w-full cursor-pointer text-left"
           >
             <svg
               viewBox="0 0 24 24"
@@ -7714,7 +10266,7 @@ export function DashboardSidebar() {
 
 ## FILE: components/hero.tsx
 
-```ts
+```tsx
 "use client";
 
 import Image from "next/image";
@@ -7876,7 +10428,7 @@ export function Hero() {
 
 ## FILE: components/how-it-works.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useState } from "react";
@@ -8266,7 +10818,7 @@ export function HowItWorks() {
 
 ## FILE: components/leaderboard.tsx
 
-```ts
+```tsx
 "use client";
 
 import { motion } from "motion/react";
@@ -8307,7 +10859,7 @@ export function Leaderboard({
       <div className="max-w-7xl mx-auto">
         <Reveal className="max-w-xl mb-10 md:mb-16">
           <p className="font-mono text-xs tracking-widest uppercase text-clay mb-3">
-            Papan peringkat · pratinjau
+            Papan peringkat Â· pratinjau
           </p>
           <h2 className="font-display font-semibold text-3xl md:text-4xl text-forest mb-4">
             Kontributor limbah terbanyak bulan ini.
@@ -8417,7 +10969,7 @@ export function Leaderboard({
 
 ## FILE: components/legal/legal-shell.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8430,7 +10982,7 @@ function BackControl() {
 
   useEffect(() => {
     // Kalau halaman ini dibuka lewat target="_blank" (mis. dari checkbox
-    // Syarat & Ketentuan di form daftar), window.opener ada isinya — tab
+    // Syarat & Ketentuan di form daftar), window.opener ada isinya â€” tab
     // asal (form daftar) masih utuh di tab satunya. Tombolnya jadi "Tutup
     // tab ini" supaya user balik ke situ, bukan navigasi ke beranda dan
     // kehilangan progres form-nya.
@@ -8487,7 +11039,7 @@ export function LegalShell({
         </h1>
 
         <p className="text-ink/55 text-[15px] leading-[1.85] border-l-2 border-gold/40 pl-4 mb-16">
-          Ini teks placeholder untuk keperluan pratinjau desain — ganti dengan{" "}
+          Ini teks placeholder untuk keperluan pratinjau desain â€” ganti dengan{" "}
           {title.toLowerCase()} resmi LENTERA sebelum situs ini dipublikasikan.
         </p>
 
@@ -8517,7 +11069,7 @@ export function LegalSection({
 
 ## FILE: components/location-picker-map.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -8666,7 +11218,7 @@ export function LocationPickerMap({ searchQuery, onLocationSelect }: LocationPic
 
   return (
     <div className="space-y-1.5">
-      <p className="text-xs text-ink/60">📌 Peta akan otomatis menyesuaikan wilayah. Klik titik spesifik di peta jika ingin lebih presisi:</p>
+      <p className="text-xs text-ink/60">ðŸ“Œ Peta akan otomatis menyesuaikan wilayah. Klik titik spesifik di peta jika ingin lebih presisi:</p>
       <div ref={containerRef} className="w-full h-[280px] rounded-xl overflow-hidden border border-ink/20 z-0 relative" />
     </div>
   );
@@ -8675,7 +11227,7 @@ export function LocationPickerMap({ searchQuery, onLocationSelect }: LocationPic
 
 ## FILE: components/navbar.tsx
 
-```ts
+```tsx
 "use client";
 
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from "motion/react";
@@ -8830,7 +11382,7 @@ export function Navbar() {
 
 ## FILE: components/network.tsx
 
-```ts
+```tsx
 "use client";
 
 import dynamic from "next/dynamic";
@@ -8892,7 +11444,7 @@ export function Network() {
 
 ## FILE: components/partners.tsx
 
-```ts
+```tsx
 "use client";
 
 import { motion } from "motion/react";
@@ -8989,7 +11541,7 @@ export function Partners() {
 
 ## FILE: components/partners-map.tsx
 
-```ts
+```tsx
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -9188,7 +11740,7 @@ export function PartnersMap() {
 
 ## FILE: components/partners-marquee.tsx
 
-```ts
+```tsx
 "use client";
 
 import { Reveal } from "./ui/reveal";
@@ -9282,7 +11834,7 @@ export function PartnersMarquee() {
 
 ## FILE: components/ui/company-logo.tsx
 
-```ts
+```tsx
 import Image from "next/image";
 import { CompanyMark, type CompanyIconType } from "./company-mark";
 
@@ -9323,7 +11875,7 @@ export function CompanyLogo({
 
 ## FILE: components/ui/company-mark.tsx
 
-```ts
+```tsx
 const iconPaths: Record<string, React.ReactNode> = {
   steel: (
     <path d="M4 17h16M4 17v-3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3M7 12V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v3" />
@@ -9431,7 +11983,7 @@ export function CompanyMark({
 
 ## FILE: components/ui/magnetic-button.tsx
 
-```ts
+```tsx
 "use client";
 
 import { motion, useMotionValue, useSpring } from "motion/react";
@@ -9487,8 +12039,8 @@ export function MagneticButton({
 
 ## FILE: components/ui/podium-graphic.tsx
 
-```ts
-// Podium 3D buatan sendiri (SVG, isometrik sederhana) — dipakai supaya posisi
+```tsx
+// Podium 3D buatan sendiri (SVG, isometrik sederhana) â€” dipakai supaya posisi
 // kartu logo perusahaan bisa dihitung tepat dari koordinat yang sama dengan
 // gambarnya sendiri, bukan diperkirakan dari foto.
 
@@ -9520,7 +12072,7 @@ const blocks: BlockSpec[] = [
   { x: 365, w: 150, yTop: 200, accent: "clay", label: "3", fontSize: 36 },
 ];
 
-// Titik tengah-atas tiap balok, dalam persen dari viewBox — dipakai untuk
+// Titik tengah-atas tiap balok, dalam persen dari viewBox â€” dipakai untuk
 // menaruh kartu logo di leaderboard.tsx supaya presisi di atas anak tangga.
 export const podiumAnchors: Record<
   1 | 2 | 3,
@@ -9580,7 +12132,7 @@ export function PodiumGraphic({ className }: { className?: string }) {
 
 ## FILE: components/ui/podium-step.tsx
 
-```ts
+```tsx
 "use client";
 
 import { motion } from "motion/react";
@@ -9647,7 +12199,7 @@ export function PodiumStep({
 
 ## FILE: components/ui/reveal.tsx
 
-```ts
+```tsx
 "use client";
 
 import { motion, Variants } from "motion/react";
@@ -9734,7 +12286,7 @@ export function RevealItem({
 
 ## FILE: components/ui/tilt-card.tsx
 
-```ts
+```tsx
 "use client";
 
 import { motion } from "motion/react";
@@ -9789,7 +12341,7 @@ export function TiltCard({
 
 ## FILE: eslint.config.mjs
 
-```ts
+```js
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
@@ -9868,10 +12420,10 @@ function parseRedisMembers(members: string[]): LeaderboardEntry[] {
 /**
  * Mengambil data papan peringkat, dengan urutan prioritas:
  *   1. Redis via Upstash (REST), jika UPSTASH_REDIS_REST_URL +
- *      UPSTASH_REDIS_REST_TOKEN sudah diisi — cocok untuk deploy
+ *      UPSTASH_REDIS_REST_TOKEN sudah diisi â€” cocok untuk deploy
  *      serverless/edge (mis. Vercel Edge Runtime).
  *   2. Redis via koneksi TCP langsung (ioredis), jika REDIS_URL sudah
- *      diisi — cocok untuk Redis self-hosted / Redis Cloud / server
+ *      diisi â€” cocok untuk Redis self-hosted / Redis Cloud / server
  *      Node.js biasa.
  *   3. Supabase, jika NEXT_PUBLIC_SUPABASE_URL + (SUPABASE_SERVICE_ROLE_KEY
  *      atau NEXT_PUBLIC_SUPABASE_ANON_KEY) sudah diisi.
@@ -9880,7 +12432,7 @@ function parseRedisMembers(members: string[]): LeaderboardEntry[] {
  *      rusak walau backend belum siap / lagi down).
  *
  * Dipanggil dari Server Component (app/page.tsx), hasilnya dioper sebagai
- * prop ke <Leaderboard entries={...} /> — komponennya sendiri tetap
+ * prop ke <Leaderboard entries={...} /> â€” komponennya sendiri tetap
  * "use client" karena butuh animasi Motion, jadi fetching harus terjadi
  * di luar komponen itu.
  */
@@ -9952,6 +12504,67 @@ export async function getLeaderboardEntries(): Promise<LeaderboardEntry[]> {
 }
 ```
 
+## FILE: lib/kyc-validation.ts
+
+```ts
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const VALIDATION_PROMPT =
+  "Analyze this image. Is it a valid official identity document like an Indonesian KTP, driving license, passport, or company certificate? Reply strictly with 'YES' or 'NO'.";
+
+export async function validateOfficialDocumentImage(
+  imageUrl?: string | null,
+  mockedAiResponse?: string,
+): Promise<boolean> {
+  if (!imageUrl) {
+    return false;
+  }
+
+  if (mockedAiResponse) {
+    return mockedAiResponse.trim().toUpperCase().includes("YES");
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error("Gemini KYC validation failed: GEMINI_API_KEY is missing.");
+    return false;
+  }
+
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      console.error(
+        `Gemini KYC validation failed: unable to fetch image URL ${imageUrl}:`,
+        response.status,
+      );
+      return false;
+    }
+
+    const contentType =
+      response.headers.get("content-type") || "image/jpeg";
+    const imageBuffer = Buffer.from(await response.arrayBuffer());
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: contentType,
+          data: imageBuffer.toString("base64"),
+        },
+      },
+      { text: VALIDATION_PROMPT },
+    ]);
+
+    const verdict = result.response.text().trim().toUpperCase();
+    return verdict.includes("YES");
+  } catch (error) {
+    console.error("Gemini KYC validation failed:", error);
+    return false;
+  }
+}
+```
+
 ## FILE: lib/leaderboard-data.ts
 
 ```ts
@@ -9968,9 +12581,9 @@ export interface LeaderboardEntry {
   accent: "gold" | "forest" | "clay" | "green";
 }
 
-// Data dummy (fallback) — dipakai kalau Supabase / API custom belum
+// Data dummy (fallback) â€” dipakai kalau Supabase / API custom belum
 // dikonfigurasi, atau saat fetch ke sana gagal. Lihat lib/get-leaderboard.ts.
-// logoUrl mengarah ke public/images/logos/ — kalau field ini kosong,
+// logoUrl mengarah ke public/images/logos/ â€” kalau field ini kosong,
 // CompanyLogo otomatis jatuh ke ikon abstrak (logoType) sebagai fallback.
 export const leaderboardEntries: LeaderboardEntry[] = [
   {
@@ -10026,6 +12639,37 @@ export const leaderboardEntries: LeaderboardEntry[] = [
 ];
 ```
 
+## FILE: lib/midtrans-signature.ts
+
+```ts
+import crypto from "crypto";
+
+export function createMidtransSignature(
+  orderId: string,
+  statusCode: string,
+  grossAmount: string,
+  serverKey: string,
+): string {
+  return crypto
+    .createHash("sha512")
+    .update(`${orderId}${statusCode}${grossAmount}${serverKey}`)
+    .digest("hex");
+}
+
+export function isValidMidtransSignature(
+  signature: string,
+  orderId: string,
+  statusCode: string,
+  grossAmount: string,
+  serverKey: string,
+): boolean {
+  const expected = Buffer.from(createMidtransSignature(orderId, statusCode, grossAmount, serverKey), "utf8");
+  const received = Buffer.from(signature, "utf8");
+
+  return received.length === expected.length && crypto.timingSafeEqual(received, expected);
+}
+```
+
 ## FILE: lib/mitra-products.ts
 
 ```ts
@@ -10038,7 +12682,7 @@ export interface MitraProduct {
   stock: number;
 }
 
-// Data dummy — ganti dengan data stok/produk sesungguhnya dari backend.
+// Data dummy â€” ganti dengan data stok/produk sesungguhnya dari backend.
 export const mitraProducts: MitraProduct[] = [
   {
     id: "briket-5kg",
@@ -10128,7 +12772,7 @@ export interface PartnerCompany {
   accent: "gold" | "forest" | "clay" | "green";
 }
 
-// Data contoh (dummy) — ganti dengan daftar mitra/industri sesungguhnya.
+// Data contoh (dummy) â€” ganti dengan daftar mitra/industri sesungguhnya.
 export const partnerCompanies: PartnerCompany[] = [
   {
     name: "PT Cipta Industri Nusantara",
@@ -10242,13 +12886,13 @@ import IORedis from "ioredis";
 /**
  * Ada 2 cara umum menyambungkan Next.js ke Redis:
  *
- * 1) Upstash (REST) — kalau redis-nya di-hosting di Upstash, atau kamu
+ * 1) Upstash (REST) â€” kalau redis-nya di-hosting di Upstash, atau kamu
  *    deploy ke Vercel Edge Runtime / serverless yang tidak cocok pakai
  *    koneksi TCP yang tetap terbuka. Redis biasa TIDAK punya REST API
  *    sendiri; Upstash yang membungkusnya jadi HTTP di depannya.
  *    Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
  *
- * 2) Koneksi TCP langsung (ioredis) — cara umum untuk Redis self-hosted,
+ * 2) Koneksi TCP langsung (ioredis) â€” cara umum untuk Redis self-hosted,
  *    Redis Cloud, AWS ElastiCache, DigitalOcean Managed Redis, dll, ATAU
  *    kalau Next.js kamu jalan di server Node.js biasa (bukan edge).
  *    Env: REDIS_URL (format: redis://default:password@host:6379,
@@ -10361,7 +13005,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 let client: SupabaseClient | null = null;
 
 /**
- * Client Supabase dengan SERVICE ROLE KEY — akses penuh, melewati RLS.
+ * Client Supabase dengan SERVICE ROLE KEY â€” akses penuh, melewati RLS.
  * HANYA boleh dipakai di server (Route Handler / Server Component), TIDAK
  * PERNAH diimpor dari file "use client", karena kalau bocor ke browser
  * siapapun bisa baca/tulis semua data.
@@ -10396,7 +13040,7 @@ export function getSupabaseAdminClient(): SupabaseClient {
 import { createBrowserClient } from "@supabase/ssr";
 
 /**
- * Client Supabase khusus untuk dipakai di browser (client component) —
+ * Client Supabase khusus untuk dipakai di browser (client component) â€”
  * dipakai oleh form Masuk & Daftar untuk memanggil supabase.auth langsung.
  * Beda dari lib/supabase.ts yang dipakai di server (Server Component) untuk
  * membaca data leaderboard.
@@ -10432,7 +13076,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 ## FILE: lib/validation.ts
 
 ```ts
-// Validasi format field pendaftaran — supaya user tidak asal isi.
+// Validasi format field pendaftaran â€” supaya user tidak asal isi.
 // Ini validasi FORMAT saja (bukan verifikasi ke database resmi seperti
 // Dukcapil/DJP), karena LENTERA belum terintegrasi ke sistem itu.
 
@@ -10524,20 +13168,88 @@ export const wasteTypes = [
 ## FILE: middleware.ts
 
 ```ts
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+import { createServerClient } from "@supabase/ssr";
+
+// ==========================================
+// 1. SETUP REDIS (SAFE LAZY INITIALIZATION)
+// ==========================================
+let ratelimit: Ratelimit | null = null;
+
+try {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (url && token) {
+    const redis = new Redis({ url, token });
+    ratelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "10 s"),
+      prefix: "middleware-ratelimit",
+    });
+  }
+} catch (error) {
+  console.warn("Upstash Redis initialization skipped in Middleware:", error);
+}
 
 export async function middleware(request: NextRequest) {
+  const url = request.nextUrl.pathname;
+
+  // ==========================================
+  // 2. LOGIKA RATE LIMITING (Khusus API)
+  // ==========================================
+  if (url.startsWith("/api/transaksi/") || url.startsWith("/api/daftar/")) {
+    if (ratelimit) {
+      try {
+        const forwardedFor = request.headers.get("x-forwarded-for");
+        const ip = forwardedFor?.split(",")[0]?.trim() || "127.0.0.1";
+        const { success } = await ratelimit.limit(ip);
+
+        if (!success) {
+          return NextResponse.json(
+            { error: "Too Many Requests. Silakan tunggu beberapa detik." },
+            { status: 429 }
+          );
+        }
+      } catch (err) {
+        console.warn("Ratelimit check skipped due to error:", err);
+      }
+    }
+    return NextResponse.next();
+  }
+
+  // Loloskan semua API routes tanpa harus menyentuh Supabase Auth di middleware
+  if (url.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
+  // ==========================================
+  // 3. LOGIKA SUPABASE AUTH & ROLE CHECKING
+  // ==========================================
   let supabaseResponse = NextResponse.next({ request });
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return supabaseResponse;
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
-        getAll() { return request.cookies.getAll() },
+        getAll() {
+          return request.cookies.getAll();
+        },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -10547,62 +13259,99 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const url = request.nextUrl.pathname;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const redirectSambilBawaCookie = (tujuan: string) => {
     const redirectRes = NextResponse.redirect(new URL(tujuan, request.url));
-    supabaseResponse.cookies.getAll().forEach(cookie => {
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectRes.cookies.set(cookie.name, cookie.value, cookie);
     });
     return redirectRes;
   };
 
-  // 1. Cek Autentikasi Dasar
-  const isDashboardRoute = url.startsWith('/dashboard') || url.startsWith('/dashboard-admin') || url.startsWith('/dashboard-industri');
-  if (isDashboardRoute && !user) return redirectSambilBawaCookie('/masuk');
+  const isDashboardRoute =
+    url.startsWith("/dashboard") ||
+    url.startsWith("/dashboard-admin") ||
+    url.startsWith("/dashboard-industri");
 
-  // 2. BACA ROLE DARI TIKET JWT (Sangat Cepat, Tanpa Query DB!)
-  const role = user?.app_metadata?.role || 'mitra'; // default ke mitra
+  // Jika mencoba ke area proteksi tanpa login -> lempar ke login
+  if (isDashboardRoute && !user) return redirectSambilBawaCookie("/masuk");
 
-  // 3. Blokir akses ke halaman login jika sudah masuk
-  if ((url === '/masuk' || url === '/login' || url === '/daftar') && user) {
-    if (role === 'admin') return redirectSambilBawaCookie('/dashboard-admin');
-    if (role === 'industri') return redirectSambilBawaCookie('/dashboard-industri');
-    return redirectSambilBawaCookie('/dashboard');
+  // Deteksi Role Hanya Jika Diperlukan (Akses Dashboard / Halaman Auth saat terautentikasi)
+  let role = "mitra";
+  if (user && (isDashboardRoute || url === "/masuk" || url === "/login" || url === "/daftar")) {
+    try {
+      const { data: adminRow } = await supabase
+        .from("admin_profiles")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (adminRow) {
+        role = "admin";
+      } else {
+        const { data: industriRow } = await supabase
+          .from("industri_profiles")
+          .select("user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (industriRow) {
+          role = "industri";
+        }
+      }
+    } catch (e) {
+      console.error("Middleware DB Role Fetch Error:", e);
+    }
   }
 
-  // 4. Routing Ketat Berdasarkan Role
+  // Redirect jika user yang sudah login mencoba akses halaman login/daftar
+  if ((url === "/masuk" || url === "/login" || url === "/daftar") && user) {
+    if (role === "admin") return redirectSambilBawaCookie("/dashboard-admin");
+    if (role === "industri") return redirectSambilBawaCookie("/dashboard-industri");
+    return redirectSambilBawaCookie("/dashboard");
+  }
+
+  // Proteksi Akses Berdasarkan Role
   const areaByRole: Record<string, string> = {
-    mitra: '/dashboard',
-    agen: '/dashboard',
-    industri: '/dashboard-industri',
-    admin: '/dashboard-admin',
+    mitra: "/dashboard",
+    industri: "/dashboard-industri",
+    admin: "/dashboard-admin",
   };
 
   if (isDashboardRoute) {
-    const allowedArea = areaByRole[role] || '/dashboard';
+    const allowedArea = areaByRole[role] || "/dashboard";
     const isAllowedPath = url === allowedArea || url.startsWith(`${allowedArea}/`);
 
-    if (!isAllowedPath) {
-      return redirectSambilBawaCookie(allowedArea);
-    }
+    if (!isAllowedPath) return redirectSambilBawaCookie(allowedArea);
   }
 
   return supabaseResponse;
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
-}
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+};
+```
+
+## FILE: midtrans.d.ts
+
+```ts
+declare module 'midtrans-client';
 ```
 
 ## FILE: next.config.mjs
 
-```ts
+```js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  allowedDevOrigins: ['192.168.100.128', '10.139.120.157', '192.168.1.6', '192.168.1.2', '169.254.9.186', '192.168.100.7'],
+  allowedDevOrigins: ['192.168.100.128', '10.139.120.157', '192.168.1.6', '192.168.1.2', '169.254.9.186', '192.168.100.7', '192.168.1.7', '192.168.1.23', '192.168.100.6', '192.168.1.9', '192.168.1.10'
+    
+  ],
 };
 
 export default nextConfig;
@@ -10620,21 +13369,55 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-## FILE: next-env.d.ts
+## FILE: package.json
 
-```ts
-/// <reference types="next" />
-/// <reference types="next/image-types/global" />
-import "./.next/types/routes.d.ts";
-import "./.next/types/root-params.d.ts";
-
-// NOTE: This file should not be edited
-// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+```json
+{
+  "name": "lentera-landing",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "node --no-warnings --test"
+  },
+  "dependencies": {
+    "@emailjs/browser": "^4.4.1",
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.4",
+    "@upstash/qstash": "^2.11.3",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.2",
+    "ioredis": "^5.4.1",
+    "leaflet": "^1.9.4",
+    "midtrans-client": "^1.4.3",
+    "motion": "^11.15.0",
+    "next": "16.3.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.14",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.0"
+  }
+}
 ```
 
 ## FILE: postcss.config.mjs
 
-```ts
+```js
 const config = {
   plugins: {
     tailwindcss: {},
@@ -10649,7 +13432,7 @@ export default config;
 
 ```sql
 -- Jalankan di Supabase SQL editor kalau memilih Supabase sebagai sumber data
--- leaderboard. Nama tabel & kolom ini yang dipakai lib/get-leaderboard.ts —
+-- leaderboard. Nama tabel & kolom ini yang dipakai lib/get-leaderboard.ts â€”
 -- kalau mau nama lain, sesuaikan juga query di file itu.
 
 create table if not exists leaderboard_entries (
@@ -10671,7 +13454,7 @@ create policy "Public read access" on leaderboard_entries
 
 
 -- ============================================================
--- Profil Mitra & Industri — dibuat saat orang mendaftar lewat
+-- Profil Mitra & Industri â€” dibuat saat orang mendaftar lewat
 -- /daftar/mitra atau /daftar/industri. user_id merujuk ke akun
 -- Supabase Auth (auth.users) yang dibuat lewat supabase.auth.signUp().
 -- ============================================================
@@ -10711,7 +13494,7 @@ create policy "Industri bisa baca profil sendiri" on industri_profiles
   for select using (auth.uid() = user_id);
 
 -- ============================================================
--- Admin — TIDAK ada form pendaftaran publik untuk ini. Bikin manual:
+-- Admin â€” TIDAK ada form pendaftaran publik untuk ini. Bikin manual:
 -- 1. Supabase Dashboard -> Authentication -> Users -> Add user (isi
 --    email + password admin-nya, centang "Auto Confirm User").
 -- 2. Copy UUID user itu, lalu jalankan:
@@ -10731,7 +13514,7 @@ create policy "Admin bisa baca profil sendiri" on admin_profiles
   for select using (auth.uid() = user_id);
 
 -- Admin bisa baca SEMUA baris mitra_profiles & industri_profiles (bukan
--- cuma miliknya sendiri) — dipakai halaman /admin untuk menampilkan daftar
+-- cuma miliknya sendiri) â€” dipakai halaman /admin untuk menampilkan daftar
 -- lengkap mitra & industri yang terdaftar.
 create policy "Admin bisa baca semua profil mitra" on mitra_profiles
   for select using (
@@ -10768,10 +13551,10 @@ create policy "Admin bisa baca semua profil industri" on industri_profiles
 --   check (telepon ~ '^(\+62|62|0)8[1-9][0-9]{6,10}$');
 
 -- ============================================================
--- Pengiriman Limbah — dipakai dashboard industri (/dashboard/industri).
+-- Pengiriman Limbah â€” dipakai dashboard industri (/dashboard/industri).
 -- LENTERA punya armada sendiri: limbah dijemput dari lokasi industri lalu
 -- diantar ke pabrik pengelolah. status di bawah merepresentasikan tahapan
--- itu. Industri cuma bisa membuat & melihat pengajuannya sendiri — update
+-- itu. Industri cuma bisa membuat & melihat pengajuannya sendiri â€” update
 -- status (dijemput/dalam perjalanan/dst) nantinya dilakukan dari sisi
 -- admin/operasional armada, bukan oleh industri sendiri.
 -- ============================================================
@@ -10809,7 +13592,7 @@ create policy "Industri bisa baca pengiriman sendiri" on waste_shipments
   for select using (auth.uid() = user_id);
 
 -- Admin bisa baca & update semua baris (dipakai nanti untuk kelola status
--- armada dari dashboard admin — belum dibuat, tapi policy-nya disiapkan
+-- armada dari dashboard admin â€” belum dibuat, tapi policy-nya disiapkan
 -- dari sekarang supaya tidak perlu migrasi ulang nanti).
 create policy "Admin bisa baca semua pengiriman" on waste_shipments
   for select using (
@@ -10871,4 +13654,52 @@ const config: Config = {
 
 export default config;
 ```
-//anak ajg
+
+## FILE: tsconfig.json
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+```
+
+

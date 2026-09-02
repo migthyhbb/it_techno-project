@@ -25,6 +25,58 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid Signature" }, { status: 403 });
     }
 
+    if (["expire", "cancel", "deny"].includes(transaction_status)) {
+      const supabase = createAdminClient();
+
+      if (order_id.startsWith("AGEN-")) {
+        const { data: pesanan, error: pesananError } = await supabase
+          .from("pesanan_mitra")
+          .select("status, produk_id, jumlah")
+          .eq("id", order_id)
+          .single();
+
+        if (pesananError) throw pesananError;
+
+        if (pesanan && pesanan.status !== "DIBATALKAN") {
+          const { data: updatedOrder, error: updateError } = await supabase
+            .from("pesanan_mitra")
+            .update({ status: "DIBATALKAN" })
+            .eq("id", order_id)
+            .neq("status", "DIBATALKAN")
+            .select("id")
+            .maybeSingle();
+
+          if (updateError) throw updateError;
+
+          if (updatedOrder) {
+            const { data: product, error: productError } = await supabase
+              .from("products")
+              .select("stok, stok_dummy")
+              .eq("id", pesanan.produk_id)
+              .single();
+
+            if (productError) throw productError;
+
+            const restoredStock = Number(product.stok || 0) + Number(pesanan.jumlah || 0);
+            const restoredDummyStock = Number(product.stok_dummy ?? product.stok ?? 0) + Number(pesanan.jumlah || 0);
+            const { error: stockError } = await supabase
+              .from("products")
+              .update({ stok: restoredStock, stok_dummy: restoredDummyStock })
+              .eq("id", pesanan.produk_id);
+
+            if (stockError) throw stockError;
+          }
+        }
+
+        await supabase
+          .from("orders")
+          .update({ status: "dibatalkan" })
+          .eq("id", order_id);
+      }
+
+      return NextResponse.json({ message: "Pesanan dibatalkan dan stok dikembalikan" }, { status: 200 });
+    }
+
     if (transaction_status !== "settlement" && transaction_status !== "capture") {
       return NextResponse.json({ message: "Status pembayaran diabaikan" }, { status: 200 });
     }

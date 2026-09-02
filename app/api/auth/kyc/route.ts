@@ -17,6 +17,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Data KYC tidak lengkap." }, { status: 400 });
     }
 
+    const maxFileSize = 5 * 1024 * 1024;
+    const allowedFileTypes: Record<string, string[]> = {
+      pdf: ["application/pdf"],
+      png: ["image/png"],
+      jpg: ["image/jpeg"],
+      jpeg: ["image/jpeg"],
+    };
+
+    if (!(fileDokumen instanceof File) || fileDokumen.size > maxFileSize) {
+      return NextResponse.json({ error: "Ukuran dokumen maksimal 5 MB." }, { status: 400 });
+    }
+
+    const fileExtension = fileDokumen.name.split('.').pop()?.toLowerCase() || "";
+
+    if (!allowedFileTypes[fileExtension]?.includes(fileDokumen.type)) {
+      return NextResponse.json({ error: "Tipe dokumen tidak didukung." }, { status: 400 });
+    }
+
     const bytes = await fileDokumen.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
