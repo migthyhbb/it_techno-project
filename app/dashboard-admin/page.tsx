@@ -495,7 +495,9 @@ export default function DashboardAdminPage() {
 
   return (
     <div className="flex min-h-screen bg-cream relative">
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10">
+      
+      {/* 🚀 KODE SIHIR ANTI-MELAR: h-[64px] min-h-[64px] max-h-[64px] */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-[64px] min-h-[64px] max-h-[64px] bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10 overflow-hidden shadow-md">
         <div className="flex flex-col">
           <span className="font-display font-bold tracking-tight text-base">LENTERA</span>
           <span className="text-[10px] text-cream/50">Portal Admin</span>
@@ -517,7 +519,7 @@ export default function DashboardAdminPage() {
         setActiveTab={setActiveTab}
       />
 
-      <main className="flex-1 min-w-0 px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-20 md:pt-12">
+      <main className="flex-1 min-w-0 px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-24 md:pt-12">
         <div className="mb-8">
           <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">Administrator Portal</p>
           <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest capitalize">
@@ -525,7 +527,6 @@ export default function DashboardAdminPage() {
           </h1>
         </div>
 
-        {/* 🚀 UPDATE: RINGKASAN DI PERPADAT (2 KOLOM DI MOBILE) */}
         {activeTab === "ringkasan" && (
           <div className="space-y-5">
             <div className="bg-paper p-5 md:p-6 rounded-2xl border border-forest/10 shadow-xs">
