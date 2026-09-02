@@ -103,6 +103,7 @@ export default function DashboardMitraPage() {
   const [proofModalOpen, setProofModalOpen] = useState(false);
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
+  // FUNGSI INI UDAH DI-PATCH ANTI BOCOR! (Difilter langsung dari Supabase)
   const fetchOrdersOnly = async (currentUserId: string) => {
     const supabase = createSupabaseBrowserClient();
     
@@ -119,6 +120,7 @@ export default function DashboardMitraPage() {
 
     const combinedOrders: Order[] = [];
 
+    // Proses Data Orders Utama
     if (ordersRes.data) {
       ordersRes.data.forEach((o) => {
         let prodName = "Produk Energi";
@@ -133,12 +135,13 @@ export default function DashboardMitraPage() {
           status: String(o.status || "diproses").toLowerCase(),
           total_harga: Number(o.total_harga || o.total || 0),
           created_at: o.created_at || new Date().toISOString(),
-          bukti_pengiriman_url: o.bukti_pengiriman_url || null,
-          nama_produk: prodName,
+          bukti_pengiriman_url: o.bukti_pengiriman_url || null, 
+          nama_produk: prodName, 
         });
       });
     }
 
+    // Proses Data Pesanan Mitra (Menghindari Duplikat)
     if (pmRes.data) {
       pmRes.data.forEach((pm) => {
         if (!combinedOrders.some((o) => o.id === String(pm.id))) {
@@ -150,8 +153,8 @@ export default function DashboardMitraPage() {
             status: String(pm.status || "diproses").toLowerCase(),
             total_harga: Number(pm.total_harga || pm.jumlah * 15000 || 0),
             created_at: pm.created_at || new Date().toISOString(),
-            bukti_pengiriman_url: pm.bukti_pengiriman_url || null,
-            nama_produk: prodName,
+            bukti_pengiriman_url: pm.bukti_pengiriman_url || null, 
+            nama_produk: prodName, 
           });
         }
       });
@@ -452,8 +455,8 @@ export default function DashboardMitraPage() {
           )}
         </section>
 
-        {/* Status Pengiriman (GRID 2 KOLOM) */}
-        <section id="pesanan-saya" className="scroll-mt-8 mb-10 md:mb-16">
+        {/* ID SECTION DIBAWAH INI UDAH DI-FIX BIAR BISA DI-KLIK DARI SIDEBAR */}
+        <section id="status-pesanan" className="scroll-mt-8 mb-10 md:mb-16">
           <p className="font-mono text-xs tracking-widest uppercase text-forest mb-1">Daftar Pesanan</p>
           <div className="flex justify-between items-center mb-4">
             <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest">
