@@ -1,4 +1,6 @@
-import Link from "next/link";
+"use client";
+
+import { useRouter } from "next/navigation";
 
 interface LegalShellProps {
   title: string;
@@ -11,13 +13,27 @@ export function LegalShell({
   updatedAt = "2 September 2026",
   children,
 }: LegalShellProps) {
+  const router = useRouter();
+
+  const handleBack = () => {
+    // Jika ada history halaman sebelumnya di tab yang sama, kembali ke sana
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      // Jika diakses langsung via URL / tab baru, arahkan ke beranda
+      router.push("/");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-cream text-ink py-12 md:py-20 px-4 sm:px-6 md:px-12">
       <div className="max-w-4xl mx-auto">
-        {/* Tombol Kembali */}
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-xs font-mono text-forest/70 hover:text-forest mb-8 transition-colors"
+        
+        {/* Tombol Kembali Dinamis */}
+        <button
+          onClick={handleBack}
+          type="button"
+          className="inline-flex items-center gap-2 text-xs font-mono text-forest/70 hover:text-forest mb-8 transition-colors cursor-pointer"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -34,7 +50,7 @@ export function LegalShell({
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
           <span>Kembali</span>
-        </Link>
+        </button>
 
         {/* Header Halaman Legal */}
         <div className="mb-10 pb-6 border-b border-forest/10">
@@ -48,6 +64,7 @@ export function LegalShell({
 
         {/* Konten Utama */}
         <div className="space-y-8">{children}</div>
+
       </div>
     </div>
   );
