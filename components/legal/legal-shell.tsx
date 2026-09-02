@@ -1,79 +1,55 @@
-"use client";
+import Link from "next/link";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ReactNode } from "react";
-
-function BackControl() {
-  const router = useRouter();
-  const [openedInNewTab, setOpenedInNewTab] = useState(false);
-
-  useEffect(() => {
-    // Kalau halaman ini dibuka lewat target="_blank" (mis. dari checkbox
-    // Syarat & Ketentuan di form daftar), window.opener ada isinya — tab
-    // asal (form daftar) masih utuh di tab satunya. Tombolnya jadi "Tutup
-    // tab ini" supaya user balik ke situ, bukan navigasi ke beranda dan
-    // kehilangan progres form-nya.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOpenedInNewTab(!!window.opener);
-  }, []);
-
-  if (openedInNewTab) {
-    return (
-      <button
-        type="button"
-        onClick={() => window.close()}
-        className="inline-flex items-center gap-1.5 text-sm text-forest/60 hover:text-forest transition-colors mb-14"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-          <path d="M18 6 6 18M6 6l12 12" />
-        </svg>
-        Tutup tab ini
-      </button>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => router.back()}
-      className="inline-flex items-center gap-1.5 text-sm text-forest/60 hover:text-forest transition-colors mb-14"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-        <path d="M19 12H5M12 19l-7-7 7-7" />
-      </svg>
-      Kembali
-    </button>
-  );
+interface LegalShellProps {
+  title: string;
+  updatedAt?: string;
+  children: React.ReactNode;
 }
 
 export function LegalShell({
   title,
+  updatedAt = "2 September 2026",
   children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+}: LegalShellProps) {
   return (
-    <main className="min-h-screen bg-cream px-6 py-20 md:py-28">
-      <article className="max-w-[680px] mx-auto">
-        <BackControl />
+    <div className="min-h-screen bg-cream text-ink py-12 md:py-20 px-4 sm:px-6 md:px-12">
+      <div className="max-w-4xl mx-auto">
+        {/* Tombol Kembali */}
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-xs font-mono text-forest/70 hover:text-forest mb-8 transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span>Kembali</span>
+        </Link>
 
-        <p className="font-mono text-xs tracking-widest uppercase text-green mb-4">
-          Terakhir diperbarui: Agustus 2026
-        </p>
-        <h1 className="font-display font-semibold text-4xl md:text-5xl text-forest leading-tight mb-8">
-          {title}
-        </h1>
+        {/* Header Halaman Legal */}
+        <div className="mb-10 pb-6 border-b border-forest/10">
+          <p className="font-mono text-xs tracking-widest uppercase text-green mb-2">
+            TERAKHIR DIPERBARUI: {updatedAt}
+          </p>
+          <h1 className="font-display font-semibold text-3xl md:text-5xl text-forest">
+            {title}
+          </h1>
+        </div>
 
-        <p className="text-ink/55 text-[15px] leading-[1.85] border-l-2 border-gold/40 pl-4 mb-16">
-          Ini teks placeholder untuk keperluan pratinjau desain — ganti dengan{" "}
-          {title.toLowerCase()} resmi LENTERA sebelum situs ini dipublikasikan.
-        </p>
-
-        <div className="space-y-12">{children}</div>
-      </article>
-    </main>
+        {/* Konten Utama */}
+        <div className="space-y-8">{children}</div>
+      </div>
+    </div>
   );
 }
 
@@ -82,14 +58,14 @@ export function LegalSection({
   children,
 }: {
   title: string;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <section>
-      <h2 className="font-display font-semibold text-2xl text-forest mb-4">
+    <div className="bg-paper p-6 sm:p-8 rounded-2xl border border-forest/10 shadow-xs">
+      <h2 className="font-display font-semibold text-lg sm:text-xl text-forest mb-4">
         {title}
       </h2>
-      <p className="text-ink/70 text-[17px] leading-[1.85]">{children}</p>
-    </section>
+      <div className="text-sm text-ink/80 leading-relaxed">{children}</div>
+    </div>
   );
 }
