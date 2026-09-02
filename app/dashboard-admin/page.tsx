@@ -497,23 +497,8 @@ export default function DashboardAdminPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-cream relative overflow-x-hidden">
-      {/* Mobile Top Navigation Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10">
-        <div className="flex flex-col">
-          <span className="font-display font-bold tracking-tight text-base">LENTERA</span>
-          <span className="text-[10px] text-cream/50">Portal Admin</span>
-        </div>
-        <button
-          onClick={() => setIsMobileOpen(true)}
-          className="p-2 text-cream hover:bg-cream/10 rounded-lg transition-colors cursor-pointer"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </div>
-
+    <div className="flex flex-col md:flex-row min-h-screen bg-cream w-full relative overflow-x-hidden">
+      
       {/* Sidebar Component */}
       <AdminSidebar
         isOpen={isMobileOpen}
@@ -523,7 +508,7 @@ export default function DashboardAdminPage() {
       />
 
       {/* Main Content View Container */}
-      <main className="flex-1 min-w-0 w-full px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-20 md:pt-12">
+      <main className="flex-1 min-w-0 w-full px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl">
         <div className="mb-8">
           <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">
             Administrator Portal
