@@ -492,6 +492,12 @@ export default function DaftarMitraPage() {
 
       let fotoUrl = "";
       if (form.foto_nik) {
+        if (!["image/jpeg", "image/png", "image/jpg"].includes(form.foto_nik.type)) {
+          setStatus("idle");
+          setError("Format gambar tidak didukung. Harap upload foto JPG/PNG.");
+          return;
+        }
+
         const fileExt = form.foto_nik.name.split(".").pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage

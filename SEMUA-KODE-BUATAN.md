@@ -623,7 +623,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const maxDuration = 60;
 
 let ratelimit: Ratelimit | null = null;
@@ -2946,6 +2946,12 @@ export default function DaftarMitraPage() {
 
       let fotoUrl = "";
       if (form.foto_nik) {
+        if (!["image/jpeg", "image/png", "image/jpg"].includes(form.foto_nik.type)) {
+          setStatus("idle");
+          setError("Format gambar tidak didukung. Harap upload foto JPG/PNG.");
+          return;
+        }
+
         const fileExt = form.foto_nik.name.split(".").pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
@@ -3719,8 +3725,8 @@ export default function DashboardMitraPage() {
     const supabase = createSupabaseBrowserClient();
     
     const [ordersRes, pmRes, productsRes] = await Promise.all([
-      supabase.from("orders").select("*").order("created_at", { ascending: false }),
-      supabase.from("pesanan_mitra").select("*").order("created_at", { ascending: false }),
+      supabase.from("orders").select("*").eq("user_id", currentUserId).order("created_at", { ascending: false }),
+      supabase.from("pesanan_mitra").select("*").eq("user_id", currentUserId).order("created_at", { ascending: false }),
       supabase.from("products").select("id, nama_produk") 
     ]);
 
@@ -3733,46 +3739,38 @@ export default function DashboardMitraPage() {
 
     if (ordersRes.data) {
       ordersRes.data.forEach((o) => {
-        const oUser = o.user_id || o.mitra_id;
-        if (!oUser || oUser === currentUserId) {
-          
-          let prodName = "Produk Energi";
-          let prodId = null;
-          if (o.items) {
-            prodId = Array.isArray(o.items) ? o.items[0]?.product_id : o.items.product_id;
-          }
-          if (prodId) prodName = productMap.get(prodId) || prodName;
-
-          combinedOrders.push({
-            id: String(o.id),
-            status: String(o.status || "diproses").toLowerCase(),
-            total_harga: Number(o.total_harga || o.total || 0),
-            created_at: o.created_at || new Date().toISOString(),
-            bukti_pengiriman_url: o.bukti_pengiriman_url || null, 
-            nama_produk: prodName, 
-          });
+        let prodName = "Produk Energi";
+        let prodId = null;
+        if (o.items) {
+          prodId = Array.isArray(o.items) ? o.items[0]?.product_id : o.items.product_id;
         }
+        if (prodId) prodName = productMap.get(prodId) || prodName;
+
+        combinedOrders.push({
+          id: String(o.id),
+          status: String(o.status || "diproses").toLowerCase(),
+          total_harga: Number(o.total_harga || o.total || 0),
+          created_at: o.created_at || new Date().toISOString(),
+          bukti_pengiriman_url: o.bukti_pengiriman_url || null, 
+          nama_produk: prodName, 
+        });
       });
     }
 
     if (pmRes.data) {
       pmRes.data.forEach((pm) => {
-        const pmUser = pm.user_id || pm.mitra_id;
-        if (!pmUser || pmUser === currentUserId) {
-          if (!combinedOrders.some((o) => o.id === String(pm.id))) {
-            
-            let prodName = "Produk Energi";
-            if (pm.produk_id) prodName = productMap.get(pm.produk_id) || prodName;
+        if (!combinedOrders.some((o) => o.id === String(pm.id))) {
+          let prodName = "Produk Energi";
+          if (pm.produk_id) prodName = productMap.get(pm.produk_id) || prodName;
 
-            combinedOrders.push({
-              id: String(pm.id),
-              status: String(pm.status || "diproses").toLowerCase(),
-              total_harga: Number(pm.total_harga || pm.jumlah * 15000 || 0),
-              created_at: pm.created_at || new Date().toISOString(),
-              bukti_pengiriman_url: pm.bukti_pengiriman_url || null, 
-              nama_produk: prodName, 
-            });
-          }
+          combinedOrders.push({
+            id: String(pm.id),
+            status: String(pm.status || "diproses").toLowerCase(),
+            total_harga: Number(pm.total_harga || pm.jumlah * 15000 || 0),
+            created_at: pm.created_at || new Date().toISOString(),
+            bukti_pengiriman_url: pm.bukti_pengiriman_url || null, 
+            nama_produk: prodName, 
+          });
         }
       });
     }
