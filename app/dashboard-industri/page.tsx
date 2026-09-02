@@ -48,7 +48,6 @@ function InfoRow({
 
 const KREDIT_PER_KG = 100;
 
-// Daftar Jenis Limbah B3 & Tarif Pengolahan per Kg
 const KATEGORI_B3 = [
   { id: "cair_kimia", nama: "Limbah Cair & Kimia Industri", tarif: 15000 },
   { id: "oli_pelumas", nama: "Oli Bekas & Pelumas Sintetis", tarif: 12000 },
@@ -686,8 +685,54 @@ export default function DashboardIndustriPage() {
             </p>
           </div>
 
-          <div className="bg-paper rounded-2xl border border-amber-200 overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
+          <div className="bg-paper rounded-2xl border border-amber-200 overflow-hidden shadow-xs p-4 md:p-0">
+            {/* TAMPILAN CARD - KHUSUS MOBILE (sm ke bawah) */}
+            <div className="block md:hidden space-y-3">
+              {b3Shipments.map((b3) => {
+                const isPending = b3.status.toLowerCase() === "menunggu pembayaran";
+
+                return (
+                  <div key={b3.id} className="bg-amber-50/50 border border-amber-200 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <h4 className="font-semibold text-forest text-sm leading-tight">{b3.nama_limbah}</h4>
+                        <p className="text-xs text-ink/60 mt-1">Berat: {b3.perkiraan_berat} kg</p>
+                      </div>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full shrink-0 ${
+                        isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : b3.status.toLowerCase() === "menunggu verifikasi" ? "bg-blue-100 text-blue-800"
+                        : "bg-green/10 text-green"
+                      }`}>
+                        {b3.status}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-amber-200/60 pt-2.5">
+                      <div>
+                        <p className="text-[10px] text-ink/50 uppercase font-medium">Total Biaya</p>
+                        <p className="text-sm font-bold text-amber-900">
+                          Rp {(b3.biaya_pengolahan || 0).toLocaleString("id-ID")}
+                        </p>
+                      </div>
+
+                      {isPending ? (
+                        <button
+                          onClick={() => setSelectedPayShipment(b3)}
+                          className="text-xs font-bold px-3 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
+                        >
+                          Konfirmasi Bayar
+                        </button>
+                      ) : (
+                        <span className="text-xs text-ink/40 italic">Lunas / Diproses</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* TAMPILAN TABEL - KHUSUS DESKTOP (md ke atas) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-amber-50/80 border-b border-amber-200 text-xs font-bold text-amber-900 uppercase tracking-wider">
