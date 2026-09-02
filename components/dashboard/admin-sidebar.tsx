@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 export const navItems = [
@@ -75,7 +74,6 @@ export function AdminSidebar({
   activeTab,
   setActiveTab,
 }: SidebarProps) {
-  const router = useRouter();
   const [nama, setNama] = useState<string | null>("Administrator");
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -90,8 +88,7 @@ export function AdminSidebar({
   async function handleLogout() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
-    router.push("/masuk");
-    router.refresh();
+    window.location.href = "/masuk";
   }
 
   const toggleMobileMenu = () => {

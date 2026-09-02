@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const navItems = [
@@ -50,7 +49,6 @@ const navItems = [
 ];
 
 export function DashboardSidebar() {
-  const router = useRouter();
   const [mitraName, setMitraName] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -94,7 +92,7 @@ export function DashboardSidebar() {
   async function handleLogout() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
-    router.push("/masuk");
+    window.location.href = "/masuk";
   }
 
   return (
@@ -112,7 +110,7 @@ export function DashboardSidebar() {
         <button
           onClick={() => setIsOpen(!isOpen)}
           aria-label="Toggle menu"
-          className="p-2 text-cream/80 hover:text-cream rounded-xl hover:bg-cream/10 transition-all duration-200 active:scale-95 focus:outline-none"
+          className="p-2 text-cream/80 hover:text-cream rounded-xl hover:bg-cream/10 transition-all duration-200 active:scale-95 focus:outline-none cursor-pointer"
         >
           <div className="w-5 h-5 flex flex-col justify-center items-center relative">
             <span
@@ -248,7 +246,7 @@ export function DashboardSidebar() {
           )}
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-red-300 hover:bg-cream/10 transition-colors w-full cursor-pointer"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-cream/65 hover:text-red-300 hover:bg-cream/10 transition-colors w-full cursor-pointer text-left"
           >
             <svg
               viewBox="0 0 24 24"

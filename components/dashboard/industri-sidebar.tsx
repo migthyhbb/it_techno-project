@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const navItems = [
@@ -54,7 +53,6 @@ interface SidebarProps {
 }
 
 export function IndustriSidebar({ isOpen = false, onClose }: SidebarProps) {
-  const router = useRouter();
   const [nama, setNama] = useState<string | null>(null);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -74,8 +72,7 @@ export function IndustriSidebar({ isOpen = false, onClose }: SidebarProps) {
   async function handleLogout() {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
-    router.push("/masuk");
-    router.refresh();
+    window.location.href = "/masuk";
   }
 
   const toggleMobileMenu = () => {
