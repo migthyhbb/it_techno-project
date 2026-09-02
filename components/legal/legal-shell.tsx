@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface LegalShellProps {
   title: string;
@@ -14,15 +14,29 @@ export function LegalShell({
   children,
 }: LegalShellProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const handleBack = () => {
-    // Jika ada history halaman sebelumnya di tab yang sama, kembali ke sana
-    if (window.history.length > 1) {
-      router.back();
-    } else {
-      // Jika diakses langsung via URL / tab baru, arahkan ke beranda
-      router.push("/");
+    // 1. Cek parameter query ?from=... di URL (misal: ?from=/daftar/mitra)
+    const fromParam = searchParams.get("from");
+
+    if (fromParam) {
+      router.push(fromParam);
+      return;
     }
+
+    // 2. Jika dibuka di tab baru (opener ada atau history cuma 1), coba tutup tab
+    if (window.opener || window.history.length <= 1) {
+      window.close();
+      // Fallback jika browser memblokir window.close()
+      setTimeout(() => {
+        router.push("/");
+      }, 200);
+      return;
+    }
+
+    // 3. Jika navigasi biasa di tab yang sama
+    router.back();
   };
 
   return (
@@ -49,7 +63,7 @@ export function LegalShell({
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
-          <span>Kembali</span>
+          <span>Tutup / Kembali</span>
         </button>
 
         {/* Header Halaman Legal */}
