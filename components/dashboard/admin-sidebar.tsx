@@ -75,7 +75,15 @@ export function AdminSidebar({
   setActiveTab,
 }: SidebarProps) {
   const [nama, setNama] = useState<string | null>("Administrator");
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [internalMobileOpen, setInternalMobileOpen] = useState(false);
+
+  // Sinkronisasi state modal mobile eksternal (dari props) dan internal
+  const isMobileVisible = isOpen || internalMobileOpen;
+
+  const handleClose = () => {
+    setInternalMobileOpen(false);
+    if (onClose) onClose();
+  };
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -92,8 +100,11 @@ export function AdminSidebar({
   }
 
   const toggleMobileMenu = () => {
-    setIsMobileOpen(!isMobileOpen);
-    if (onClose) onClose();
+    if (isMobileVisible) {
+      handleClose();
+    } else {
+      setInternalMobileOpen(true);
+    }
   };
 
   return (
@@ -104,10 +115,12 @@ export function AdminSidebar({
           <span className="font-display font-semibold text-base tracking-tight block leading-none">
             LENTERA
           </span>
-          <span className="text-[10px] text-cream/45 font-mono uppercase tracking-wider">Portal Admin</span>
+          <span className="text-[10px] text-cream/45 font-mono uppercase tracking-wider">
+            Portal Admin
+          </span>
         </div>
 
-        {/* Dynamic Animated Hamburger Button */}
+        {/* Hamburger / Toggle Button */}
         <button
           onClick={toggleMobileMenu}
           aria-label="Toggle menu"
@@ -116,38 +129,50 @@ export function AdminSidebar({
           <div className="w-5 h-5 flex flex-col justify-center items-center relative">
             <span
               className={`h-0.5 w-5 bg-current rounded-full transition-all duration-300 ease-in-out ${
-                isMobileOpen ? "rotate-45 translate-y-[2px]" : "-translate-y-1"
+                isMobileVisible ? "rotate-45 translate-y-[2px]" : "-translate-y-1"
               }`}
             />
             <span
               className={`h-0.5 w-5 bg-current rounded-full transition-all duration-200 ease-in-out ${
-                isMobileOpen ? "opacity-0" : "opacity-100"
+                isMobileVisible ? "opacity-0" : "opacity-100"
               }`}
             />
             <span
               className={`h-0.5 w-5 bg-current rounded-full transition-all duration-300 ease-in-out ${
-                isMobileOpen ? "-rotate-45 -translate-y-[2px]" : "translate-y-1"
+                isMobileVisible ? "-rotate-45 -translate-y-[2px]" : "translate-y-1"
               }`}
             />
           </div>
         </button>
       </div>
 
-      {/* 2. MOBILE OVERLAY & SMOOTH SLIDE-DOWN DROPDOWN */}
+      {/* 2. MOBILE OVERLAY & SLIDE-DOWN DROPDOWN */}
       <div
-        onClick={() => setIsMobileOpen(false)}
+        onClick={handleClose}
         className={`md:hidden fixed inset-0 z-40 bg-ink/50 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
-          isMobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          isMobileVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
       />
 
       <div
-        className={`md:hidden fixed top-[57px] left-0 right-0 z-40 bg-forest text-cream border-b border-cream/10 px-4 py-5 shadow-2xl transition-all duration-300 ease-in-out transform origin-top ${
-          isMobileOpen
+        className={`md:hidden fixed top-[57px] left-0 right-0 z-40 bg-forest text-cream border-b border-cream/10 px-4 py-5 shadow-2xl transition-all duration-300 ease-in-out transform origin-top max-h-[85vh] overflow-y-auto ${
+          isMobileVisible
             ? "translate-y-0 opacity-100 scale-y-100 pointer-events-auto"
             : "-translate-y-4 opacity-0 scale-y-95 pointer-events-none"
         }`}
       >
+        <div className="flex items-center justify-between pb-3 mb-3 border-b border-cream/10">
+          <p className="text-xs font-mono text-gold uppercase tracking-wider">
+            Navigasi Panel Admin
+          </p>
+          <button
+            onClick={handleClose}
+            className="text-cream/60 hover:text-cream text-xs font-medium px-2 py-1 rounded-lg bg-cream/5 hover:bg-cream/10 transition-colors cursor-pointer"
+          >
+            ✕ Tutup
+          </button>
+        </div>
+
         <nav className="space-y-1">
           {navItems.map((item) => {
             const isActive = activeTab === item.id;
@@ -157,7 +182,7 @@ export function AdminSidebar({
                 type="button"
                 onClick={() => {
                   if (setActiveTab) setActiveTab(item.id);
-                  setIsMobileOpen(false);
+                  handleClose();
                 }}
                 className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium w-full text-left transition-all duration-150 active:scale-[0.98] cursor-pointer ${
                   isActive
@@ -221,7 +246,9 @@ export function AdminSidebar({
           <span className="font-display font-semibold text-lg tracking-tight">
             LENTERA
           </span>
-          <p className="text-xs text-cream/45 mt-1 font-mono uppercase tracking-wider">Portal Admin</p>
+          <p className="text-xs text-cream/45 mt-1 font-mono uppercase tracking-wider">
+            Portal Admin
+          </p>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">

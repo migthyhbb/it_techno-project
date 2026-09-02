@@ -40,7 +40,7 @@ interface Order {
   created_at: string;
   total_harga: number;
   status: string;
-  bukti_pengiriman_url?: string | null; 
+  bukti_pengiriman_url?: string | null;
 }
 
 interface UserAccount {
@@ -90,7 +90,6 @@ export default function DashboardAdminPage() {
   const [newOrderStatus, setNewOrderStatus] = useState("");
   const [proofFile, setProofFile] = useState<File | null>(null);
 
-  // 🚀 STATE BARU BUAT MODAL FOTO BUKTI DI ADMIN
   const [proofModalOpen, setProofModalOpen] = useState(false);
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
@@ -254,7 +253,7 @@ export default function DashboardAdminPage() {
 
     try {
       if (proofFile) {
-        const fileExt = proofFile.name.split('.').pop();
+        const fileExt = proofFile.name.split(".").pop();
         const fileName = `bukti-${selectedOrderUpdate.id}-${Date.now()}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
@@ -274,7 +273,7 @@ export default function DashboardAdminPage() {
         .from("orders")
         .update({
           status: newOrderStatus,
-          ...(finalProofUrl ? { bukti_pengiriman_url: finalProofUrl } : {})
+          ...(finalProofUrl ? { bukti_pengiriman_url: finalProofUrl } : {}),
         })
         .eq("id", selectedOrderUpdate.id);
 
@@ -403,10 +402,13 @@ export default function DashboardAdminPage() {
     e.preventDefault();
     if (!selectedShipment) return;
     setIsSubmitting(true);
-    
+
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.from("waste_shipments").update({ status: newStatus }).eq("id", selectedShipment.id);
-    
+    const { error } = await supabase
+      .from("waste_shipments")
+      .update({ status: newStatus })
+      .eq("id", selectedShipment.id);
+
     setIsSubmitting(false);
 
     if (error) {
@@ -495,7 +497,8 @@ export default function DashboardAdminPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-cream relative">
+    <div className="flex min-h-screen bg-cream relative overflow-x-hidden">
+      {/* Mobile Top Navigation Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-forest text-cream flex items-center justify-between px-5 z-40 border-b border-cream/10">
         <div className="flex flex-col">
           <span className="font-display font-bold tracking-tight text-base">LENTERA</span>
@@ -511,6 +514,7 @@ export default function DashboardAdminPage() {
         </button>
       </div>
 
+      {/* Sidebar Component */}
       <AdminSidebar
         isOpen={isMobileOpen}
         onClose={() => setIsMobileOpen(false)}
@@ -518,9 +522,12 @@ export default function DashboardAdminPage() {
         setActiveTab={setActiveTab}
       />
 
-      <main className="flex-1 min-w-0 px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-20 md:pt-12">
+      {/* Main Content View Container */}
+      <main className="flex-1 min-w-0 w-full px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-20 md:pt-12">
         <div className="mb-8">
-          <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">Administrator Portal</p>
+          <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">
+            Administrator Portal
+          </p>
           <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest capitalize">
             {activeTab.replace("-", " ")}
           </h1>
@@ -552,9 +559,12 @@ export default function DashboardAdminPage() {
             </div>
 
             <div className="bg-paper p-6 rounded-2xl border border-forest/10">
-              <h3 className="font-display font-semibold text-lg text-forest mb-2">Selamat Datang di Portal Kendali</h3>
+              <h3 className="font-display font-semibold text-lg text-forest mb-2">
+                Selamat Datang di Portal Kendali
+              </h3>
               <p className="text-sm text-ink/60 leading-relaxed">
-                Gunakan menu di sidebar untuk menavigasi manajemen akun, katalog produk, harga wilayah, dan pengiriman limbah industri.
+                Gunakan menu di sidebar untuk menavigasi manajemen akun, katalog produk, harga
+                wilayah, dan pengiriman limbah industri.
               </p>
             </div>
           </div>
@@ -564,12 +574,16 @@ export default function DashboardAdminPage() {
           <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
             <div className="p-4 border-b border-forest/10 bg-forest/5 flex justify-between items-center">
               <div>
-                <h3 className="font-display font-semibold text-forest text-base">Daftar Akun Mitra & Industri</h3>
-                <p className="text-xs text-ink/60">Inspeksi profil lengkap, foto KTP/NPWP, dan set kuota transaksi.</p>
+                <h3 className="font-display font-semibold text-forest text-base">
+                  Daftar Akun Mitra & Industri
+                </h3>
+                <p className="text-xs text-ink/60">
+                  Inspeksi profil lengkap, foto KTP/NPWP, dan set kuota transaksi.
+                </p>
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="w-full text-left text-sm border-collapse min-w-[600px]">
                 <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
                   <tr>
                     <th className="p-4">Nama / Perusahaan</th>
@@ -660,16 +674,16 @@ export default function DashboardAdminPage() {
 
         {activeTab === "katalog-produk" && (
           <section className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
               <p className="text-xs text-ink/60">Daftar produk energi yang terdaftar secara nasional.</p>
               <button
                 onClick={() => setProductModalOpen(true)}
-                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer"
+                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer self-start sm:self-auto"
               >
                 + Tambah Produk Baru
               </button>
             </div>
-            <div className="grid sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {products.map((p) => (
                 <div key={p.id} className="bg-paper border border-forest/10 p-5 rounded-2xl flex flex-col relative group shadow-xs">
                   <button
@@ -695,18 +709,18 @@ export default function DashboardAdminPage() {
 
         {activeTab === "harga-wilayah" && (
           <section className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-2">
               <p className="text-xs text-ink/60">Penyesuaian harga dan ketersediaan stok produk per daerah.</p>
               <button
                 onClick={() => setPriceModalOpen(true)}
-                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer"
+                className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer self-start sm:self-auto"
               >
                 + Set Harga Wilayah
               </button>
             </div>
-            <div className="grid sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {regionalPrices.length === 0 && (
-                <div className="col-span-3 p-8 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">
+                <div className="col-span-1 sm:col-span-2 lg:col-span-3 p-8 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">
                   Belum ada penyesuaian harga spesifik daerah.
                 </div>
               )}
@@ -735,7 +749,7 @@ export default function DashboardAdminPage() {
         {activeTab === "pengiriman" && (
           <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="w-full text-left text-sm border-collapse min-w-[600px]">
                 <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
                   <tr>
                     <th className="p-4">Industri</th>
@@ -776,6 +790,7 @@ export default function DashboardAdminPage() {
           </section>
         )}
 
+        {/* MODAL PROFIL USER */}
         {detailModalOpen && selectedUserDetail && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
@@ -838,6 +853,7 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
+        {/* MODAL PESANAN MITRA */}
         {ordersModalOpen && selectedUserDetail && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto">
@@ -866,8 +882,8 @@ export default function DashboardAdminPage() {
                 ) : userOrders.length === 0 ? (
                   <div className="bg-white border border-forest/10 rounded-xl p-6 text-center text-xs text-ink/50">Mitra ini belum pernah melakukan pemesanan produk.</div>
                 ) : (
-                  <div className="border border-forest/10 rounded-xl overflow-hidden bg-white">
-                    <table className="w-full text-left text-xs">
+                  <div className="border border-forest/10 rounded-xl overflow-hidden bg-white overflow-x-auto">
+                    <table className="w-full text-left text-xs min-w-[500px]">
                       <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
                         <tr>
                           <th className="p-3">ID Pesanan</th>
@@ -892,7 +908,6 @@ export default function DashboardAdminPage() {
                                 }`}>
                                   {ord.status}
                                 </span>
-                                {/* 🚀 UPDATE: Tombol Lihat Bukti berubah jadi modal */}
                                 {ord.bukti_pengiriman_url && (
                                   <button
                                     type="button"
@@ -938,6 +953,7 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
+        {/* MODAL EDIT STATUS PESANAN */}
         {orderStatusModalOpen && selectedOrderUpdate && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -984,6 +1000,7 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
+        {/* MODAL BAN USER */}
         {banModalOpen && selectedUser && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -1005,6 +1022,7 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
+        {/* MODAL SET HARGA WILAYAH */}
         {priceModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -1060,6 +1078,7 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
+        {/* MODAL TAMBAH PRODUK */}
         {productModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-lg p-6">
@@ -1081,6 +1100,7 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
+        {/* MODAL STATUS PENGIRIMAN LIMBAH */}
         {statusModalOpen && selectedShipment && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
             <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
@@ -1103,7 +1123,7 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* 🚀 MODAL BARU: TAMPILKAN BUKTI PENGIRIMAN DI ADMIN */}
+        {/* MODAL FOTO BUKTI PENGIRIMAN */}
         {proofModalOpen && selectedProofUrl && (
           <div 
             className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"
