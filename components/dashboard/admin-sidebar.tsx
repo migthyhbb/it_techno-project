@@ -144,11 +144,11 @@ export function AdminSidebar({
         </button>
       </div>
 
-      {/* 2. MOBILE OVERLAY & DROPDOWN */}
+      {/* 2. MOBILE OVERLAY & DROPDOWN MENU */}
       {isMobileVisible && (
         <div
           onClick={handleClose}
-          className="md:hidden fixed inset-0 z-40 bg-ink/50 backdrop-blur-xs transition-opacity"
+          className="md:hidden fixed inset-0 z-40 bg-ink/50 backdrop-blur-xs"
         />
       )}
 
@@ -238,7 +238,7 @@ export function AdminSidebar({
         </div>
       </div>
 
-      {/* 3. DESKTOP SIDEBAR (Strictly Hidden on Mobile) */}
+      {/* 3. DESKTOP SIDEBAR (HANYA DITAMPILKAN DI MD KE ATAS) */}
       <aside className="hidden md:flex md:w-64 shrink-0 bg-forest text-cream flex-col h-screen sticky top-0">
         <div className="p-6 border-b border-cream/10">
           <span className="font-display font-semibold text-lg tracking-tight">
