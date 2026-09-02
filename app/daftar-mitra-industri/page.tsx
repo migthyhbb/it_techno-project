@@ -21,14 +21,19 @@ export default function DaftarMitraIndustriPage() {
   useEffect(() => {
     async function fetchPartners() {
       try {
-        const res = await fetch("/api/partners");
+        const res = await fetch("/api/partners", {
+          cache: "no-store",
+        });
         const data = await res.json();
 
         if (Array.isArray(data)) {
           setPartners(data);
+        } else {
+          setPartners([]);
         }
       } catch (err) {
         console.error("Gagal mengambil data dari API:", err);
+        setPartners([]);
       } finally {
         setLoading(false);
       }
@@ -39,9 +44,11 @@ export default function DaftarMitraIndustriPage() {
 
   const filteredData = partners.filter((item) => {
     const matchFilter = filter === "semua" || item.tipe === filter;
+    const searchLower = search.toLowerCase().trim();
     const matchSearch =
-      (item.nama && item.nama.toLowerCase().includes(search.toLowerCase())) ||
-      (item.alamat && item.alamat.toLowerCase().includes(search.toLowerCase()));
+      !searchLower ||
+      (item.nama && item.nama.toLowerCase().includes(searchLower)) ||
+      (item.alamat && item.alamat.toLowerCase().includes(searchLower));
     return matchFilter && matchSearch;
   });
 
@@ -74,7 +81,7 @@ export default function DaftarMitraIndustriPage() {
                 <button
                   key={tab}
                   onClick={() => setFilter(tab)}
-                  className={`px-4 sm:px-5 py-2 rounded-xl text-xs font-medium capitalize transition-all flex-1 sm:flex-none ${
+                  className={`px-4 sm:px-5 py-2 rounded-xl text-xs font-medium capitalize transition-all flex-1 sm:flex-none cursor-pointer ${
                     filter === tab
                       ? "bg-forest text-cream shadow-xs"
                       : "text-ink/60 hover:text-forest"

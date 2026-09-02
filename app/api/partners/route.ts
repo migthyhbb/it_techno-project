@@ -1,26 +1,26 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// 🚀 MANTRA SAKTI ANTI-CACHE NEXT.JS
 export const dynamic = "force-dynamic";
 
-// PANGGIL JALUR VIP (SERVICE ROLE) BIAR BISA NEMBUS RLS DARI BACKEND
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function GET() {
   try {
-    // 1. Fetch data mitra (CUMA AMBIL KOLOM YANG AMAN DILIHAT PUBLIK!)
+    // 1. Fetch data mitra yang AKTIF saja
     const { data: mitraData, error: mitraError } = await supabaseAdmin
       .from("mitra_profiles")
-      .select("id, user_id, nama_mitra, alamat, created_at");
+      .select("id, user_id, nama_mitra, alamat, created_at, status_akun")
+      .or("status_akun.eq.aktif,status_akun.is.null");
 
-    // 2. Fetch data industri (CUMA AMBIL KOLOM YANG AMAN DILIHAT PUBLIK!)
+    // 2. Fetch data industri yang AKTIF saja
     const { data: industriData, error: industriError } = await supabaseAdmin
       .from("industri_profiles")
-      .select("id, user_id, nama_perusahaan, alamat, created_at");
+      .select("id, user_id, nama_perusahaan, alamat, created_at, status_akun")
+      .or("status_akun.eq.aktif,status_akun.is.null");
 
     if (mitraError) {
       console.error("Error fetching mitra_profiles:", mitraError.message);
@@ -35,7 +35,7 @@ export async function GET() {
       id: item.id || item.user_id,
       nama: item.nama_mitra || "Mitra Tanpa Nama",
       alamat: item.alamat || "Lokasi belum diisi",
-      tipe: "mitra",
+      tipe: "mitra" as const,
       tanggalBergabung: item.created_at
         ? new Date(item.created_at).toLocaleDateString("id-ID", {
             day: "numeric",
@@ -50,7 +50,7 @@ export async function GET() {
       id: item.id || item.user_id,
       nama: item.nama_perusahaan || "Industri Tanpa Nama",
       alamat: item.alamat || "Lokasi belum diisi",
-      tipe: "industri",
+      tipe: "industri" as const,
       tanggalBergabung: item.created_at
         ? new Date(item.created_at).toLocaleDateString("id-ID", {
             day: "numeric",
