@@ -5,92 +5,108 @@ import { motion } from "motion/react";
 
 export default function NotFound() {
   return (
-    <main className="min-h-screen bg-cream flex flex-col justify-center relative overflow-hidden selection:bg-forest selection:text-cream">
+    <main className="min-h-screen bg-cream flex flex-col items-center justify-center py-20 px-4 sm:px-6 relative overflow-hidden z-0">
       
-      {/* Latar Belakang Bersih dengan Gradien Radial Halus */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(46,117,89,0.06),transparent_60%)] pointer-events-none" />
+      {/* --- BACKGROUND ANIMATIONS (Abstract Floating Geometry) --- */}
+      <motion.div
+        animate={{ rotate: 360, scale: [1, 1.2, 1] }}
+        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+        className="absolute -top-32 -left-32 w-[30rem] h-[30rem] bg-gradient-to-br from-forest/5 to-transparent rounded-full blur-3xl -z-10 pointer-events-none"
+      />
+      <motion.div
+        animate={{ rotate: -360, scale: [1, 1.5, 1] }}
+        transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+        className="absolute -bottom-40 -right-20 w-[40rem] h-[40rem] bg-gradient-to-tl from-green/10 to-transparent rounded-full blur-3xl -z-10 pointer-events-none"
+      />
 
-      <div className="w-full max-w-[1400px] mx-auto px-6 sm:px-12 lg:px-24 relative z-10 flex flex-col lg:flex-row justify-between gap-20 lg:gap-32">
-        
-        {/* Kolom Kiri: Tipografi Editorial Raksasa */}
-        <div className="flex-1 lg:max-w-2xl flex flex-col justify-center pt-10 lg:pt-0">
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {/* Angka 404 menjadi elemen arsitektur, bukan sekadar teks */}
-            <h1 className="font-display font-black text-[120px] sm:text-[160px] lg:text-[220px] leading-[0.8] text-forest tracking-tighter mb-8 sm:mb-12">
-              404<span className="text-green">.</span>
-            </h1>
-
-            <h2 className="font-display font-medium text-4xl sm:text-5xl lg:text-6xl text-forest leading-[1.1] tracking-tight mb-6">
-              Jalur energi <br />
-              <span className="text-forest/30">tidak valid.</span>
-            </h2>
-
-            <p className="text-base sm:text-lg text-ink/70 leading-relaxed max-w-md">
-              Halaman yang Anda cari tidak tersedia. Tautan mungkin telah usang atau data telah didaur ulang oleh sistem LENTERA.
-            </p>
-          </motion.div>
-        </div>
-
-        {/* Kolom Kanan: Navigasi List Interaktif (Bukan Kartu) */}
-        <div className="flex-1 flex flex-col justify-center w-full max-w-2xl lg:ml-auto">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 1.2, delay: 0.3 }}
-            className="flex flex-col border-t border-forest/10"
-          >
-            {[
-              {
-                title: "Beranda Utama",
-                desc: "Kembali ke pusat informasi LENTERA.",
-                href: "/",
-              },
-              {
-                title: "Mitra & Industri",
-                desc: "Eksplorasi direktori jaringan sirkular kami.",
-                href: "/daftar-mitra-industri",
-              },
-              {
-                title: "Pusat Edukasi",
-                desc: "Pelajari metode pengolahan limbah energi.",
-                href: "/edukasi",
-              },
-            ].map((item, i) => (
-              <Link
-                key={i}
-                href={item.href}
-                className="group relative flex flex-col py-8 sm:py-10 border-b border-forest/10 hover:border-forest/40 transition-colors duration-700 overflow-hidden"
-              >
-                {/* Efek hover background yang muncul elegan dari bawah */}
-                <div className="absolute inset-0 bg-forest/[0.03] translate-y-full group-hover:translate-y-0 transition-transform duration-700 ease-[0.16,1,0.3,1] -z-10" />
-
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display text-2xl sm:text-3xl lg:text-4xl text-forest/50 group-hover:text-forest transition-colors duration-500">
-                    {item.title}
-                  </h3>
-                  
-                  {/* Lingkaran panah yang membesar dan terisi saat hover */}
-                  <div className="w-12 h-12 rounded-full border border-forest/15 flex items-center justify-center text-forest group-hover:bg-forest group-hover:border-forest group-hover:text-cream transition-all duration-500 ease-out">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="transform -translate-x-1 group-hover:translate-x-0.5 transition-transform duration-500">
-                      <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
-                    </svg>
-                  </div>
-                </div>
-                
-                {/* Deskripsi tersembunyi yang muncul halus ke atas */}
-                <p className="text-sm text-ink/60 mt-3 max-w-sm absolute bottom-8 opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-700 ease-[0.16,1,0.3,1]">
-                  {item.desc}
-                </p>
-              </Link>
-            ))}
-          </motion.div>
-        </div>
-
+      {/* --- GIANT PARALLAX TYPOGRAPHY --- */}
+      <div className="relative z-10 flex gap-2 sm:gap-6 font-display font-black text-[8rem] sm:text-[14rem] md:text-[18rem] leading-none select-none drop-shadow-sm mb-4">
+        <motion.span
+          animate={{ y: [0, -20, 0] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          className="text-forest"
+        >
+          4
+        </motion.span>
+        <motion.span
+          animate={{ y: [0, 25, 0] }}
+          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+          className="text-transparent bg-clip-text bg-gradient-to-b from-green to-forest"
+        >
+          0
+        </motion.span>
+        <motion.span
+          animate={{ y: [0, -15, 0] }}
+          transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+          className="text-forest"
+        >
+          4
+        </motion.span>
       </div>
+
+      {/* --- TEXT CONTENT --- */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="text-center max-w-2xl mx-auto z-10 mb-12"
+      >
+        <h1 className="font-display font-bold text-2xl sm:text-3xl md:text-4xl text-forest mb-4 tracking-tight">
+          Sirkuit Terputus! Halaman Lenyap.
+        </h1>
+        <p className="text-sm sm:text-base text-ink/70 leading-relaxed px-4">
+          Energi yang Anda cari di jalur ini tidak dapat ditemukan. Tautan mungkin telah usang, 
+          atau halaman ini sudah didaur ulang oleh sistem LENTERA.
+        </p>
+      </motion.div>
+
+      {/* --- BENTO GRID NAVIGATION (Premium Action Cards) --- */}
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, delay: 0.2 }}
+        className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-4xl z-10 px-4"
+      >
+        {/* Bento Card 1: Beranda */}
+        <Link href="/" className="group block h-full">
+          <div className="bg-white/60 backdrop-blur-md border border-forest/10 p-6 rounded-3xl h-full flex flex-col justify-between hover:bg-forest hover:border-forest transition-all duration-300 shadow-sm hover:shadow-xl hover:-translate-y-1">
+            <div className="w-12 h-12 bg-forest/5 text-forest group-hover:bg-white/20 group-hover:text-cream rounded-2xl flex items-center justify-center mb-6 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-forest group-hover:text-cream text-lg mb-1 transition-colors">Beranda Utama</h3>
+              <p className="text-xs text-ink/60 group-hover:text-cream/70 transition-colors">Kembali ke pusat informasi LENTERA.</p>
+            </div>
+          </div>
+        </Link>
+
+        {/* Bento Card 2: Mitra & Industri */}
+        <Link href="/daftar-mitra-industri" className="group block h-full">
+          <div className="bg-white/60 backdrop-blur-md border border-forest/10 p-6 rounded-3xl h-full flex flex-col justify-between hover:bg-forest hover:border-forest transition-all duration-300 shadow-sm hover:shadow-xl hover:-translate-y-1">
+            <div className="w-12 h-12 bg-forest/5 text-forest group-hover:bg-white/20 group-hover:text-cream rounded-2xl flex items-center justify-center mb-6 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-forest group-hover:text-cream text-lg mb-1 transition-colors">Mitra & Industri</h3>
+              <p className="text-xs text-ink/60 group-hover:text-cream/70 transition-colors">Eksplorasi jaringan sirkular kami.</p>
+            </div>
+          </div>
+        </Link>
+
+        {/* Bento Card 3: Edukasi */}
+        <Link href="/edukasi" className="group block h-full">
+          <div className="bg-white/60 backdrop-blur-md border border-forest/10 p-6 rounded-3xl h-full flex flex-col justify-between hover:bg-green hover:border-green transition-all duration-300 shadow-sm hover:shadow-xl hover:-translate-y-1">
+            <div className="w-12 h-12 bg-forest/5 text-forest group-hover:bg-forest/20 group-hover:text-forest rounded-2xl flex items-center justify-center mb-6 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-forest group-hover:text-forest text-lg mb-1 transition-colors">Pusat Edukasi</h3>
+              <p className="text-xs text-ink/60 group-hover:text-forest/70 transition-colors">Pelajari lebih lanjut tentang limbah energi.</p>
+            </div>
+          </div>
+        </Link>
+      </motion.div>
+
     </main>
   );
 }
