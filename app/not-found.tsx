@@ -32,21 +32,17 @@ export default function NotFound() {
         </span>
       </div>
 
-      <div className="max-w-xl mx-auto space-y-6 relative z-10">
+      <div className="max-w-xl mx-auto space-y-5 relative z-10">
         
-        {/* Animated Status Badge */}
+        {/* Minimalist Overline Text */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex justify-center"
         >
-          <div className="flex items-center gap-2.5 bg-white/60 backdrop-blur-sm border border-forest/15 px-4 py-2 rounded-full shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="font-mono text-[10px] sm:text-xs font-bold uppercase tracking-widest text-forest">
-              Kesalahan 404 — Tautan Tidak Valid
-            </span>
-          </div>
+          <span className="font-mono text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-forest/60">
+            Error 404
+          </span>
         </motion.div>
 
         {/* Animated Heading */}
@@ -60,7 +56,7 @@ export default function NotFound() {
           </h1>
         </motion.div>
 
-        {/* Animated Subtitle (Bahasa Baku) */}
+        {/* Animated Subtitle */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
