@@ -134,7 +134,7 @@ export default function DaftarIndustriPage() {
           type="tel"
           value={form.telepon}
           onChange={(event) => updateField("telepon", event.target.value)}
-          placeholder="08123456789"
+          placeholder="081200000000"
           required
         />
         <label className="block mb-4">

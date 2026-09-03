@@ -794,7 +794,7 @@ export default function DaftarMitraPage() {
                       type="tel"
                       value={form.telepon}
                       onChange={(e) => update("telepon", e.target.value)}
-                      placeholder="08123456789"
+                      placeholder="081200000000"
                       required
                     />
                     {fieldErrors.telepon && (

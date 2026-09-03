@@ -1086,7 +1086,7 @@ export default function DashboardIndustriPage() {
                     <input
                       type="text"
                       className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-gold bg-white"
-                      placeholder="Contoh: 081234567890"
+                      placeholder="Contoh: 081200000000"
                       value={formWithdraw.nomor_rekening}
                       onChange={(e) => setFormWithdraw({ ...formWithdraw, nomor_rekening: e.target.value })}
                       required

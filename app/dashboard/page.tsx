@@ -103,7 +103,6 @@ export default function DashboardMitraPage() {
   const [proofModalOpen, setProofModalOpen] = useState(false);
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
-  // FUNGSI INI UDAH DI-PATCH ANTI BOCOR! (Difilter langsung dari Supabase)
   const fetchOrdersOnly = async (currentUserId: string) => {
     const supabase = createSupabaseBrowserClient();
     
@@ -455,7 +454,6 @@ export default function DashboardMitraPage() {
           )}
         </section>
 
-        {/* ID SECTION DIBAWAH INI UDAH DI-FIX BIAR BISA DI-KLIK DARI SIDEBAR */}
         <section id="status-pesanan" className="scroll-mt-8 mb-10 md:mb-16">
           <p className="font-mono text-xs tracking-widest uppercase text-forest mb-1">Daftar Pesanan</p>
           <div className="flex justify-between items-center mb-4">

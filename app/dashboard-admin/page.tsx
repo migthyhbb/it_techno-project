@@ -494,8 +494,6 @@ export default function DashboardAdminPage() {
 
   return (
     <div className="flex min-h-screen bg-cream relative overflow-x-hidden">
-      
-      {/* 🚀 KITA PANGGIL SATU-SATUNYA SIDEBAR DI SINI SECARA BERSIH */}
       <AdminSidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -1172,7 +1170,6 @@ export default function DashboardAdminPage() {
           </div>
         )}
 
-        {/* 🚀 MODAL BARU: TAMPILKAN BUKTI PENGIRIMAN DI ADMIN */}
         {proofModalOpen && selectedProofUrl && (
           <div 
             className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"

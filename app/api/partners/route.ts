@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// MANTRA SAKTI ANTI-CACHE NEXT.JS
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    // 1. PINDAHKAN INISIALISASI KE DALAM SINI BIAR BACA ENV SAAT RUNTIME
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
@@ -16,8 +14,6 @@ export async function GET() {
 
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    // 2. KITA PAKAI SELECT * TAPI KITA FILTER DI MAPPING
-    // Ini mencegah error kalau nama kolom 'id' atau 'created_at' tidak sama persis di DB
     const { data: mitraData, error: mitraError } = await supabaseAdmin
       .from("mitra_profiles")
       .select("*");
@@ -34,7 +30,6 @@ export async function GET() {
       throw new Error(`DB Industri Error: ${industriError.message}`);
     }
 
-    // 3. Mapping data mitra (HANYA AMBIL YANG AMAN, JANGAN BAWA NIK/TELEPON)
     const formattedMitra = (mitraData || []).map((item) => ({
       id: item.id || item.user_id,
       nama: item.nama_mitra || item.nama_lengkap || item.nama || "Mitra Tanpa Nama",
@@ -49,7 +44,6 @@ export async function GET() {
         : "-",
     }));
 
-    // 4. Mapping data industri
     const formattedIndustri = (industriData || []).map((item) => ({
       id: item.id || item.user_id,
       nama: item.nama_perusahaan || item.nama || "Industri Tanpa Nama",

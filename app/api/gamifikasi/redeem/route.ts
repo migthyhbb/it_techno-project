@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       .from('industri_profiles')
       .update({ saldo_kredit: saldoBaru })
       .eq('user_id', user.id)
-      .gte('saldo_kredit', poinNumber) // JURUS SAKTI: Pastikan saldo di DB >= jumlah poin yang dicairkan
+      .gte('saldo_kredit', poinNumber)
       .select('saldo_kredit')
       .maybeSingle();
 

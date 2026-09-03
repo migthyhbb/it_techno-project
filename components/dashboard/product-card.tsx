@@ -30,7 +30,6 @@ export function ProductCard({ product }: { product: Product }) {
     setLoading(true);
 
     try {
-      // 🚀 JURUS AMAN: Ambil data user SEKARANG sebelum buka Midtrans
       const supabase = createSupabaseBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
       

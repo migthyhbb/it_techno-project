@@ -64,7 +64,7 @@ export function isValidPassword(value: string): boolean {
 }
 
 export const validationMessages = {
-  phone: "Nomor telepon tidak valid. Contoh: 08123456789.",
+  phone: "Nomor telepon tidak valid. Contoh: 081200000000.",
   nikNib: "NIK harus 16 digit atau NIB 13 digit angka.",
   npwp: "NPWP harus 15 atau 16 digit angka.",
   address: "Alamat lengkap minimal 15 karakter dan 3 kata (jalan, kota, provinsi).",

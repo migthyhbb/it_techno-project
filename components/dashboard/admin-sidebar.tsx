@@ -129,7 +129,6 @@ export function AdminSidebar({
             : "-translate-y-4 opacity-0 scale-y-95 pointer-events-none"
         }`}
       >
-        {/* Tombol X Tutup udah dibuang, sisain judul doang biar rapi */}
         <div className="pb-3 mb-3 border-b border-cream/10">
           <p className="text-xs font-mono text-gold uppercase tracking-wider">
             Navigasi Panel Admin
