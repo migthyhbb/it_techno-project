@@ -5,94 +5,106 @@ import { motion } from "motion/react";
 
 export default function NotFound() {
   return (
-    <main className="min-h-screen bg-cream flex flex-col items-center justify-center px-4 sm:px-6 md:px-12 text-center relative overflow-hidden z-0">
+    <main className="min-h-screen bg-cream flex flex-col items-center justify-center py-20 px-4 sm:px-6 relative overflow-hidden z-0">
       
-      {/* Drifting Energy Orbs (Background Animation) */}
+      {/* --- BACKGROUND ANIMATIONS (Abstract Floating Geometry) --- */}
       <motion.div
-        animate={{
-          x: [0, 80, -40, 0],
-          y: [0, -80, 60, 0],
-          scale: [1, 1.2, 0.9, 1],
-        }}
-        transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-        className="absolute top-1/4 left-1/4 w-[25rem] sm:w-[35rem] h-[25rem] sm:h-[35rem] bg-forest/10 rounded-full blur-[100px] pointer-events-none -z-10"
+        animate={{ rotate: 360, scale: [1, 1.2, 1] }}
+        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+        className="absolute -top-32 -left-32 w-[30rem] h-[30rem] bg-gradient-to-br from-forest/5 to-transparent rounded-full blur-3xl -z-10 pointer-events-none"
       />
       <motion.div
-        animate={{
-          x: [0, -80, 40, 0],
-          y: [0, 80, -60, 0],
-          scale: [1, 1.5, 0.8, 1],
-        }}
-        transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
-        className="absolute bottom-1/4 right-1/4 w-[20rem] sm:w-[30rem] h-[20rem] sm:h-[30rem] bg-green/10 rounded-full blur-[80px] pointer-events-none -z-10"
+        animate={{ rotate: -360, scale: [1, 1.5, 1] }}
+        transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+        className="absolute -bottom-40 -right-20 w-[40rem] h-[40rem] bg-gradient-to-tl from-green/10 to-transparent rounded-full blur-3xl -z-10 pointer-events-none"
       />
 
-      {/* Giant Animated 404 Gradient Text */}
+      {/* --- GIANT PARALLAX TYPOGRAPHY --- */}
+      <div className="relative z-10 flex gap-2 sm:gap-6 font-display font-black text-[8rem] sm:text-[14rem] md:text-[18rem] leading-none select-none drop-shadow-sm mb-4">
+        <motion.span
+          animate={{ y: [0, -20, 0] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          className="text-forest"
+        >
+          4
+        </motion.span>
+        <motion.span
+          animate={{ y: [0, 25, 0] }}
+          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+          className="text-transparent bg-clip-text bg-gradient-to-b from-green to-forest"
+        >
+          0
+        </motion.span>
+        <motion.span
+          animate={{ y: [0, -15, 0] }}
+          transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+          className="text-forest"
+        >
+          4
+        </motion.span>
+      </div>
+
+      {/* --- TEXT CONTENT --- */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 1.2, ease: "easeOut" }}
-        className="absolute inset-0 flex items-center justify-center -z-10 select-none pointer-events-none"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="text-center max-w-2xl mx-auto z-10 mb-12"
       >
-        <span className="text-[12rem] sm:text-[18rem] md:text-[24rem] lg:text-[28rem] font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-forest/5 to-cream leading-none">
-          404
-        </span>
+        <h1 className="font-display font-bold text-2xl sm:text-3xl md:text-4xl text-forest mb-4 tracking-tight">
+          Sirkuit Terputus! Halaman Lenyap.
+        </h1>
+        <p className="text-sm sm:text-base text-ink/70 leading-relaxed px-4">
+          Energi yang Anda cari di jalur ini tidak dapat ditemukan. Tautan mungkin telah usang, 
+          atau halaman ini sudah didaur ulang oleh sistem LENTERA.
+        </p>
       </motion.div>
 
-      {/* Main Glassmorphism Card */}
+      {/* --- BENTO GRID NAVIGATION (Premium Action Cards) --- */}
       <motion.div
-        initial={{ opacity: 0, y: 40 }}
+        initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
-        className="relative z-10 max-w-xl w-full"
+        transition={{ duration: 0.8, delay: 0.2 }}
+        className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-4xl z-10 px-4"
       >
-        <motion.div 
-          animate={{ y: [0, -10, 0] }}
-          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-          className="bg-white/40 backdrop-blur-xl border border-white/60 p-8 sm:p-12 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.04)] relative overflow-hidden"
-        >
-          {/* Inner Card Shine Effect */}
-          <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/60 to-transparent pointer-events-none" />
-
-          <div className="relative z-10 space-y-6">
-            {/* Minimalist Overline */}
-            <span className="inline-block font-mono text-[10px] sm:text-xs font-bold uppercase tracking-widest text-forest/60 border-b border-forest/20 pb-1">
-              Navigasi Terputus
-            </span>
-
-            {/* Heading */}
-            <h1 className="font-display font-semibold text-3xl sm:text-4xl md:text-5xl text-forest leading-tight">
-              Halaman Tidak Ditemukan
-            </h1>
-
-            {/* Subtitle */}
-            <p className="text-sm sm:text-base text-ink/70 leading-relaxed max-w-sm mx-auto">
-              Maaf, jalur yang Anda tuju tidak tersedia di jaringan LENTERA. 
-              Mungkin tautannya sudah usang atau salah ketik.
-            </p>
-
-            {/* Interactive Action Buttons */}
-            <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="w-full sm:w-auto">
-                <Link
-                  href="/"
-                  className="block w-full bg-forest text-paper px-8 py-3.5 rounded-2xl text-sm font-semibold hover:bg-forest/90 transition-colors shadow-md text-center"
-                >
-                  Kembali ke Beranda
-                </Link>
-              </motion.div>
-              
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="w-full sm:w-auto">
-                <Link
-                  href="/daftar-mitra-industri"
-                  className="block w-full bg-white/50 backdrop-blur-sm border border-forest/20 text-forest px-8 py-3.5 rounded-2xl text-sm font-semibold hover:bg-forest/5 transition-colors text-center"
-                >
-                  Jelajahi Mitra
-                </Link>
-              </motion.div>
+        {/* Bento Card 1: Beranda */}
+        <Link href="/" className="group block h-full">
+          <div className="bg-white/60 backdrop-blur-md border border-forest/10 p-6 rounded-3xl h-full flex flex-col justify-between hover:bg-forest hover:border-forest transition-all duration-300 shadow-sm hover:shadow-xl hover:-translate-y-1">
+            <div className="w-12 h-12 bg-forest/5 text-forest group-hover:bg-white/20 group-hover:text-cream rounded-2xl flex items-center justify-center mb-6 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-forest group-hover:text-cream text-lg mb-1 transition-colors">Beranda Utama</h3>
+              <p className="text-xs text-ink/60 group-hover:text-cream/70 transition-colors">Kembali ke pusat informasi LENTERA.</p>
             </div>
           </div>
-        </motion.div>
+        </Link>
+
+        {/* Bento Card 2: Mitra & Industri */}
+        <Link href="/daftar-mitra-industri" className="group block h-full">
+          <div className="bg-white/60 backdrop-blur-md border border-forest/10 p-6 rounded-3xl h-full flex flex-col justify-between hover:bg-forest hover:border-forest transition-all duration-300 shadow-sm hover:shadow-xl hover:-translate-y-1">
+            <div className="w-12 h-12 bg-forest/5 text-forest group-hover:bg-white/20 group-hover:text-cream rounded-2xl flex items-center justify-center mb-6 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-forest group-hover:text-cream text-lg mb-1 transition-colors">Mitra & Industri</h3>
+              <p className="text-xs text-ink/60 group-hover:text-cream/70 transition-colors">Eksplorasi jaringan sirkular kami.</p>
+            </div>
+          </div>
+        </Link>
+
+        {/* Bento Card 3: Edukasi */}
+        <Link href="/edukasi" className="group block h-full">
+          <div className="bg-white/60 backdrop-blur-md border border-forest/10 p-6 rounded-3xl h-full flex flex-col justify-between hover:bg-green hover:border-green transition-all duration-300 shadow-sm hover:shadow-xl hover:-translate-y-1">
+            <div className="w-12 h-12 bg-forest/5 text-forest group-hover:bg-forest/20 group-hover:text-forest rounded-2xl flex items-center justify-center mb-6 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-forest group-hover:text-forest text-lg mb-1 transition-colors">Pusat Edukasi</h3>
+              <p className="text-xs text-ink/60 group-hover:text-forest/70 transition-colors">Pelajari lebih lanjut tentang limbah energi.</p>
+            </div>
+          </div>
+        </Link>
       </motion.div>
 
     </main>
