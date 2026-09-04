@@ -234,7 +234,6 @@ export default function DashboardAdminPage() {
 
     const supabase = createSupabaseBrowserClient();
 
-    // Fetch data orders beserta detail pesanan_mitra & nama produk
     const [ordersRes, pmRes, productsRes] = await Promise.all([
       supabase.from("orders").select("*").eq("user_id", usr.user_id).order("created_at", { ascending: false }),
       supabase.from("pesanan_mitra").select("*").eq("user_id", usr.user_id),
@@ -878,72 +877,137 @@ export default function DashboardAdminPage() {
 
         {/* MODAL PESANAN MITRA */}
         {ordersModalOpen && selectedUserDetail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-4xl p-6 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-3 sm:p-4">
+            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-4xl p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+              
+              {/* Header Modal */}
               <div className="flex justify-between items-start mb-4 border-b border-forest/10 pb-3">
                 <div>
-                  <span className="text-[10px] uppercase font-mono tracking-widest text-blue-600">Riwayat & Status Pesanan Mitra</span>
-                  <h3 className="font-display font-semibold text-xl text-forest">{selectedUserDetail.nama}</h3>
+                  <span className="text-[10px] uppercase font-mono tracking-widest text-blue-600 font-semibold">Riwayat & Status Pesanan</span>
+                  <h3 className="font-display font-semibold text-lg sm:text-xl text-forest">{selectedUserDetail.nama}</h3>
                 </div>
-                <button onClick={() => setOrdersModalOpen(false)} className="text-ink/40 hover:text-ink text-sm font-bold cursor-pointer">✕</button>
+                <button onClick={() => setOrdersModalOpen(false)} className="text-ink/40 hover:text-ink text-base font-bold cursor-pointer p-1">✕</button>
               </div>
-              <form onSubmit={handleUpdateQuota} className="bg-blue-50/50 border border-blue-200/60 rounded-xl p-4 mb-6 flex flex-col sm:flex-row sm:items-end gap-3">
+
+              {/* Form Kuota */}
+              <form onSubmit={handleUpdateQuota} className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 sm:p-4 mb-5 flex flex-col sm:flex-row sm:items-end gap-3">
                 <div className="flex-1">
-                  <label className="block text-xs font-semibold text-blue-900 mb-1">Atur Batas Kuota Pemesanan Akun Ini:</label>
-                  <input type="number" min={0} required value={newQuota} onChange={(e) => setNewQuota(Number(e.target.value))} className="w-full border border-blue-300 p-2 rounded-xl text-sm bg-white outline-none font-mono" />
+                  <label className="block text-xs font-semibold text-blue-900 mb-1">Batas Kuota Pemesanan Akun Ini:</label>
+                  <input type="number" min={0} required value={newQuota} onChange={(e) => setNewQuota(Number(e.target.value))} className="w-full border border-blue-300 p-2 rounded-xl text-sm bg-white outline-none font-mono focus:ring-2 focus:ring-blue-500/20" />
                 </div>
-                <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-blue-700 transition-colors cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Kuota Baru"}</button>
+                <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50">
+                  {isSubmitting ? "Menyimpan..." : "Simpan Kuota Baru"}
+                </button>
               </form>
+
+              {/* Daftar Transaksi */}
               <div className="mb-4">
-                <h4 className="font-semibold text-forest text-sm mb-2">Daftar Transaksi Pemesanan</h4>
+                <h4 className="font-semibold text-forest text-sm mb-3">Daftar Transaksi Pemesanan</h4>
+                
                 {loadingOrders ? (
-                  <p className="text-xs text-ink/50 py-4 text-center">Memuat riwayat transaksi...</p>
+                  <p className="text-xs text-ink/50 py-6 text-center">Memuat riwayat transaksi...</p>
                 ) : userOrders.length === 0 ? (
                   <div className="bg-white border border-forest/10 rounded-xl p-6 text-center text-xs text-ink/50">Mitra ini belum pernah melakukan pemesanan produk.</div>
                 ) : (
-                  <div className="border border-forest/10 rounded-xl overflow-hidden bg-white">
-                    <table className="w-full text-left text-xs block md:table overflow-x-auto">
-                      <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10 hidden md:table-header-group">
-                        <tr>
-                          <th className="p-3">ID Pesanan</th>
-                          <th className="p-3">Nama Produk</th>
-                          <th className="p-3">Tanggal</th>
-                          <th className="p-3">Total Biaya</th>
-                          <th className="p-3">Status Pengiriman</th>
-                          <th className="p-3 text-center">Ubah Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-forest/10 block md:table-row-group">
-                        {userOrders.map((ord) => (
-                          <tr key={ord.id} className="block md:table-row p-4 md:p-0">
-                            <td className="p-1 md:p-3 font-mono font-medium text-forest block md:table-cell mb-1 md:mb-0 select-all">
-                              <span className="inline-block md:hidden text-ink/50 mr-2 font-sans">ID:</span>{ord.id}
-                            </td>
-                            <td className="p-1 md:p-3 font-semibold text-forest block md:table-cell mb-1 md:mb-0">
-                              <span className="inline-block md:hidden text-ink/50 mr-2 font-normal">Produk:</span>{ord.nama_produk || "Produk Energi"}
-                            </td>
-                            <td className="p-1 md:p-3 text-ink/60 block md:table-cell mb-1 md:mb-0">
-                              <span className="inline-block md:hidden text-ink/50 mr-2">Tgl:</span>{new Date(ord.created_at).toLocaleDateString("id-ID")}
-                            </td>
-                            <td className="p-1 md:p-3 font-semibold text-green block md:table-cell mb-2 md:mb-0">
-                              <span className="inline-block md:hidden text-ink/50 mr-2 font-normal">Total:</span>Rp {ord.total_harga?.toLocaleString("id-ID")}
-                            </td>
-                            <td className="p-1 md:p-3 block md:table-cell mb-3 md:mb-0">
-                              <div className="flex flex-col gap-1 items-start">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${ord.status === "dikirim" ? "bg-amber-100 text-amber-800" : ord.status === "selesai" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"}`}>{ord.status}</span>
-                                {ord.bukti_pengiriman_url && <button type="button" onClick={(e) => { e.preventDefault(); setSelectedProofUrl(ord.bukti_pengiriman_url!); setProofModalOpen(true); }} className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-1 cursor-pointer font-medium">📎 Lihat Bukti</button>}
-                              </div>
-                            </td>
-                            <td className="p-1 md:p-3 text-center block md:table-cell border-t md:border-0 border-forest/10 pt-3 md:pt-0 mt-2 md:mt-0">
-                              <button onClick={() => { setSelectedOrderUpdate(ord); setNewOrderStatus(ord.status); setProofFile(null); setOrderStatusModalOpen(true); }} className="w-full md:w-auto text-green hover:underline text-xs font-medium cursor-pointer bg-green/10 md:bg-transparent py-2 md:py-0 rounded-lg md:rounded-none">Ubah Status & Bukti</button>
-                            </td>
+                  <>
+                    {/* TAMPILAN MOBILE: CARD LAYOUT */}
+                    <div className="block md:hidden space-y-3">
+                      {userOrders.map((ord) => (
+                        <div key={ord.id} className="bg-white border border-forest/10 rounded-xl p-4 shadow-2xs space-y-2.5">
+                          <div className="flex justify-between items-start gap-2 border-b border-forest/5 pb-2">
+                            <div>
+                              <p className="text-[10px] text-ink/40 uppercase font-mono tracking-wider">ID Transaksi</p>
+                              <p className="font-mono text-xs font-medium text-forest break-all select-all">{ord.id}</p>
+                            </div>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize shrink-0 ${ord.status === "dikirim" ? "bg-amber-100 text-amber-800 border border-amber-200" : ord.status === "selesai" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                              {ord.status}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <p className="text-[10px] text-ink/50 uppercase font-mono">Produk</p>
+                              <p className="font-semibold text-forest line-clamp-1">{ord.nama_produk || "Produk Energi"}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] text-ink/50 uppercase font-mono">Tanggal</p>
+                              <p className="text-ink/70 font-medium">{new Date(ord.created_at).toLocaleDateString("id-ID")}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-end pt-2 border-t border-forest/5">
+                            <div>
+                              <p className="text-[10px] text-ink/50 uppercase font-mono">Total Biaya</p>
+                              <p className="font-bold text-green text-sm">Rp {ord.total_harga?.toLocaleString("id-ID")}</p>
+                            </div>
+
+                            {ord.bukti_pengiriman_url && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.preventDefault(); setSelectedProofUrl(ord.bukti_pengiriman_url!); setProofModalOpen(true); }}
+                                className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 font-semibold cursor-pointer py-1 px-2 rounded-md bg-blue-50"
+                              >
+                                📎 Lihat Bukti
+                              </button>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => { setSelectedOrderUpdate(ord); setNewOrderStatus(ord.status); setProofFile(null); setOrderStatusModalOpen(true); }}
+                            className="w-full text-xs font-semibold py-2 bg-forest/5 text-forest hover:bg-forest/10 rounded-lg transition-colors cursor-pointer text-center mt-1"
+                          >
+                            Ubah Status & Upload Bukti
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* TAMPILAN DESKTOP: TABEL */}
+                    <div className="hidden md:block border border-forest/10 rounded-xl overflow-hidden bg-white">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
+                          <tr>
+                            <th className="p-3">ID Pesanan</th>
+                            <th className="p-3">Nama Produk</th>
+                            <th className="p-3">Tanggal</th>
+                            <th className="p-3">Total Biaya</th>
+                            <th className="p-3">Status Pengiriman</th>
+                            <th className="p-3 text-center">Aksi</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-forest/10">
+                          {userOrders.map((ord) => (
+                            <tr key={ord.id} className="hover:bg-forest/[0.02]">
+                              <td className="p-3 font-mono font-medium text-forest max-w-[150px] truncate select-all" title={ord.id}>
+                                {ord.id}
+                              </td>
+                              <td className="p-3 font-semibold text-forest">
+                                {ord.nama_produk || "Produk Energi"}
+                              </td>
+                              <td className="p-3 text-ink/60 whitespace-nowrap">
+                                {new Date(ord.created_at).toLocaleDateString("id-ID")}
+                              </td>
+                              <td className="p-3 font-semibold text-green whitespace-nowrap">
+                                Rp {ord.total_harga?.toLocaleString("id-ID")}
+                              </td>
+                              <td className="p-3">
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${ord.status === "dikirim" ? "bg-amber-100 text-amber-800" : ord.status === "selesai" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"}`}>{ord.status}</span>
+                                  {ord.bukti_pengiriman_url && <button type="button" onClick={(e) => { e.preventDefault(); setSelectedProofUrl(ord.bukti_pengiriman_url!); setProofModalOpen(true); }} className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-1 cursor-pointer font-medium">📎 Lihat Bukti</button>}
+                                </div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <button onClick={() => { setSelectedOrderUpdate(ord); setNewOrderStatus(ord.status); setProofFile(null); setOrderStatusModalOpen(true); }} className="text-green hover:underline text-xs font-medium cursor-pointer">Ubah Status & Bukti</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </div>
+
               <div className="flex justify-end pt-3 border-t border-forest/10">
                 <button type="button" onClick={() => setOrdersModalOpen(false)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 cursor-pointer">Tutup Modal</button>
               </div>
