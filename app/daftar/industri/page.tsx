@@ -15,6 +15,7 @@ import { TermsCheckbox } from "@/components/auth/terms-checkbox";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { translateAuthError } from "@/lib/auth-errors";
 import {
+  isValidNikNib, // Bisa digunakan untuk memvalidasi panjang NPWP/NIB juga
   isValidAddress,
   isValidPhone,
   isValidPassword,
@@ -139,7 +140,9 @@ export default function DaftarIndustriPage() {
   useEffect(() => {
     const checkExistingSession = async () => {
       const supabase = createSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (user) {
         const { data: blacklisted } = await supabase
@@ -163,7 +166,7 @@ export default function DaftarIndustriPage() {
         }
 
         if (profile) {
-          router.replace("/dashboard-industri");
+          router.replace("/dashboard");
           return;
         }
 
@@ -206,8 +209,15 @@ export default function DaftarIndustriPage() {
 
     if (provId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`)
-        .then((res) => res.json())
-        .then((data) => setCities(Array.isArray(data) ? data : []));
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data kota");
+          return res.json();
+        })
+        .then((data) => setCities(Array.isArray(data) ? data : []))
+        .catch(() => {
+          console.error("Gagal memuat data kota");
+          setCities([]);
+        });
     }
   };
 
@@ -223,8 +233,15 @@ export default function DaftarIndustriPage() {
 
     if (regencyId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/districts/${regencyId}.json`)
-        .then((res) => res.json())
-        .then((data) => setDistricts(Array.isArray(data) ? data : []));
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data kecamatan");
+          return res.json();
+        })
+        .then((data) => setDistricts(Array.isArray(data) ? data : []))
+        .catch(() => {
+          console.error("Gagal memuat data kecamatan");
+          setDistricts([]);
+        });
     }
   };
 
@@ -238,8 +255,15 @@ export default function DaftarIndustriPage() {
 
     if (districtId) {
       fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/villages/${districtId}.json`)
-        .then((res) => res.json())
-        .then((data) => setVillages(Array.isArray(data) ? data : []));
+        .then((res) => {
+          if (!res.ok) throw new Error("Gagal mengambil data kelurahan");
+          return res.json();
+        })
+        .then((data) => setVillages(Array.isArray(data) ? data : []))
+        .catch(() => {
+          console.error("Gagal memuat data kelurahan");
+          setVillages([]);
+        });
     }
   };
 
@@ -350,7 +374,11 @@ export default function DaftarIndustriPage() {
           password: form.password,
         });
 
-        if (updateError && !updateError.message.toLowerCase().includes("different") && !updateError.message.toLowerCase().includes("same")) {
+        if (
+          updateError &&
+          !updateError.message.toLowerCase().includes("different") &&
+          !updateError.message.toLowerCase().includes("same")
+        ) {
           throw updateError;
         }
 
@@ -366,10 +394,12 @@ export default function DaftarIndustriPage() {
     // Step 3: Validasi Form Profil Industri
     const errors: FieldErrors = {};
     if (!form.nama_perusahaan.trim()) errors.nama_perusahaan = "Nama perusahaan wajib diisi.";
-    if (!form.npwp.trim()) errors.npwp = "NPWP wajib diisi.";
+    
+    // Asumsi NPWP punya format panjang serupa dengan NIK/NIB (bisa disesuaikan validasinya)
+    if (!isValidNikNib(form.npwp)) errors.npwp = "Format NPWP / NIB tidak valid.";
 
     if (!form.foto_npwp) {
-      errors.foto_npwp = "Dokumen NPWP/NIB wajib diupload.";
+      errors.foto_npwp = "Foto NPWP / Dokumen Usaha wajib diupload.";
     } else if (form.foto_npwp.size > 5 * 1024 * 1024) {
       errors.foto_npwp = "Ukuran gambar terlalu besar. Maksimal 5MB.";
     }
@@ -398,12 +428,17 @@ export default function DaftarIndustriPage() {
     setStatus("loading");
     try {
       const supabase = createSupabaseBrowserClient();
-      const { data: { session } } = await supabase.auth.getSession();
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const user = session?.user ?? (await supabase.auth.getUser()).data.user;
 
       if (!user) throw new Error("no-session");
 
-      // Cek di tabel blacklists
+      // === PENGECEKAN KETAT IDENTITAS ===
+
+      // 1. Cek di tabel blacklists
       const { data: blacklisted } = await supabase
         .from("blacklists")
         .select("nik_nib, telepon, alasan")
@@ -412,26 +447,27 @@ export default function DaftarIndustriPage() {
 
       if (blacklisted) {
         const reason = blacklisted.alasan || "Terdaftar dalam daftar hitam penangguhan akun.";
+        
         await supabase.from("blacklists").upsert({
           user_id: user.id,
           email: user.email,
-          nik_nib: form.npwp,
+          nik_nib: form.npwp, // Menyimpan NPWP ke dalam field nik_nib di blacklist
           telepon: form.telepon,
           alasan: `Pendaftaran ditolak otomatis: ${reason}`
         });
 
         setStatus("idle");
-        setError(`Pendaftaran ditolak: NPWP atau Telepon Anda terdaftar dalam daftar hitam penangguhan akun.`);
+        setError(`Pendaftaran ditolak: NPWP (${form.npwp}) atau Nomor Telepon (${form.telepon}) Anda terdaftar dalam daftar hitam penangguhan akun. Alasan: ${reason}`);
         await supabase.auth.signOut();
         return;
       }
 
-      // Cek profil industri yang di-ban
+      // 2. Cek apakah ada profil industri lain berstatus banned yang pakai NPWP/NIB atau Telepon sama
       const { data: bannedProfile } = await supabase
         .from("industri_profiles")
-        .select("npwp, telepon, alasan_ban")
+        .select("npwp, nik_nib, telepon, alasan_ban")
         .eq("status_akun", "banned")
-        .or(`npwp.eq.${form.npwp},telepon.eq.${form.telepon}`)
+        .or(`npwp.eq.${form.npwp},nik_nib.eq.${form.npwp},telepon.eq.${form.telepon}`)
         .maybeSingle();
 
       if (bannedProfile) {
@@ -445,12 +481,11 @@ export default function DaftarIndustriPage() {
         });
 
         setStatus("idle");
-        setError(`Pendaftaran ditolak: NPWP atau Telepon ini terhubung dengan akun industri yang telah di-ban!`);
+        setError(`Pendaftaran ditolak: NPWP atau Nomor Telepon ini terhubung dengan akun industri yang telah di-ban! Alasan: ${reason}`);
         await supabase.auth.signOut();
         return;
       }
 
-      // Upload Gambar NPWP
       let fotoUrl = "";
       if (form.foto_npwp) {
         if (!["image/jpeg", "image/png", "image/jpg"].includes(form.foto_npwp.type)) {
@@ -462,7 +497,7 @@ export default function DaftarIndustriPage() {
         const fileExt = form.foto_npwp.name.split(".").pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
-          .from("industri_documents")
+          .from("industri_documents") // Sesuaikan jika Anda menggunakan bucket yang sama/berbeda
           .upload(`npwp/${fileName}`, form.foto_npwp);
 
         if (uploadError) throw uploadError;
@@ -474,12 +509,11 @@ export default function DaftarIndustriPage() {
         fotoUrl = publicUrlData.publicUrl;
       }
 
-      // Simpan Profil
       const { error: profileError } = await supabase.from("industri_profiles").upsert(
         {
           user_id: user.id,
           nama_perusahaan: form.nama_perusahaan,
-          npwp: form.npwp,
+          npwp: form.npwp, // Sesuai permintaan bedanya di npwp
           provinsi: form.provinsi,
           kota_kabupaten: form.kota,
           kecamatan: form.kecamatan,
@@ -499,7 +533,7 @@ export default function DaftarIndustriPage() {
       await supabase.auth.refreshSession();
       setStatus("submitted");
       router.refresh();
-      router.push("/dashboard-industri");
+      router.push("/dashboard");
     } catch (err) {
       setStatus("idle");
       setError(formatHumanFriendlyError(err));
@@ -510,9 +544,9 @@ export default function DaftarIndustriPage() {
 
   return (
     <AuthShell
-      eyebrow="Pendaftaran industri"
+      eyebrow="Pendaftaran Industri"
       title="Daftar sebagai Industri"
-      subtitle="Bergabung sebagai pemasok limbah industri di LENTERA."
+      subtitle="Untuk pabrik dan perusahaan penghasil limbah energi."
       footer={
         <p className="text-sm text-ink/60 space-y-1.5">
           <span className="block">
@@ -522,7 +556,7 @@ export default function DaftarIndustriPage() {
             </Link>
           </span>
           <span className="block">
-            Mau daftar sebagai mitra agen?{" "}
+            Mau daftar sebagai mitra?{" "}
             <Link href="/daftar/mitra" className="text-green font-medium hover:underline">
               Klik di sini
             </Link>
@@ -555,7 +589,7 @@ export default function DaftarIndustriPage() {
                     type="email"
                     value={form.email}
                     onChange={(e) => update("email", e.target.value)}
-                    placeholder="nama@perusahaan.com"
+                    placeholder="kontak@perusahaan.com"
                     required
                     autoFocus
                   />
@@ -601,11 +635,11 @@ export default function DaftarIndustriPage() {
                 {step === 3 && (
                   <>
                     <FormField
-                      label="Nama Perusahaan / Industri"
+                      label="Nama Perusahaan"
                       type="text"
                       value={form.nama_perusahaan}
                       onChange={(e) => update("nama_perusahaan", e.target.value)}
-                      placeholder="PT Nama Perusahaan"
+                      placeholder="PT / CV / Usaha Dagang"
                       required
                       autoFocus
                     />
@@ -614,11 +648,11 @@ export default function DaftarIndustriPage() {
                     )}
 
                     <FormField
-                      label="NPWP"
+                      label="NPWP / NIB"
                       type="text"
                       value={form.npwp}
                       onChange={(e) => update("npwp", e.target.value)}
-                      placeholder="Nomor NPWP Perusahaan"
+                      placeholder="Nomor NPWP atau NIB Perusahaan"
                       required
                     />
                     {fieldErrors.npwp && (
@@ -627,7 +661,7 @@ export default function DaftarIndustriPage() {
 
                     <div className="mb-4 text-left">
                       <label className="block text-sm font-medium mb-1.5 text-ink">
-                        Upload Foto Dokumen NPWP / NIB
+                        Upload Foto NPWP / NIB
                       </label>
                       <input
                         type="file"
@@ -729,7 +763,7 @@ export default function DaftarIndustriPage() {
 
                     <div className="mb-4 text-left">
                       <label className="block text-sm font-medium mb-1.5 text-ink">
-                        Titik Lokasi Pabrik / Fasilitas
+                        Pilih Titik Lokasi Usaha/Pabrik
                       </label>
                       <LocationPickerMap
                         searchQuery={searchQuery}
@@ -742,7 +776,7 @@ export default function DaftarIndustriPage() {
                       type="text"
                       value={form.detail_alamat}
                       onChange={(e) => update("detail_alamat", e.target.value.toUpperCase())}
-                      placeholder="Jalan, Blok Kawasan Industri, Patokan"
+                      placeholder="Jalan, RT/RW, kavling bangunan pabrik"
                       required
                     />
                     {fieldErrors.detail_alamat && (
@@ -752,11 +786,11 @@ export default function DaftarIndustriPage() {
                     )}
 
                     <FormField
-                      label="Nomor Telepon / Kontak"
+                      label="Nomor telepon"
                       type="tel"
                       value={form.telepon}
                       onChange={(e) => update("telepon", e.target.value)}
-                      placeholder="081200000000"
+                      placeholder="081200000000 / (021) xxxx"
                       required
                     />
                     {fieldErrors.telepon && (
