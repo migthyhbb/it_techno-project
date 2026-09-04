@@ -1,22 +1,16 @@
-// Validasi format field pendaftaran — supaya user tidak asal isi.
-// Ini validasi FORMAT saja (bukan verifikasi ke database resmi seperti
-// Dukcapil/DJP), karena LENTERA belum terintegrasi ke sistem itu.
 
 export function isValidPhone(value: string): boolean {
   const cleaned = value.replace(/[\s-]/g, "");
-  // 08xxxxxxxxx / +628xxxxxxxxx / 628xxxxxxxxx, total 10-13 digit
   return /^(?:\+62|62|0)8[1-9][0-9]{6,10}$/.test(cleaned);
 }
 
 export function isValidNikNib(value: string): boolean {
   const cleaned = value.replace(/\D/g, "");
-  // NIK = 16 digit, NIB = 13 digit
   return cleaned.length === 16 || cleaned.length === 13;
 }
 
 export function isValidNpwp(value: string): boolean {
   const cleaned = value.replace(/\D/g, "");
-  // Format lama 15 digit, format baru (berbasis NIK) 16 digit
   return cleaned.length === 15 || cleaned.length === 16;
 }
 

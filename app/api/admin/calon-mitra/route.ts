@@ -9,8 +9,6 @@ export async function GET() {
     if (authError || !user || user.app_metadata?.role !== 'admin') {
       return NextResponse.json({ error: 'Akses ditolak (Unauthorized)' }, { status: 403 });
     }
-
-    // PERBAIKAN: Gunakan tabel baru secara konsisten
     const [mitra, industri] = await Promise.all([
       supabase.from('mitra_profiles').select('*').eq('status_verifikasi', 'pending'),
       supabase.from('industri_profiles').select('*').eq('status_verifikasi', 'pending'),

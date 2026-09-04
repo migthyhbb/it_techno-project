@@ -3,8 +3,6 @@ import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
-
-    // 1. Parsing body dengan aman
     let body: unknown;
     try {
       body = await request.json();
@@ -17,8 +15,6 @@ export async function POST(request: Request) {
     }
 
     const { email, password } = body as Record<string, unknown>;
-
-    // Validasi input
     if (
       typeof email !== 'string' ||
       typeof password !== 'string' ||
@@ -32,14 +28,10 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
-
-    // 2. Proses Login ke Supabase Auth
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-
-    // 3. Tangani Error Auth (Termasuk Rate Limit)
     if (error) {
       if (error.status === 429) {
         return NextResponse.json(
@@ -61,16 +53,10 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
-
-    // 4. Baca identitas jabatan dari token
     const user = data.user;
     const role = user?.app_metadata?.role;
-
-    // --- 5. TAMBAHAN BARU: PENGECEKAN STATUS VERIFIKASI ADMIN ---
     if (role === 'agen' || role === 'perusahaan') {
       const tableName = role === 'agen' ? 'agen' : 'perusahaan_industri';
-
-      // Cek status di tabel profil
       const { data: profileData, error: profileError } = await supabase
         .from(tableName)
         .select('status_verifikasi')
@@ -81,8 +67,6 @@ export async function POST(request: Request) {
         await supabase.auth.signOut(); // Kick user
         return NextResponse.json({ error: 'Data profil tidak ditemukan.' }, { status: 404 });
       }
-
-      // Pastikan status_verifikasi adalah 'approved' (sesuaikan dengan isi database-mu)
       if (profileData.status_verifikasi !== 'approved') {
         await supabase.auth.signOut(); // Kick user karena belum di-acc
         return NextResponse.json(
@@ -91,9 +75,6 @@ export async function POST(request: Request) {
         );
       }
     }
-    // --- AKHIR PENGECEKAN STATUS ---
-
-    // 6. Kembalikan data ke Frontend jika lulus semua pengecekan
     return NextResponse.json(
       {
         message: 'Login berhasil!',

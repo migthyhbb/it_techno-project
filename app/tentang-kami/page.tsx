@@ -6,7 +6,6 @@ import { motion } from "motion/react";
 import { Navbar } from "@/components/navbar";
 
 export default function TentangKamiPage() {
-  // Variasi animasi untuk mempermudah pemanggilan
   const fadeUp = {
     hidden: { opacity: 0, y: 30 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },

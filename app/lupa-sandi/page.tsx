@@ -20,8 +20,6 @@ export default function LupaSandiPage() {
 
   const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
   const [error, setError] = useState<string | null>(null);
-
-  // Tahap 1: Kirim OTP
   async function handleSendOtp(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -46,13 +44,9 @@ export default function LupaSandiPage() {
       setError(err instanceof Error ? err.message : "Gagal mengirimkan kode OTP");
     }
   }
-
-  // Tahap 2: Verifikasi OTP + Update Kata Sandi
   async function handleVerifyOtpAndReset(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-
-    // Validasi format kata sandi terlebih dahulu
     if (!isValidPassword(newPassword)) {
       setError(validationMessages.password);
       return;
@@ -62,8 +56,6 @@ export default function LupaSandiPage() {
 
     try {
       const supabase = createSupabaseBrowserClient();
-
-      // 1. Verifikasi kode OTP
       const { error: verifyError } = await supabase.auth.verifyOtp({
         email,
         token,
@@ -71,8 +63,6 @@ export default function LupaSandiPage() {
       });
 
       if (verifyError) throw verifyError;
-
-      // 2. Update kata sandi baru
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });

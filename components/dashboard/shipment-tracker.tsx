@@ -34,9 +34,6 @@ export function ShipmentTracker({ status }: { status: ShipmentStatus }) {
       </div>
     );
   }
-
-  // "dijadwalkan" tampil sebagai bagian dari tahap "Menunggu" di tracker
-  // ringkas ini (belum berangkat), supaya stepper-nya tetap 5 titik.
   const effectiveStatus = status === "dijadwalkan" ? "menunggu_konfirmasi" : status;
   const currentIndex = stages.findIndex((s) => s.key === effectiveStatus);
   const idx = currentIndex === -1 ? 0 : currentIndex;

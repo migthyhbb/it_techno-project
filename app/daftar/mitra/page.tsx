@@ -148,14 +148,11 @@ export default function DaftarMitraPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        // Cek apakah user yang sedang terhubung adalah ADMIN
         const { data: adminProfile } = await supabase
           .from("admin_profiles")
           .select("user_id")
           .eq("user_id", user.id)
           .maybeSingle();
-
-        // Jika user adalah ADMIN, bersihkan sesi login agar tidak menimpa/terkontaminasi akun admin!
         if (adminProfile) {
           await supabase.auth.signOut();
           return;
@@ -406,8 +403,6 @@ export default function DaftarMitraPage() {
       }
       return;
     }
-
-    // Step 3: Validasi Form Profil Mitra
     const errors: FieldErrors = {};
     if (!form.nama_mitra.trim()) errors.nama_mitra = "Nama mitra wajib diisi.";
     if (!isValidNikNib(form.nik_nib)) errors.nik_nib = validationMessages.nikNib;
@@ -449,10 +444,6 @@ export default function DaftarMitraPage() {
       const user = session?.user ?? (await supabase.auth.getUser()).data.user;
 
       if (!user) throw new Error("no-session");
-
-      // === PENGECEKAN KETAT IDENTITAS ===
-
-      // 1. Cek di tabel blacklists
       const { data: blacklisted } = await supabase
         .from("blacklists")
         .select("nik_nib, telepon, alasan")
@@ -475,8 +466,6 @@ export default function DaftarMitraPage() {
         await supabase.auth.signOut();
         return;
       }
-
-      // 2. Cek apakah ada profil mitra lain berstatus banned
       const { data: bannedProfile } = await supabase
         .from("mitra_profiles")
         .select("nik_nib, telepon, alasan_ban")

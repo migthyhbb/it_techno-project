@@ -44,9 +44,6 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
-
-    // 1) Buat akun. email_confirm: true supaya akun langsung aktif dan bisa
-    //    langsung masuk tanpa menunggu klik link konfirmasi di email.
     const { data: userData, error: createError } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -59,10 +56,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    // 2) Simpan detail profil, ditautkan ke user_id yang baru dibuat.
-    //    Pakai service role jadi tidak kena RLS — tidak bergantung sesi
-    //    login yang belum tentu ada di titik ini.
     const { error: profileError } = await supabase.from("industri_profiles").insert({
       user_id: userData.user.id,
       nama_perusahaan,
@@ -72,9 +65,6 @@ export async function POST(request: Request) {
     });
     if (profileError) {
       console.error("Gagal menyimpan profil industri:", profileError);
-      // Akun sudah kebuat tapi profil gagal disimpan — hapus lagi akunnya
-      // supaya tidak nyangkut jadi akun "kosong" dan email-nya bisa dipakai
-      // untuk coba daftar ulang.
       await supabase.auth.admin.deleteUser(userData.user.id);
       return NextResponse.json(
         { error: "Gagal menyimpan data profil, coba lagi." },

@@ -24,7 +24,6 @@ export default function AdminPage() {
         .maybeSingle();
 
       if (!adminRow) {
-        // Login valid tapi bukan akun admin — jangan biarkan lihat halaman ini.
         router.replace("/masuk");
         return;
       }

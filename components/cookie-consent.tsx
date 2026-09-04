@@ -7,7 +7,6 @@ export function CookieConsent() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Mengecek apakah user sudah klik "Saya Mengerti" sebelumnya
     const consent = localStorage.getItem("lentera-cookie-consent");
     if (!consent) {
       setIsVisible(true);
@@ -15,7 +14,6 @@ export function CookieConsent() {
   }, []);
 
   const handleAccept = () => {
-    // Menyimpan persetujuan di browser agar pop-up tidak muncul lagi
     localStorage.setItem("lentera-cookie-consent", "true");
     setIsVisible(false);
   };

@@ -27,8 +27,6 @@ export async function POST(req: Request) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-    // Dapatkan sesi user aktif
     const authHeader = req.headers.get("Authorization");
     let userId = null;
 
@@ -37,8 +35,6 @@ export async function POST(req: Request) {
       const { data: { user } } = await supabase.auth.getUser(token);
       if (user) userId = user.id;
     }
-
-    // Jika user id belum didapat via token, coba via sesi client
     if (!userId) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) userId = user.id;
@@ -52,8 +48,6 @@ export async function POST(req: Request) {
     }
 
     const supabaseAdmin = createAdminClient();
-
-    // Simpan ke database Supabase
     const { data, error } = await supabaseAdmin
       .from("waste_shipments")
       .insert({

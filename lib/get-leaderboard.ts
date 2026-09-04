@@ -1,9 +1,6 @@
 import { getUpstashClient, getIoRedisClient } from "./redis";
 import { getSupabaseClient } from "./supabase";
 import { leaderboardEntries as dummyLeaderboardEntries, type LeaderboardEntry } from "./leaderboard-data";
-
-// Nama key sorted-set di Redis. Sesuaikan dengan yang dipakai backend kamu
-// kalau namanya beda.
 const REDIS_KEY = "leaderboard:entries";
 
 /**

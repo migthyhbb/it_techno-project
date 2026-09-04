@@ -45,8 +45,6 @@ export async function POST(request: Request) {
 
     if (uploadError) throw uploadError;
     const { data: urlData } = supabase.storage.from('industri_documents').getPublicUrl(`npwp/${fileName}`);
-
-    // Update ke tabel Industri Profiles
     await supabase.from('industri_profiles').update({
       status_verifikasi: 'need_review',
       url_dokumen_npwp: urlData.publicUrl

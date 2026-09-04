@@ -20,15 +20,12 @@ export async function createClient() {
               cookieStore.set(name, value, options);
             });
           } catch {
-            // Diabaikan untuk server component
           }
         },
       },
     }
   );
 }
-
-// Fungsi Admin yang sudah diperbaiki sesuai standar CodeRabbit
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

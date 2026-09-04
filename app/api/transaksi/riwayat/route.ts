@@ -4,19 +4,13 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
-
-    // 1. Pastikan user sudah login
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Tidak ada akses (Unauthorized)' }, { status: 401 });
     }
-
-    // 2. Ambil parameter dari URL (untuk fitur Filter & Pagination)
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '10');
     const kategori = searchParams.get('kategori'); // misal: 'pembelian' atau 'setoran_limbah'
-
-    // 3. Tarik data dari database (Misal dari tabel transaksi_limbah)
     let query = supabase
       .from('transaksi_limbah')
       .select('*')
@@ -31,8 +25,6 @@ export async function GET(request: Request) {
     const { data: riwayat, error: dbError } = await query;
 
     if (dbError) throw dbError;
-
-    // 4. Kembalikan data
     return NextResponse.json({
       message: "Berhasil mengambil riwayat transaksi",
       total_data: riwayat?.length || 0,

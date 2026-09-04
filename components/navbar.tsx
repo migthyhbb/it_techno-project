@@ -22,8 +22,6 @@ export function Navbar() {
     { href: "/daftar-mitra-industri", label: "Daftar Mitra & Industri" },
     { href: "/kontak", label: "Kontak" },
   ];
-
-  // Mengubah menu yang aktif saat ini menjadi "Beranda" (mengarahkan balik ke "/")
   const links = baseLinks.map((link) => {
     const isActive = pathname === link.href;
     if (isActive) {

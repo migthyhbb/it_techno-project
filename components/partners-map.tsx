@@ -93,7 +93,6 @@ export function PartnersMap() {
       const points: MapPoint[] = [...fixedPengolahanPoints];
 
       try {
-        // Fetch Mitra (Pakai user_id)
         const { data: mitraData } = await supabase
           .from("mitra_profiles")
           .select("user_id, nama_mitra, lat, lng");
@@ -115,8 +114,6 @@ export function PartnersMap() {
             }
           });
         }
-
-        // Fetch Industri (Pakai user_id)
         const { data: industriData } = await supabase
           .from("industri_profiles")
           .select("user_id, nama_perusahaan, lat, lng");

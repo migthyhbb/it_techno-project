@@ -91,10 +91,7 @@ export function LocationPickerMap({ searchQuery, onLocationSelect }: LocationPic
         mapRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Auto-Fly & Simpan Lat/Lng Otomatis saat dropdown Wilayah dipilih
   useEffect(() => {
     if (!searchQuery || !mapRef.current) return;
 
@@ -109,8 +106,6 @@ export function LocationPickerMap({ searchQuery, onLocationSelect }: LocationPic
           const longitude = parseFloat(data[0].lon);
 
           mapRef.current?.flyTo([latitude, longitude], 13, { duration: 1.5 });
-
-          // Update marker & lempar lat/lng ke form pendaftaran
           const L = (await import("leaflet")).default;
           const customIcon = L.divIcon({
             className: "",
@@ -141,7 +136,6 @@ export function LocationPickerMap({ searchQuery, onLocationSelect }: LocationPic
     }, 600);
 
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
 
   return (

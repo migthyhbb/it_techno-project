@@ -76,7 +76,6 @@ export function DashboardSidebar() {
           .maybeSingle();
         if (profile?.nama_perusahaan) namaTampil = profile.nama_perusahaan;
       } else {
-        // Fallback untuk akun Mitra default
         const { data: profile } = await supabase
           .from("mitra_profiles")
           .select("nama_mitra")

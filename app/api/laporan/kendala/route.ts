@@ -27,12 +27,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    // 1. Siapkan Gambar untuk AI
     const bytes = await fileFoto.arrayBuffer();
     const buffer = Buffer.from(bytes);
-
-    // 2. ANALISIS AI GEMINI (Screening Lapis 1)
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const prompt = `
       Kamu adalah inspektur Quality Control (QC). Analisis foto laporan kerusakan ini beserta keluhan dari agen: "${deskripsi}".
@@ -54,8 +50,6 @@ export async function POST(request: Request) {
     let responseText = result.response.text().trim();
     if (responseText.startsWith('```json')) responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
     const aiData = JSON.parse(responseText);
-
-    // 3. UPLOAD FOTO KE STORAGE (Hanya jika disetujui AI atau perlu Review)
     let publicUrl = "";
     if (aiData.is_valid) {
       const fileName = `report_${id_transaksi}_${Date.now()}.${fileFoto.name.split('.').pop()}`;
@@ -67,19 +61,13 @@ export async function POST(request: Request) {
         publicUrl = supabase.storage.from('laporan_bucket').getPublicUrl(fileName).data.publicUrl;
       }
     }
-
-    // 4. TRIAGE / PEMILAHAN STATUS OTOMATIS
     let finalStatus = 'manual_review';
 
     if (!aiData.is_valid) {
-      // DITOLAK OTOMATIS: Foto tidak nyambung atau gelap
       finalStatus = 'rejected_by_ai';
     } else if (aiData.is_valid && aiData.tingkat_kerusakan <= 20) {
-      // AUTO-APPROVAL: Kerusakan ringan di bawah 20%, langsung setujui tanpa admin!
       finalStatus = 'auto_approved';
     }
-
-    // 5. SIMPAN KE DATABASE
     const { error: dbError } = await supabase
       .from('laporan_kendala')
       .insert([{
@@ -93,8 +81,6 @@ export async function POST(request: Request) {
       }]);
 
     if (dbError) throw new Error("Gagal menyimpan laporan ke database");
-
-    // 6. KEMBALIKAN RESPONS KE FRONT-END
     if (finalStatus === 'rejected_by_ai') {
       return NextResponse.json({
         message: "Laporan ditolak otomatis. Bukti foto tidak valid atau tidak menunjukkan kerusakan.",

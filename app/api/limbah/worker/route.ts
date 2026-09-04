@@ -9,8 +9,6 @@ async function handler(request: Request) {
   try {
     const supabase = createAdminClient();
     const { user_id, deskripsi_input, berat_kg, lokasi, foto_url } = await request.json();
-
-    // 1. Prompt Gemini AI (Paksa format JSON ketat)
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
       generationConfig: { responseMimeType: "application/json" } // Fitur baru Gemini: Anti gagal JSON!
@@ -20,14 +18,10 @@ async function handler(request: Request) {
 
     const result = await model.generateContent(prompt);
     const aiData = JSON.parse(result.response.text());
-
-    // 2. Hitung Tagihan vs Poin
     const isB3 = aiData.kategori === 'B3';
     const totalTagihan = isB3 ? (berat_kg * 50000) : 0; // Rp 50.000 per kg untuk B3
     const poinDidapat = isB3 ? 0 : Math.round(berat_kg * 10);
     const statusAwal = isB3 ? 'menunggu_pembayaran' : 'menunggu_konfirmasi';
-
-    // 3. Simpan Keputusan ke Tabel Utama
     const { error: insertError } = await supabase.from('waste_shipments').insert([{
       user_id: user_id,
       nama_limbah: deskripsi_input,

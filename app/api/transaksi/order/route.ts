@@ -59,8 +59,6 @@ export async function POST(request: Request) {
     }
 
     const supabaseAdmin = createAdminClient();
-
-    // 1. Ambil data profil mitra untuk mengetahui wilayah
     const { data: profile } = await supabaseAdmin
       .from('mitra_profiles')
       .select('kota_kabupaten, provinsi, nama_mitra')
@@ -72,8 +70,6 @@ export async function POST(request: Request) {
         error: "Lokasi wilayah mitra tidak ditemukan. Silakan lengkapi profil Anda." 
       }, { status: 400 });
     }
-
-    // 2. Wajib ambil harga spesifik wilayah mitra
     const { data: regPrice } = await supabaseAdmin
       .from('regional_product_prices')
       .select('harga')
@@ -90,15 +86,11 @@ export async function POST(request: Request) {
     const hargaWilayah = Number(regPrice.harga);
     const totalBayar = volume_terjual_kg * hargaWilayah;
     const orderId = `AGEN-${Date.now()}`;
-
-    // 3. Batas minimal pembayaran Midtrans (Rp 10.000)
     if (totalBayar < 10000) {
       return NextResponse.json({
         error: `Total pemesanan minimal Rp 10.000 untuk memproses pembayaran Midtrans. (Total Anda saat ini: Rp ${totalBayar.toLocaleString("id-ID")})`
       }, { status: 400 });
     }
-
-    // 4. Batas maksimal pembayaran Midtrans (Rp 99.999.999.999)
     if (totalBayar > 99999999999) {
       return NextResponse.json({
         error: `Total pemesanan melebihi batas maksimal pembayaran Midtrans (Maksimal Rp 99.999.999.999). Silakan kurangi jumlah pesanan.`
@@ -140,16 +132,12 @@ export async function POST(request: Request) {
     }
 
     const statusPesanan = snapToken ? 'menunggu_pembayaran' : 'diproses';
-
-    // 5. Simpan ke tabel orders
     await supabaseAdmin.from('orders').insert([{
       id: orderId,
       user_id: user.id,
       total_harga: totalBayar,
       status: statusPesanan
     }]);
-
-    // 6. Simpan ke tabel pesanan_mitra
     await supabaseAdmin.from('pesanan_mitra').insert([{
       id: orderId,
       user_id: user.id,

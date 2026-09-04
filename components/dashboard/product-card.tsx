@@ -20,7 +20,6 @@ export function ProductCard({ product }: { product: Product }) {
   const totalHarga = product.price * jumlah;
 
   const handleOrder = async () => {
-    // 1. Validasi Batas Minimal Midtrans (Rp 10.000)
     if (totalHarga < 10000) {
       alert(
         `Gagal memproses pesanan!\n\n` +
@@ -30,8 +29,6 @@ export function ProductCard({ product }: { product: Product }) {
       );
       return;
     }
-
-    // 2. Validasi Batas Maksimal Midtrans (Rp 99.999.999.999)
     if (totalHarga > 99999999999) {
       alert(
         `Gagal memproses pesanan!\n\n` +
@@ -60,8 +57,6 @@ export function ProductCard({ product }: { product: Product }) {
         setLoading(false);
         return;
       }
-
-      // 3. Eksekusi Popup Midtrans Snap jika mendapatkan token
       if (data.token && typeof window !== "undefined" && (window as any).snap) {
         (window as any).snap.pay(data.token, {
           onSuccess: function () {

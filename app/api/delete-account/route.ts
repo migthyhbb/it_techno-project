@@ -33,27 +33,18 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
-
-    // Inisialisasi Supabase Admin Client (Menggunakan Kunci Master)
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
       },
     });
-
-    // --- PROSES SAPU BERSIH DATA (Mencegah Error Foreign Key) ---
-    // 1. Hapus riwayat transaksi terlebih dahulu agar tidak nyangkut
     await supabaseAdmin.from("waste_shipments").delete().eq("user_id", userId);
     await supabaseAdmin.from("orders").delete().eq("user_id", userId);
     await supabaseAdmin.from("pesanan_mitra").delete().eq("user_id", userId);
     await supabaseAdmin.from("pencairan_dana").delete().eq("id_agen", userId);
-
-    // 2. Hapus data profil berdasarkan kemungkinan tipe akun
     await supabaseAdmin.from("mitra_profiles").delete().eq("user_id", userId);
     await supabaseAdmin.from("industri_profiles").delete().eq("user_id", userId);
-
-    // 3. Hapus user dari Supabase Auth secara permanen (auth.users)
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(
       userId
     );

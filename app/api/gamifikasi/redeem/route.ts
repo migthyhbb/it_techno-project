@@ -20,8 +20,6 @@ export async function POST(request: Request) {
     if (!poinNumber || poinNumber < 100) {
       return NextResponse.json({ error: "Minimal penukaran 100 Token." }, { status: 400 });
     }
-
-    // 1. BACA SALDO SAAT INI DULU (Buat hitung-hitungan)
     const { data: profile } = await supabase
       .from('industri_profiles')
       .select('saldo_kredit')
@@ -33,9 +31,6 @@ export async function POST(request: Request) {
     if (saldoSekarang < poinNumber) {
       return NextResponse.json({ error: "Token tidak mencukupi!" }, { status: 400 });
     }
-
-    // 2. ATOMIC TRANSACTION (ANTI RACE-CONDITION)
-    // Cuma mau update KALAU saldonya masih benar-benar cukup saat query ini jalan (mencegah bot multi-klik)
     const supabaseAdmin = createAdminClient();
     const saldoBaru = saldoSekarang - poinNumber;
 
@@ -50,19 +45,14 @@ export async function POST(request: Request) {
     if (updateError) throw updateError;
 
     if (!updatedProfile) {
-      // Kalau nilainya kosong, berarti filter .gte() di atas gagal (saldo sudah ditarik di request lain)
       return NextResponse.json({ error: "Transaksi digagalkan. Saldo berubah." }, { status: 409 });
     }
-
-    // 3. Catat Riwayat Pencairan (Supaya bisa di-audit)
     await supabaseAdmin.from('pencairan_dana').insert([{
       id_agen: user.id,
       jumlah_tarik_tunai: poinNumber,
       bank_tujuan: metode_pencairan,
       status: 'Selesai'
     }]);
-
-    // 4. SINKRONISASI KE REDIS LEADERBOARD (Turunkan Peringkatnya secara real-time)
     await redis.zincrby('eco_credits_leaderboard', -Math.abs(poinNumber), user.id);
 
     return NextResponse.json({

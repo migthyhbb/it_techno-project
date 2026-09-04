@@ -118,8 +118,6 @@ export default function DashboardMitraPage() {
     }
 
     const combinedOrders: Order[] = [];
-
-    // Proses Data Orders Utama
     if (ordersRes.data) {
       ordersRes.data.forEach((o) => {
         let prodName = "Produk Energi";
@@ -139,8 +137,6 @@ export default function DashboardMitraPage() {
         });
       });
     }
-
-    // Proses Data Pesanan Mitra (Menghindari Duplikat)
     if (pmRes.data) {
       pmRes.data.forEach((pm) => {
         if (!combinedOrders.some((o) => o.id === String(pm.id))) {
@@ -266,8 +262,6 @@ export default function DashboardMitraPage() {
               rpKotaClean.includes(userKotaClean)
             );
           });
-
-          // HANYA tampilkan produk yang memiliki penyesuaian harga wilayah dan harganya > 0
           if (regionalMatch && Number(regionalMatch.harga ?? regionalMatch.harga_min ?? 0) > 0) {
             filteredProducts.push({
               id: p.id,

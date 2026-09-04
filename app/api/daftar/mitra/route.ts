@@ -55,8 +55,6 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
-
-    // 1) Buat akun
     const { data: userData, error: createError } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -70,8 +68,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    // 2) Simpan detail profil lengkap beserta detail wilayah & koordinat map
     const { error: profileError } = await supabase.from("mitra_profiles").insert({
       user_id: userData.user.id,
       nama_mitra,

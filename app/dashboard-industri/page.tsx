@@ -66,8 +66,6 @@ export default function DashboardIndustriPage() {
   const [totalTerkirim, setTotalTerkirim] = useState(0);
   const [totalKredit, setTotalKredit] = useState(0);
   const [shipments, setShipments] = useState<WasteShipment[]>([]);
-
-  // State Modal Penjemputan Limbah Biasa
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -77,8 +75,6 @@ export default function DashboardIndustriPage() {
     lokasi: "",
     foto: null as File | null,
   });
-
-  // State Modal Penjemputan Limbah B3
   const [isB3ModalOpen, setIsB3ModalOpen] = useState(false);
   const [formB3, setFormB3] = useState({
     nama_limbah: "",
@@ -87,13 +83,9 @@ export default function DashboardIndustriPage() {
     lokasi: "",
     foto: null as File | null,
   });
-
-  // State Modal Pembayaran B3
   const [selectedPayShipment, setSelectedPayShipment] = useState<WasteShipment | null>(null);
   const [buktiBayarFile, setBuktiBayarFile] = useState<File | null>(null);
   const [isPaying, setIsPaying] = useState(false);
-
-  // State Modal Pencairan (Withdrawal)
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
@@ -102,8 +94,6 @@ export default function DashboardIndustriPage() {
     metode: "Bank Transfer",
     nomor_rekening: "",
   });
-
-  // State Modal Edit Profil Industri
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -114,8 +104,6 @@ export default function DashboardIndustriPage() {
     kota_kabupaten: "",
     alamat: "",
   });
-
-  // State Modal Hapus Akun Industri
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 

@@ -5,8 +5,6 @@ import { Reveal, RevealGroup, RevealItem } from "./ui/reveal";
 import { CompanyLogo } from "./ui/company-logo";
 import { PodiumStep } from "./ui/podium-step";
 import { leaderboardEntries as dummyLeaderboardEntries, type LeaderboardEntry } from "@/lib/leaderboard-data";
-
-// Urutan tampil podium: 2 - 1 - 3 (klasik), beserta tinggi & warna tiap anak tangga.
 const podiumOrder = [2, 1, 3];
 
 const podiumConfig: Record<

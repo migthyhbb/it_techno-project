@@ -4,14 +4,10 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET() {
   try {
     const supabase = await createClient();
-
-    // Pastikan user sudah login (Agen atau Perusahaan)
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Ambil data katalog yang aktif, diurutkan dari yang stoknya paling banyak
     const { data: produk, error: dbError } = await supabase
       .from('katalog_produk')
       .select('*')

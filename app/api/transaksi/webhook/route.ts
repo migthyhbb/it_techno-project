@@ -5,15 +5,11 @@ import { isValidMidtransSignature } from "@/lib/midtrans-signature";
 export async function POST(request: Request) {
   try {
     const body = await request.json() as Record<string, unknown>;
-
-    // Casting aman untuk menghindari tipe 'any'
     const order_id = String(body.order_id || "");
     const transaction_status = String(body.transaction_status || "");
     const status_code = String(body.status_code || "");
     const gross_amount = String(body.gross_amount || "");
     const signature_key = String(body.signature_key || "");
-
-    // 1. VERIFIKASI SIGNATURE MUTLAK (Copilot pasti suka ini!)
     const serverKey = process.env.MIDTRANS_SERVER_KEY;
     if (!serverKey) {
       console.error("MIDTRANS_SERVER_KEY belum dikonfigurasi.");
@@ -82,11 +78,8 @@ export async function POST(request: Request) {
     }
 
     const supabase = createAdminClient();
-
-    // 2. IDEMPOTENCY CHECK (Mencegah Stok Berkurang 2 Kali)
     if (order_id.startsWith("B3-")) {
       const cleanId = order_id.replace("B3-", "");
-      // Cek apakah sudah diproses sebelumnya
       const { data: existing, error: lookupError } = await supabase
         .from("waste_shipments")
         .select("status")
@@ -104,7 +97,6 @@ export async function POST(request: Request) {
       }
     }
     else if (order_id.startsWith("AGEN-")) {
-      // Pastikan hanya pesanan berstatus "PENDING" yang stoknya dipotong
       const { data: pesanan, error: pesananError } = await supabase
         .from("pesanan_mitra")
         .select("status, produk_id, jumlah")

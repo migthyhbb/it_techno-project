@@ -109,9 +109,18 @@ export async function middleware(request: NextRequest) {
   // Jika mencoba ke area proteksi tanpa login -> lempar ke login
   if (isDashboardRoute && !user) return redirectSambilBawaCookie("/masuk");
 
-  // Deteksi Role Hanya Jika Diperlukan (Akses Dashboard / Halaman Auth saat terautentikasi)
+  // A. PERBAIKAN: Jika mengakses rute Pendaftaran (/daftar, /daftar/mitra, /daftar/industri)
+  // Biarkan user/admin selalu bisa mengakses form pendaftaran dan bersihkan sesi lamanya
+  if (url.startsWith("/daftar")) {
+    if (user) {
+      await supabase.auth.signOut();
+    }
+    return supabaseResponse;
+  }
+
+  // Deteksi Role Hanya Jika Diperlukan
   let role = "mitra";
-  if (user && (isDashboardRoute || url === "/masuk" || url === "/login" || url === "/daftar")) {
+  if (user && (isDashboardRoute || url === "/masuk" || url === "/login")) {
     try {
       const { data: adminRow } = await supabase
         .from("admin_profiles")
@@ -137,8 +146,8 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Redirect jika user yang sudah login mencoba akses halaman login/daftar
-  if ((url === "/masuk" || url === "/login" || url === "/daftar") && user) {
+  // B. Redirect ke dashboard HANYA jika mencoba akses halaman masuk (/masuk atau /login) saat sudah punya sesi login aktif
+  if ((url === "/masuk" || url === "/login") && user) {
     if (role === "admin") return redirectSambilBawaCookie("/dashboard-admin");
     if (role === "industri") return redirectSambilBawaCookie("/dashboard-industri");
     return redirectSambilBawaCookie("/dashboard");

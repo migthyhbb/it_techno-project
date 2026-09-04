@@ -78,8 +78,6 @@ function LegalShellContent({
     </div>
   );
 }
-
-// Wrapper Suspense untuk mencegah error "npm run build" di Vercel
 export function LegalShell(props: LegalShellProps) {
   return (
     <Suspense fallback={<div className="min-h-screen bg-cream p-12 text-forest">Memuat...</div>}>

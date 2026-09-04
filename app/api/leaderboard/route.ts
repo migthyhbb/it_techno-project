@@ -31,8 +31,6 @@ export async function GET() {
     if (leaderboardData.length === 0) {
       return NextResponse.json({ message: "Leaderboard kosong.", data: [] }, { status: 200 });
     }
-
-    // UPDATE PENTING: Ambil data dari industri_profiles
     const { data: companies, error } = await supabase
       .from('industri_profiles')
       .select('user_id, nama_perusahaan, url_dokumen_npwp')

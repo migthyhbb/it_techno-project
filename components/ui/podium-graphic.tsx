@@ -1,6 +1,3 @@
-// Podium 3D buatan sendiri (SVG, isometrik sederhana) — dipakai supaya posisi
-// kartu logo perusahaan bisa dihitung tepat dari koordinat yang sama dengan
-// gambarnya sendiri, bukan diperkirakan dari foto.
 
 type Shade = { front: string; top: string; side: string; text: string };
 
@@ -9,8 +6,6 @@ const shades: Record<"gold" | "forest" | "clay", Shade> = {
   forest: { front: "#17301F", top: "#26472F", side: "#0F2417", text: "#F6F2E6" },
   clay: { front: "#7A5738", top: "#977151", side: "#5E4229", text: "#F6F2E6" },
 };
-
-// Geometri bersama (viewBox 620x300). dx/dy = arah "kedalaman" isometrik.
 const DX = 34;
 const DY = -20;
 const Y_BASE = 280;
@@ -29,9 +24,6 @@ const blocks: BlockSpec[] = [
   { x: 180, w: 170, yTop: 110, accent: "gold", label: "1", fontSize: 46 },
   { x: 365, w: 150, yTop: 200, accent: "clay", label: "3", fontSize: 36 },
 ];
-
-// Titik tengah-atas tiap balok, dalam persen dari viewBox — dipakai untuk
-// menaruh kartu logo di leaderboard.tsx supaya presisi di atas anak tangga.
 export const podiumAnchors: Record<
   1 | 2 | 3,
   { left: string; top: string }

@@ -11,7 +11,6 @@ const redis = new Redis({
 
 export async function POST(request: Request) {
   try {
-    // 1. Ambil Token Autentikasi dari Header
     const authHeader = request.headers.get("Authorization");
     const supabase = await createClient();
     
@@ -22,8 +21,6 @@ export async function POST(request: Request) {
       const { data: { user } } = await supabase.auth.getUser(token);
       if (user) userId = user.id;
     }
-
-    // Fallback jika token dikirim via Cookie Sesi Server
     if (!userId) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) userId = user.id;
@@ -32,8 +29,6 @@ export async function POST(request: Request) {
     if (!userId) {
       return NextResponse.json({ error: "Sesi tidak valid / Belum login." }, { status: 401 });
     }
-
-    // Rate Limiting via Redis
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
       || request.headers.get("x-real-ip")
       || "unknown";
@@ -46,8 +41,6 @@ export async function POST(request: Request) {
         { status: 429 }
       );
     }
-
-    // 2. Tangkap Payload Lengkap (Biasa & B3)
     const {
       deskripsi_input,
       berat_kg,
@@ -64,8 +57,6 @@ export async function POST(request: Request) {
     }
 
     const supabaseAdmin = createAdminClient();
-
-    // 3. JIKA PERMINTAAN LIMBAH B3: LANGSUNG CATAT DENGAN STATUS "Menunggu Pembayaran"
     if (is_b3) {
       const { data, error } = await supabaseAdmin.from('waste_shipments').insert([{
         user_id: userId,
@@ -87,8 +78,6 @@ export async function POST(request: Request) {
         data
       }, { status: 201 });
     }
-
-    // 4. HEURISTIC FILTER (Jalur Cepat Non-B3)
     const kataKunciAman = ['kardus', 'kertas', 'plastik', 'botol', 'kayu', 'serbuk', 'daun', 'organik'];
     const inputLowerCase = deskripsi_input.toLowerCase();
     const isOtomatisAman = kataKunciAman.some(kata => inputLowerCase.includes(kata));
@@ -118,7 +107,6 @@ export async function POST(request: Request) {
       }, { status: 201 });
 
     } else {
-      // 5. PROSES AMBIGU: Lempar ke AI Worker (QStash)
       const workerUrl = process.env.NODE_ENV === 'production'
         ? `https://${process.env.VERCEL_URL}/api/limbah/worker`
         : process.env.NGROK_URL + '/api/limbah/worker';

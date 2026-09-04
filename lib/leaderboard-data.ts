@@ -10,11 +10,6 @@ export interface LeaderboardEntry {
   logoUrl?: string;
   accent: "gold" | "forest" | "clay" | "green";
 }
-
-// Data dummy (fallback) — dipakai kalau Supabase / API custom belum
-// dikonfigurasi, atau saat fetch ke sana gagal. Lihat lib/get-leaderboard.ts.
-// logoUrl mengarah ke public/images/logos/ — kalau field ini kosong,
-// CompanyLogo otomatis jatuh ke ikon abstrak (logoType) sebagai fallback.
 export const leaderboardEntries: LeaderboardEntry[] = [
   {
     rank: 1,

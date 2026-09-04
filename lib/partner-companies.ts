@@ -9,8 +9,6 @@ export interface PartnerCompany {
   logoType: CompanyIconType;
   accent: "gold" | "forest" | "clay" | "green";
 }
-
-// Data contoh (dummy) — ganti dengan daftar mitra/industri sesungguhnya.
 export const partnerCompanies: PartnerCompany[] = [
   {
     name: "PT Cipta Industri Nusantara",
