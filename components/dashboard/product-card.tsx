@@ -24,7 +24,7 @@ export function ProductCard({ product }: { product: Product }) {
     if (totalHarga < 10000) {
       alert(
         `Gagal memproses pesanan!\n\n` +
-        `Sistem pembayaran Midtrans mensyaratkan total transaksi minimal Rp 10.000.\n` +
+        `Sistem pembayaran mensyaratkan total transaksi minimal Rp 10.000.\n` +
         `Total saat ini: Rp ${totalHarga.toLocaleString("id-ID")}.\n` +
         `Silakan tambah jumlah pesanan kamu.`
       );
