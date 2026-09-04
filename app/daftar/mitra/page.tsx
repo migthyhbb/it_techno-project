@@ -47,8 +47,8 @@ type FormState = {
   email: string;
   otp: string;
   password: string;
-  nama_perusahaan: string;
-  npwp: string;
+  nama_mitra: string;
+  nik_nib: string;
   provinsi: string;
   kota: string;
   kecamatan: string;
@@ -57,26 +57,27 @@ type FormState = {
   telepon: string;
   lat: number | null;
   lng: number | null;
-  foto_npwp: File | null;
+  foto_nik: File | null;
 };
 
 type FieldErrors = Partial<
   Record<
-    | "nama_perusahaan"
-    | "npwp"
+    | "nama_mitra"
+    | "nik_nib"
     | "provinsi"
     | "kota"
     | "kecamatan"
     | "kelurahan"
     | "detail_alamat"
     | "telepon"
-    | "foto_npwp",
+    | "foto_nik",
     string
   >
 >;
 
 function formatHumanFriendlyError(err: unknown): string {
   if (!err) return "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi.";
+
   const message = typeof err === "string" ? err : (err as { message?: string })?.message || "";
 
   if (message.includes("Payload too large") || message.includes("413") || message.includes("exceeds")) {
@@ -88,8 +89,9 @@ function formatHumanFriendlyError(err: unknown): string {
   if (message.includes("bucket") || message.includes("storage")) {
     return "Gagal mengunggah dokumen. Silakan periksa koneksi internet Anda dan coba lagi.";
   }
+
   if (message.includes("duplicate key") || message.includes("already exists")) {
-    return "Data NPWP, nomor telepon, atau profil industri ini sudah pernah terdaftar.";
+    return "Data NIK/NIB, nomor telepon, atau profil mitra ini sudah pernah terdaftar.";
   }
   if (message.includes("different") || message.includes("same password")) {
     return "Kata sandi baru tidak boleh sama dengan kata sandi lama.";
@@ -102,10 +104,11 @@ function formatHumanFriendlyError(err: unknown): string {
   if (translated !== "Terjadi kesalahan, coba lagi.") {
     return translated;
   }
+
   return "Gagal memproses pendaftaran. Silakan periksa kembali data Anda dan coba lagi.";
 }
 
-export default function DaftarIndustriPage() {
+export default function DaftarMitraPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -113,8 +116,8 @@ export default function DaftarIndustriPage() {
     email: "",
     otp: "",
     password: "",
-    nama_perusahaan: "",
-    npwp: "",
+    nama_mitra: "",
+    nik_nib: "",
     provinsi: "",
     kota: "",
     kecamatan: "",
@@ -123,7 +126,7 @@ export default function DaftarIndustriPage() {
     telepon: "",
     lat: null,
     lng: null,
-    foto_npwp: null,
+    foto_nik: null,
   });
 
   const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
@@ -150,6 +153,7 @@ export default function DaftarIndustriPage() {
           .select("user_id")
           .eq("user_id", user.id)
           .maybeSingle();
+
         if (adminProfile) {
           await supabase.auth.signOut();
           return;
@@ -162,7 +166,7 @@ export default function DaftarIndustriPage() {
           .maybeSingle();
 
         const { data: profile } = await supabase
-          .from("industri_profiles")
+          .from("mitra_profiles")
           .select("id, status_akun, alasan_ban")
           .eq("user_id", user.id)
           .maybeSingle();
@@ -171,12 +175,12 @@ export default function DaftarIndustriPage() {
           const alasan = blacklisted?.alasan || profile?.alasan_ban || "Pelanggaran ketentuan layanan.";
           alert(`Akun Anda telah diblokir/di-ban!\nAlasan: ${alasan}`);
           await supabase.auth.signOut();
-          router.replace("/masuk");
+          window.location.href = "/masuk";
           return;
         }
 
         if (profile) {
-          router.replace("/dashboard");
+          window.location.href = "/dashboard";
           return;
         }
 
@@ -400,15 +404,16 @@ export default function DaftarIndustriPage() {
       }
       return;
     }
-    const errors: FieldErrors = {};
-    if (!form.nama_perusahaan.trim()) errors.nama_perusahaan = "Nama perusahaan wajib diisi.";
-    
-    if (!isValidNikNib(form.npwp)) errors.npwp = "Format NPWP / NIB tidak valid.";
 
-    if (!form.foto_npwp) {
-      errors.foto_npwp = "Foto NPWP / Dokumen Usaha wajib diupload.";
-    } else if (form.foto_npwp.size > 5 * 1024 * 1024) {
-      errors.foto_npwp = "Ukuran gambar terlalu besar. Maksimal 5MB.";
+    // Step 3 Validation
+    const errors: FieldErrors = {};
+    if (!form.nama_mitra.trim()) errors.nama_mitra = "Nama mitra wajib diisi.";
+    if (!isValidNikNib(form.nik_nib)) errors.nik_nib = validationMessages.nikNib;
+
+    if (!form.foto_nik) {
+      errors.foto_nik = "Foto NIK/NPWP wajib diupload.";
+    } else if (form.foto_nik.size > 5 * 1024 * 1024) {
+      errors.foto_nik = "Ukuran gambar terlalu besar. Maksimal 5MB.";
     }
 
     if (!form.provinsi) errors.provinsi = "Provinsi wajib dipilih.";
@@ -436,85 +441,104 @@ export default function DaftarIndustriPage() {
     try {
       const supabase = createSupabaseBrowserClient();
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user ?? (await supabase.auth.getUser()).data.user;
+      await supabase.auth.refreshSession();
+
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+      if (!currentUser) {
+        if (form.email && form.password) {
+          const { data: reloginData, error: reloginErr } = await supabase.auth.signInWithPassword({
+            email: form.email,
+            password: form.password,
+          });
+
+          if (reloginErr || !reloginData.user) {
+            throw new Error("no-session");
+          }
+        } else {
+          throw new Error("no-session");
+        }
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) throw new Error("no-session");
+
       const { data: blacklisted } = await supabase
         .from("blacklists")
         .select("nik_nib, telepon, alasan")
-        .or(`nik_nib.eq.${form.npwp},telepon.eq.${form.telepon},user_id.eq.${user.id}`)
+        .or(`nik_nib.eq.${form.nik_nib},telepon.eq.${form.telepon},user_id.eq.${user.id}`)
         .maybeSingle();
 
       if (blacklisted) {
         const reason = blacklisted.alasan || "Terdaftar dalam daftar hitam penangguhan akun.";
-        
+
         await supabase.from("blacklists").upsert({
           user_id: user.id,
           email: user.email,
-          nik_nib: form.npwp,
+          nik_nib: form.nik_nib,
           telepon: form.telepon,
           alasan: `Pendaftaran ditolak otomatis: ${reason}`
         });
 
         setStatus("idle");
-        setError(`Pendaftaran ditolak: NPWP (${form.npwp}) atau Nomor Telepon (${form.telepon}) Anda terdaftar dalam daftar hitam penangguhan akun. Alasan: ${reason}`);
+        setError(`Pendaftaran ditolak: NIK/NIB (${form.nik_nib}) atau Nomor Telepon (${form.telepon}) Anda terdaftar dalam daftar hitam penangguhan akun. Alasan: ${reason}`);
         await supabase.auth.signOut();
         return;
       }
+
       const { data: bannedProfile } = await supabase
-        .from("industri_profiles")
-        .select("npwp, nik_nib, telepon, alasan_ban")
+        .from("mitra_profiles")
+        .select("nik_nib, telepon, alasan_ban")
         .eq("status_akun", "banned")
-        .or(`npwp.eq.${form.npwp},nik_nib.eq.${form.npwp},telepon.eq.${form.telepon}`)
+        .or(`nik_nib.eq.${form.nik_nib},telepon.eq.${form.telepon}`)
         .maybeSingle();
 
       if (bannedProfile) {
         const reason = bannedProfile.alasan_ban || "Pelanggaran ketentuan layanan.";
+
         await supabase.from("blacklists").upsert({
           user_id: user.id,
           email: user.email,
-          nik_nib: form.npwp,
+          nik_nib: form.nik_nib,
           telepon: form.telepon,
           alasan: `Pendaftaran ditolak otomatis: ${reason}`
         });
 
         setStatus("idle");
-        setError(`Pendaftaran ditolak: NPWP atau Nomor Telepon ini terhubung dengan akun industri yang telah di-ban! Alasan: ${reason}`);
+        setError(`Pendaftaran ditolak: NIK/NIB atau Nomor Telepon ini terhubung dengan akun mitra yang telah di-ban! Alasan: ${reason}`);
         await supabase.auth.signOut();
         return;
       }
 
       let fotoUrl = "";
-      if (form.foto_npwp) {
-        if (!["image/jpeg", "image/png", "image/jpg"].includes(form.foto_npwp.type)) {
+      if (form.foto_nik) {
+        if (!["image/jpeg", "image/png", "image/jpg"].includes(form.foto_nik.type)) {
           setStatus("idle");
           setError("Format gambar tidak didukung. Harap upload foto JPG/PNG.");
           return;
         }
 
-        const fileExt = form.foto_npwp.name.split(".").pop();
+        const fileExt = form.foto_nik.name.split(".").pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
-          .from("industri_documents")
-          .upload(`npwp/${fileName}`, form.foto_npwp);
+          .from("mitra_documents")
+          .upload(`nik/${fileName}`, form.foto_nik);
 
         if (uploadError) throw uploadError;
 
         const { data: publicUrlData } = supabase.storage
-          .from("industri_documents")
-          .getPublicUrl(`npwp/${fileName}`);
+          .from("mitra_documents")
+          .getPublicUrl(`nik/${fileName}`);
 
         fotoUrl = publicUrlData.publicUrl;
       }
 
-      const { error: profileError } = await supabase.from("industri_profiles").upsert(
+      const { error: profileError } = await supabase.from("mitra_profiles").upsert(
         {
           user_id: user.id,
-          nama_perusahaan: form.nama_perusahaan,
-          npwp: form.npwp,
+          nama_mitra: form.nama_mitra,
+          nik_nib: form.nik_nib,
           provinsi: form.provinsi,
           kota_kabupaten: form.kota,
           kecamatan: form.kecamatan,
@@ -523,7 +547,7 @@ export default function DaftarIndustriPage() {
           telepon: form.telepon,
           lat: form.lat !== null ? Number(form.lat) : null,
           lng: form.lng !== null ? Number(form.lng) : null,
-          foto_npwp_url: fotoUrl,
+          foto_nik_url: fotoUrl,
           status_akun: "aktif",
         },
         { onConflict: "user_id" }
@@ -533,11 +557,19 @@ export default function DaftarIndustriPage() {
 
       await supabase.auth.refreshSession();
       setStatus("submitted");
-      router.refresh();
-      router.push("/dashboard");
-    } catch (err) {
+      
+      // Menggunakan hard redirect agar cookie ter-sync utuh melewati Middleware Next.js
+      window.location.href = "/dashboard";
+    } catch (err: any) {
       setStatus("idle");
-      setError(formatHumanFriendlyError(err));
+      if (err?.message === "no-session") {
+        setError("Sesi pendaftaran Anda telah berakhir. Mengembalikan ke verifikasi email...");
+        setTimeout(() => {
+          setStep(0);
+        }, 1500);
+      } else {
+        setError(formatHumanFriendlyError(err));
+      }
     }
   }
 
@@ -545,9 +577,9 @@ export default function DaftarIndustriPage() {
 
   return (
     <AuthShell
-      eyebrow="Pendaftaran Industri"
-      title="Daftar sebagai Industri"
-      subtitle="Untuk pabrik dan perusahaan penghasil limbah energi."
+      eyebrow="Pendaftaran mitra"
+      title="Daftar sebagai Mitra"
+      subtitle="Untuk agen dan distributor energi LENTERA."
       footer={
         <p className="text-sm text-ink/60 space-y-1.5">
           <span className="block">
@@ -557,8 +589,8 @@ export default function DaftarIndustriPage() {
             </Link>
           </span>
           <span className="block">
-            Mau daftar sebagai mitra?{" "}
-            <Link href="/daftar/mitra" className="text-green font-medium hover:underline">
+            Mau daftar sebagai industri?{" "}
+            <Link href="/daftar/industri" className="text-green font-medium hover:underline">
               Klik di sini
             </Link>
           </span>
@@ -567,7 +599,7 @@ export default function DaftarIndustriPage() {
     >
       {status === "submitted" ? (
         <div className="text-center py-4">
-          <p className="text-forest font-medium mb-1">Pendaftaran industri berhasil!</p>
+          <p className="text-forest font-medium mb-1">Pendaftaran mitra berhasil!</p>
           <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
         </div>
       ) : (
@@ -586,11 +618,11 @@ export default function DaftarIndustriPage() {
               >
                 {step === 0 && (
                   <FormField
-                    label="Email Perusahaan"
+                    label="Email"
                     type="email"
                     value={form.email}
                     onChange={(e) => update("email", e.target.value)}
-                    placeholder="kontak@perusahaan.com"
+                    placeholder="nama@email.com"
                     required
                     autoFocus
                   />
@@ -636,46 +668,46 @@ export default function DaftarIndustriPage() {
                 {step === 3 && (
                   <>
                     <FormField
-                      label="Nama Perusahaan"
+                      label="Nama mitra"
                       type="text"
-                      value={form.nama_perusahaan}
-                      onChange={(e) => update("nama_perusahaan", e.target.value)}
-                      placeholder="PT / CV / Usaha Dagang"
+                      value={form.nama_mitra}
+                      onChange={(e) => update("nama_mitra", e.target.value)}
+                      placeholder="Nama perorangan / usaha"
                       required
                       autoFocus
                     />
-                    {fieldErrors.nama_perusahaan && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.nama_perusahaan}</p>
+                    {fieldErrors.nama_mitra && (
+                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.nama_mitra}</p>
                     )}
 
                     <FormField
-                      label="NPWP / NIB"
+                      label="NIK / NIB"
                       type="text"
-                      value={form.npwp}
-                      onChange={(e) => update("npwp", e.target.value)}
-                      placeholder="Nomor NPWP atau NIB Perusahaan"
+                      value={form.nik_nib}
+                      onChange={(e) => update("nik_nib", e.target.value)}
+                      placeholder="16 digit NIK atau 13 digit NIB"
                       required
                     />
-                    {fieldErrors.npwp && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.npwp}</p>
+                    {fieldErrors.nik_nib && (
+                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.nik_nib}</p>
                     )}
 
                     <div className="mb-4 text-left">
                       <label className="block text-sm font-medium mb-1.5 text-ink">
-                        Upload Foto NPWP / NIB
+                        Upload Foto NIK / NPWP
                       </label>
                       <input
                         type="file"
                         accept="image/png, image/jpeg, image/jpg"
                         onChange={(e) =>
-                          setForm((f) => ({ ...f, foto_npwp: e.target.files?.[0] || null }))
+                          setForm((f) => ({ ...f, foto_nik: e.target.files?.[0] || null }))
                         }
                         className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2 bg-white"
                         required
                       />
                       <p className="text-[11px] text-ink/50 mt-1">Maksimal ukuran berkas: 5MB (JPG, JPEG, PNG)</p>
-                      {fieldErrors.foto_npwp && (
-                        <p className="text-xs text-red-600 mt-1.5">{fieldErrors.foto_npwp}</p>
+                      {fieldErrors.foto_nik && (
+                        <p className="text-xs text-red-600 mt-1.5">{fieldErrors.foto_nik}</p>
                       )}
                     </div>
 
@@ -764,7 +796,7 @@ export default function DaftarIndustriPage() {
 
                     <div className="mb-4 text-left">
                       <label className="block text-sm font-medium mb-1.5 text-ink">
-                        Pilih Titik Lokasi Usaha/Pabrik
+                        Pilih Titik Lokasi Usaha/Bangunan
                       </label>
                       <LocationPickerMap
                         searchQuery={searchQuery}
@@ -777,7 +809,7 @@ export default function DaftarIndustriPage() {
                       type="text"
                       value={form.detail_alamat}
                       onChange={(e) => update("detail_alamat", e.target.value.toUpperCase())}
-                      placeholder="Jalan, RT/RW, kavling bangunan pabrik"
+                      placeholder="Jalan, RT/RW, no. rumah, patokan"
                       required
                     />
                     {fieldErrors.detail_alamat && (
@@ -791,7 +823,7 @@ export default function DaftarIndustriPage() {
                       type="tel"
                       value={form.telepon}
                       onChange={(e) => update("telepon", e.target.value)}
-                      placeholder="081200000000 / (021) xxxx"
+                      placeholder="081200000000"
                       required
                     />
                     {fieldErrors.telepon && (
@@ -825,7 +857,7 @@ export default function DaftarIndustriPage() {
                   ? "Verifikasi"
                   : step < stepLabels.length - 1
                   ? "Lanjut"
-                  : "Daftar sebagai Industri"}
+                  : "Daftar sebagai Mitra"}
               </SubmitButton>
             </div>
           </form>
