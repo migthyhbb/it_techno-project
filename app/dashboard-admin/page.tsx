@@ -77,6 +77,9 @@ export default function DashboardAdminPage() {
   const [regionalPrices, setRegionalPrices] = useState<RegionalProductPrice[]>([]);
   const [usersList, setUsersList] = useState<UserAccount[]>([]);
 
+  // State pencarian harga wilayah
+  const [searchQuery, setSearchQuery] = useState("");
+
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedUserDetail, setSelectedUserDetail] = useState<UserAccount | null>(null);
 
@@ -545,6 +548,15 @@ export default function DashboardAdminPage() {
     setPriceModalOpen(true);
   };
 
+  // Filter daftar harga berdasarkan pencarian kota / provinsi / produk
+  const filteredRegionalPrices = regionalPrices.filter((rp) => {
+    const query = searchQuery.toLowerCase();
+    const matchesKota = rp.kota.toLowerCase().includes(query);
+    const matchesProvinsi = rp.provinsi.toLowerCase().includes(query);
+    const matchesProduk = rp.products?.nama_produk?.toLowerCase().includes(query) || false;
+    return matchesKota || matchesProvinsi || matchesProduk;
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-cream">
@@ -557,619 +569,632 @@ export default function DashboardAdminPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-cream relative overflow-x-hidden">
+    <div className="flex h-screen w-screen bg-cream overflow-hidden">
       <AdminSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <main className="flex-1 min-w-0 px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-6xl pt-24 md:pt-12">
-        <div className="mb-8">
-          <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">Administrator Portal</p>
-          <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest capitalize">{activeTab.replace("-", " ")}</h1>
-        </div>
-
-        {activeTab === "ringkasan" && (
-          <div className="space-y-5">
-            <div className="bg-paper p-5 md:p-6 rounded-2xl border border-forest/10 shadow-xs">
-              <h3 className="font-display font-semibold text-lg text-forest mb-1.5">Selamat Datang di Portal Kendali</h3>
-              <p className="text-sm text-ink/60 leading-relaxed">
-                Pantau statistik utama, kelola akun, dan navigasikan katalog produk serta pengiriman dari satu tempat.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
-                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Mitra</p>
-                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{usersList.filter((u) => u.tipe === "mitra").length}</p>
-              </div>
-              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
-                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Industri</p>
-                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{usersList.filter((u) => u.tipe === "industri").length}</p>
-              </div>
-              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
-                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Pengiriman Limbah</p>
-                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{shipments.length}</p>
-              </div>
-              <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
-                <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Produk Katalog</p>
-                <p className="font-display font-semibold text-xl md:text-2xl text-forest">{products.length}</p>
-              </div>
-            </div>
+      <main className="flex-1 min-w-0 h-full overflow-y-auto px-4 sm:px-6 md:px-12 py-6 md:py-12 pt-24 md:pt-12">
+        <div className="max-w-6xl mx-auto">
+          <div className="mb-8">
+            <p className="font-mono text-xs tracking-widest uppercase text-green mb-1">Administrator Portal</p>
+            <h1 className="font-display font-semibold text-2xl md:text-3xl text-forest capitalize">{activeTab.replace("-", " ")}</h1>
           </div>
-        )}
 
-        {(activeTab === "manajemen-pengguna" || activeTab === "manajemen-akun") && (
-          <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-forest/10 bg-forest/5 flex justify-between items-center">
-              <div>
-                <h3 className="font-display font-semibold text-forest text-base">Daftar Akun Mitra & Industri</h3>
-                <p className="text-xs text-ink/60">Inspeksi profil lengkap, foto KTP/NPWP, dan set kuota transaksi.</p>
+          {activeTab === "ringkasan" && (
+            <div className="space-y-5">
+              <div className="bg-paper p-5 md:p-6 rounded-2xl border border-forest/10 shadow-xs">
+                <h3 className="font-display font-semibold text-lg text-forest mb-1.5">Selamat Datang di Portal Kendali</h3>
+                <p className="text-sm text-ink/60 leading-relaxed">
+                  Pantau statistik utama, kelola akun, dan navigasikan katalog produk serta pengiriman dari satu tempat.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                  <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Mitra</p>
+                  <p className="font-display font-semibold text-xl md:text-2xl text-forest">{usersList.filter((u) => u.tipe === "mitra").length}</p>
+                </div>
+                <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                  <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Total Industri</p>
+                  <p className="font-display font-semibold text-xl md:text-2xl text-forest">{usersList.filter((u) => u.tipe === "industri").length}</p>
+                </div>
+                <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                  <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Pengiriman Limbah</p>
+                  <p className="font-display font-semibold text-xl md:text-2xl text-forest">{shipments.length}</p>
+                </div>
+                <div className="bg-paper p-4 md:p-5 rounded-2xl border border-forest/10 shadow-xs flex flex-col justify-center">
+                  <p className="text-[10px] sm:text-xs text-ink/50 uppercase font-mono mb-1">Produk Katalog</p>
+                  <p className="font-display font-semibold text-xl md:text-2xl text-forest">{products.length}</p>
+                </div>
               </div>
             </div>
+          )}
 
-            <div className="block md:hidden p-4 space-y-4 bg-cream/30">
-              {usersList.map((usr, index) => (
-                <div key={`mobile-usr-${usr.user_id}-${index}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-semibold text-forest text-sm">{usr.nama}</h4>
-                      <p className="text-xs text-ink/60 uppercase font-mono mt-0.5">{usr.tipe} • {usr.nik_nib}</p>
+          {(activeTab === "manajemen-pengguna" || activeTab === "manajemen-akun") && (
+            <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
+              <div className="p-4 border-b border-forest/10 bg-forest/5 flex justify-between items-center">
+                <div>
+                  <h3 className="font-display font-semibold text-forest text-base">Daftar Akun Mitra & Industri</h3>
+                  <p className="text-xs text-ink/60">Inspeksi profil lengkap, foto KTP/NPWP, dan set kuota transaksi.</p>
+                </div>
+              </div>
+
+              <div className="block md:hidden p-4 space-y-4 bg-cream/30">
+                {usersList.map((usr, index) => (
+                  <div key={`mobile-usr-${usr.user_id}-${index}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-semibold text-forest text-sm">{usr.nama}</h4>
+                        <p className="text-xs text-ink/60 uppercase font-mono mt-0.5">{usr.tipe} • {usr.nik_nib}</p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${usr.status_akun === "banned" ? "bg-red-100 text-red-700" : "bg-green/10 text-green"}`}>
+                        {usr.status_akun}
+                      </span>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${usr.status_akun === "banned" ? "bg-red-100 text-red-700" : "bg-green/10 text-green"}`}>
-                      {usr.status_akun}
-                    </span>
-                  </div>
 
-                  {usr.tipe === "mitra" && (
-                    <div className="text-xs text-ink/70">
-                      Penggunaan Kuota: <span className="font-mono font-medium text-forest">{usr.total_pemesanan} / {usr.kuota_pemesanan ?? 30}</span>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-forest/5 mt-1">
-                    <button onClick={() => { setSelectedUserDetail(usr); setDetailModalOpen(true); }} className="flex-1 text-xs font-medium py-2 bg-forest/5 text-forest rounded-lg hover:bg-forest/10 transition-colors text-center cursor-pointer">
-                      Detail
-                    </button>
                     {usr.tipe === "mitra" && (
-                      <button onClick={() => handleOpenOrdersModal(usr)} className="flex-1 text-xs font-medium py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-center cursor-pointer">
-                        Pesanan
-                      </button>
+                      <div className="text-xs text-ink/70">
+                        Penggunaan Kuota: <span className="font-mono font-medium text-forest">{usr.total_pemesanan} / {usr.kuota_pemesanan ?? 30}</span>
+                      </div>
                     )}
-                    {usr.status_akun === "banned" ? (
-                      <button onClick={() => handleUnbanUser(usr)} className="flex-1 text-xs font-semibold py-2 bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 transition-colors text-center cursor-pointer">
-                        Lepas Ban
+
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-forest/5 mt-1">
+                      <button onClick={() => { setSelectedUserDetail(usr); setDetailModalOpen(true); }} className="flex-1 text-xs font-medium py-2 bg-forest/5 text-forest rounded-lg hover:bg-forest/10 transition-colors text-center cursor-pointer">
+                        Detail
                       </button>
-                    ) : (
-                      <button onClick={() => { setSelectedUser(usr); setBanModalOpen(true); }} className="flex-1 text-xs font-semibold py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-center cursor-pointer">
-                        Ban
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
-                  <tr>
-                    <th className="p-4">Nama / Perusahaan</th>
-                    <th className="p-4">Tipe</th>
-                    <th className="p-4">NIK / NIB / NPWP</th>
-                    <th className="p-4">Penggunaan Kuota</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-forest/10">
-                  {usersList.map((usr, index) => (
-                    <tr key={`desktop-usr-${usr.user_id}-${index}`} className="hover:bg-forest/[0.02] transition-colors">
-                      <td className="p-4 font-medium text-forest">{usr.nama}</td>
-                      <td className="p-4 capitalize text-xs font-mono">{usr.tipe}</td>
-                      <td className="p-4 text-xs font-mono">{usr.nik_nib}</td>
-                      <td className="p-4 text-xs">
-                        {usr.tipe === "mitra" ? (
-                          <span className="font-mono font-medium text-forest">{usr.total_pemesanan} / {usr.kuota_pemesanan ?? 30}</span>
-                        ) : (
-                          <span className="text-ink/40 italic">-</span>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold ${usr.status_akun === "banned" ? "bg-red-100 text-red-700" : "bg-green/10 text-green"}`}>
-                          {usr.status_akun}
-                        </span>
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => { setSelectedUserDetail(usr); setDetailModalOpen(true); }} className="text-xs font-medium px-2.5 py-1.5 bg-forest/10 text-forest rounded-lg hover:bg-forest/20 transition-colors cursor-pointer">
-                            Detail
-                          </button>
-                          {usr.tipe === "mitra" && (
-                            <button onClick={() => handleOpenOrdersModal(usr)} className="text-xs font-medium px-2.5 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors cursor-pointer">
-                              Pesanan
-                            </button>
-                          )}
-                          {usr.status_akun === "banned" ? (
-                            <button onClick={() => handleUnbanUser(usr)} className="text-xs font-semibold px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer">
-                              Lepas Ban
-                            </button>
-                          ) : (
-                            <button onClick={() => { setSelectedUser(usr); setBanModalOpen(true); }} className="text-xs font-semibold px-2.5 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors cursor-pointer">
-                              Ban
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {activeTab === "katalog-produk" && (
-          <section className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-xs text-ink/60">Daftar produk energi yang terdaftar secara nasional.</p>
-              <button onClick={() => setProductModalOpen(true)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer">
-                + Tambah Produk Baru
-              </button>
-            </div>
-            <div className="grid sm:grid-cols-3 gap-4">
-              {products.map((p) => (
-                <div key={p.id} className="bg-paper border border-forest/10 p-5 rounded-2xl flex flex-col relative group shadow-xs">
-                  <button onClick={() => handleDeleteProduct(p.id)} className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer">
-                    Hapus
-                  </button>
-                  <h3 className="font-display font-semibold text-forest text-lg pr-10">{p.nama_produk}</h3>
-                  <p className="text-xs text-ink/60 mb-3 leading-relaxed">{p.deskripsi}</p>
-                  <div className="mt-auto border-t border-forest/10 pt-3">
-                    <p className="text-[10px] text-ink/50 uppercase tracking-widest">Harga Nasional (Default)</p>
-                    <p className="font-semibold text-green">Rp {p.harga_default?.toLocaleString("id-ID")} <span className="text-xs font-normal text-ink/50">/{p.satuan}</span></p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {activeTab === "harga-wilayah" && (
-          <section className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-xs text-ink/60">Penyesuaian harga dan ketersediaan stok produk per daerah.</p>
-              <button onClick={() => setPriceModalOpen(true)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer">
-                + Set Harga Wilayah
-              </button>
-            </div>
-            <div className="grid sm:grid-cols-3 gap-4">
-              {regionalPrices.length === 0 && (
-                <div className="col-span-3 p-8 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">
-                  Belum ada penyesuaian harga spesifik daerah.
-                </div>
-              )}
-              {regionalPrices.map((rp) => (
-                <div key={rp.id} className="bg-paper rounded-2xl border border-forest/10 p-5 relative group shadow-xs">
-                  <button onClick={() => handleEditPriceClick(rp)} className="absolute top-4 right-16 text-blue-500 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer">
-                    Edit
-                  </button>
-                  <button onClick={() => handleDeleteRegionalPrice(rp.id)} className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer">
-                    Hapus
-                  </button>
-                  <p className="text-[10px] uppercase text-ink/50 mb-1 pr-16">{rp.kota}, {rp.provinsi}</p>
-                  <h3 className="font-semibold text-forest text-lg mb-1">{rp.products?.nama_produk}</h3>
-                  <div className="text-sm text-ink/70 space-y-1 mt-2 border-t border-forest/10 pt-2">
-                    <p>Harga: <span className="font-bold text-green">Rp {rp.harga?.toLocaleString("id-ID")}</span></p>
-                    <p>Stok: <span className="font-bold text-forest">{rp.stok} {rp.products?.satuan || "karung"}</span></p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {activeTab === "pengiriman" && (
-          <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
-            <div className="block md:hidden p-4 space-y-4 bg-cream/30">
-              {shipments.map((ship) => (
-                <div key={`mobile-ship-${ship.id}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-semibold text-forest text-sm">{ship.industri_profiles?.nama_perusahaan || "-"}</h4>
-                      <p className="text-xs text-ink/70 mt-1">{ship.nama_limbah} <span className="font-semibold">({ship.perkiraan_berat}kg)</span></p>
-                    </div>
-                    <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${ship.status.toLowerCase() === "selesai" ? "bg-green/10 text-green" : ship.status.toLowerCase() === "diperjalanan" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-800"}`}>
-                      {ship.status}
-                    </span>
-                  </div>
-                  <div className="text-xs text-ink/60 bg-forest/5 p-2 rounded-lg">
-                    <span className="block font-medium text-ink/80 mb-0.5">Lokasi Penjemputan:</span>
-                    {ship.lokasi_penjemputan}
-                  </div>
-                  <div className="pt-2 border-t border-forest/5 mt-1">
-                    <button onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }} className="w-full text-xs font-semibold py-2 bg-green/10 text-green rounded-lg hover:bg-green/20 transition-colors text-center cursor-pointer">
-                      Ubah Status
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
-                  <tr>
-                    <th className="p-4">Industri</th>
-                    <th className="p-4">Limbah & Berat</th>
-                    <th className="p-4">Lokasi Penjemputan</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-forest/10">
-                  {shipments.map((ship) => (
-                    <tr key={`desktop-ship-${ship.id}`} className="hover:bg-forest/[0.02] transition-colors">
-                      <td className="p-4 font-medium text-forest">{ship.industri_profiles?.nama_perusahaan || "-"}</td>
-                      <td className="p-4">{ship.nama_limbah} ({ship.perkiraan_berat}kg)</td>
-                      <td className="p-4 text-xs max-w-xs truncate">{ship.lokasi_penjemputan}</td>
-                      <td className="p-4 font-bold text-xs">
-                        <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] ${ship.status.toLowerCase() === "selesai" ? "bg-green/10 text-green" : ship.status.toLowerCase() === "diperjalanan" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-800"}`}>
-                          {ship.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-center">
-                        <button onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }} className="text-green hover:underline text-xs font-medium cursor-pointer">
-                          Ubah Status
+                      {usr.tipe === "mitra" && (
+                        <button onClick={() => handleOpenOrdersModal(usr)} className="flex-1 text-xs font-medium py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-center cursor-pointer">
+                          Pesanan
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {/* MODAL DETAIL USER */}
-        {detailModalOpen && selectedUserDetail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-start mb-4 border-b border-forest/10 pb-3">
-                <div>
-                  <span className="text-[10px] uppercase font-mono tracking-widest text-green">Profil {selectedUserDetail.tipe}</span>
-                  <h3 className="font-display font-semibold text-xl text-forest">{selectedUserDetail.nama}</h3>
-                </div>
-                <button onClick={() => setDetailModalOpen(false)} className="text-ink/40 hover:text-ink text-sm font-bold cursor-pointer">✕</button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mb-6">
-                <div className="bg-white p-3 rounded-xl border border-forest/10 space-y-1.5">
-                  <p className="text-ink/50 uppercase font-mono text-[10px]">Identitas Resmi</p>
-                  <p><span className="font-semibold">NIK / NIB / NPWP:</span> {selectedUserDetail.nik_nib}</p>
-                  <p><span className="font-semibold">Telepon:</span> {selectedUserDetail.telepon}</p>
-                  <p><span className="font-semibold">Status Akun:</span> <span className="capitalize font-bold">{selectedUserDetail.status_akun}</span></p>
-                  {selectedUserDetail.alasan_ban && <p className="text-red-600"><span className="font-semibold">Alasan Ban:</span> {selectedUserDetail.alasan_ban}</p>}
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-forest/10 space-y-1.5">
-                  <p className="text-ink/50 uppercase font-mono text-[10px]">Alamat & Wilayah Operasional</p>
-                  <p><span className="font-semibold">Provinsi:</span> {selectedUserDetail.provinsi}</p>
-                  <p><span className="font-semibold">Kota / Kab:</span> {selectedUserDetail.kota_kabupaten}</p>
-                  <p><span className="font-semibold">Kec / Kel:</span> {selectedUserDetail.kecamatan}, {selectedUserDetail.kelurahan}</p>
-                  <p><span className="font-semibold">Detail Alamat:</span> {selectedUserDetail.alamat}</p>
-                  <p><span className="font-semibold">Koordinat GPS:</span> {selectedUserDetail.lat && selectedUserDetail.lng ? `${selectedUserDetail.lat}, ${selectedUserDetail.lng}` : "Belum di-set"}</p>
-                </div>
-              </div>
-              <div className="mb-6">
-                <p className="text-xs font-semibold text-forest mb-2">Dokumen Verifikasi (Foto KTP / NPWP):</p>
-                {selectedUserDetail.foto_doc_url ? (
-                  <div className="bg-black/5 rounded-xl p-2 border border-forest/10 overflow-hidden text-center">
-                    <a href={selectedUserDetail.foto_doc_url} target="_blank" rel="noopener noreferrer">
-                      <img src={selectedUserDetail.foto_doc_url} alt="Foto Dokumen" className="max-h-64 object-contain mx-auto rounded-lg hover:opacity-90 transition-opacity" />
-                    </a>
+                      )}
+                      {usr.status_akun === "banned" ? (
+                        <button onClick={() => handleUnbanUser(usr)} className="flex-1 text-xs font-semibold py-2 bg-emerald-100 text-emerald-800 rounded-lg hover:bg-emerald-200 transition-colors text-center cursor-pointer">
+                          Lepas Ban
+                        </button>
+                      ) : (
+                        <button onClick={() => { setSelectedUser(usr); setBanModalOpen(true); }} className="flex-1 text-xs font-semibold py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-center cursor-pointer">
+                          Ban
+                        </button>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-6 text-center text-ink/40 text-xs">Foto dokumen tidak diunggah atau belum tersedia.</div>
-                )}
-              </div>
-              <div className="flex justify-end pt-3 border-t border-forest/10">
-                <button type="button" onClick={() => setDetailModalOpen(false)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 cursor-pointer">Tutup Profil</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL PESANAN MITRA */}
-        {ordersModalOpen && selectedUserDetail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-3 sm:p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-4xl p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
-              
-              {/* Header Modal */}
-              <div className="flex justify-between items-start mb-4 border-b border-forest/10 pb-3">
-                <div>
-                  <span className="text-[10px] uppercase font-mono tracking-widest text-blue-600 font-semibold">Riwayat & Status Pesanan</span>
-                  <h3 className="font-display font-semibold text-lg sm:text-xl text-forest">{selectedUserDetail.nama}</h3>
-                </div>
-                <button onClick={() => setOrdersModalOpen(false)} className="text-ink/40 hover:text-ink text-base font-bold cursor-pointer p-1">✕</button>
+                ))}
               </div>
 
-              {/* Form Kuota */}
-              <form onSubmit={handleUpdateQuota} className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 sm:p-4 mb-5 flex flex-col sm:flex-row sm:items-end gap-3">
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold text-blue-900 mb-1">Batas Kuota Pemesanan Akun Ini:</label>
-                  <input type="number" min={0} required value={newQuota} onChange={(e) => setNewQuota(Number(e.target.value))} className="w-full border border-blue-300 p-2 rounded-xl text-sm bg-white outline-none font-mono focus:ring-2 focus:ring-blue-500/20" />
-                </div>
-                <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50">
-                  {isSubmitting ? "Menyimpan..." : "Simpan Kuota Baru"}
-                </button>
-              </form>
-
-              {/* Daftar Transaksi */}
-              <div className="mb-4">
-                <h4 className="font-semibold text-forest text-sm mb-3">Daftar Transaksi Pemesanan</h4>
-                
-                {loadingOrders ? (
-                  <p className="text-xs text-ink/50 py-6 text-center">Memuat riwayat transaksi...</p>
-                ) : userOrders.length === 0 ? (
-                  <div className="bg-white border border-forest/10 rounded-xl p-6 text-center text-xs text-ink/50">Mitra ini belum pernah melakukan pemesanan produk.</div>
-                ) : (
-                  <>
-                    {/* TAMPILAN MOBILE: CARD LAYOUT */}
-                    <div className="block md:hidden space-y-3">
-                      {userOrders.map((ord) => (
-                        <div key={ord.id} className="bg-white border border-forest/10 rounded-xl p-4 shadow-2xs space-y-2.5">
-                          <div className="flex justify-between items-start gap-2 border-b border-forest/5 pb-2">
-                            <div>
-                              <p className="text-[10px] text-ink/40 uppercase font-mono tracking-wider">ID Transaksi</p>
-                              <p className="font-mono text-xs font-medium text-forest break-all select-all">{ord.id}</p>
-                            </div>
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize shrink-0 ${ord.status === "dikirim" ? "bg-amber-100 text-amber-800 border border-amber-200" : ord.status === "selesai" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
-                              {ord.status}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <p className="text-[10px] text-ink/50 uppercase font-mono">Produk</p>
-                              <p className="font-semibold text-forest line-clamp-1">{ord.nama_produk || "Produk Energi"}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-[10px] text-ink/50 uppercase font-mono">Tanggal</p>
-                              <p className="text-ink/70 font-medium">{new Date(ord.created_at).toLocaleDateString("id-ID")}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex justify-between items-end pt-2 border-t border-forest/5">
-                            <div>
-                              <p className="text-[10px] text-ink/50 uppercase font-mono">Total Biaya</p>
-                              <p className="font-bold text-green text-sm">Rp {ord.total_harga?.toLocaleString("id-ID")}</p>
-                            </div>
-
-                            {ord.bukti_pengiriman_url && (
-                              <button
-                                type="button"
-                                onClick={(e) => { e.preventDefault(); setSelectedProofUrl(ord.bukti_pengiriman_url!); setProofModalOpen(true); }}
-                                className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 font-semibold cursor-pointer py-1 px-2 rounded-md bg-blue-50"
-                              >
-                                📎 Lihat Bukti
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
+                    <tr>
+                      <th className="p-4">Nama / Perusahaan</th>
+                      <th className="p-4">Tipe</th>
+                      <th className="p-4">NIK / NIB / NPWP</th>
+                      <th className="p-4">Penggunaan Kuota</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-forest/10">
+                    {usersList.map((usr, index) => (
+                      <tr key={`desktop-usr-${usr.user_id}-${index}`} className="hover:bg-forest/[0.02] transition-colors">
+                        <td className="p-4 font-medium text-forest">{usr.nama}</td>
+                        <td className="p-4 capitalize text-xs font-mono">{usr.tipe}</td>
+                        <td className="p-4 text-xs font-mono">{usr.nik_nib}</td>
+                        <td className="p-4 text-xs">
+                          {usr.tipe === "mitra" ? (
+                            <span className="font-mono font-medium text-forest">{usr.total_pemesanan} / {usr.kuota_pemesanan ?? 30}</span>
+                          ) : (
+                            <span className="text-ink/40 italic">-</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold ${usr.status_akun === "banned" ? "bg-red-100 text-red-700" : "bg-green/10 text-green"}`}>
+                            {usr.status_akun}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button onClick={() => { setSelectedUserDetail(usr); setDetailModalOpen(true); }} className="text-xs font-medium px-2.5 py-1.5 bg-forest/10 text-forest rounded-lg hover:bg-forest/20 transition-colors cursor-pointer">
+                              Detail
+                            </button>
+                            {usr.tipe === "mitra" && (
+                              <button onClick={() => handleOpenOrdersModal(usr)} className="text-xs font-medium px-2.5 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors cursor-pointer">
+                                Pesanan
+                              </button>
+                            )}
+                            {usr.status_akun === "banned" ? (
+                              <button onClick={() => handleUnbanUser(usr)} className="text-xs font-semibold px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer">
+                                Lepas Ban
+                              </button>
+                            ) : (
+                              <button onClick={() => { setSelectedUser(usr); setBanModalOpen(true); }} className="text-xs font-semibold px-2.5 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors cursor-pointer">
+                                Ban
                               </button>
                             )}
                           </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
-                          <button
-                            onClick={() => { setSelectedOrderUpdate(ord); setNewOrderStatus(ord.status); setProofFile(null); setOrderStatusModalOpen(true); }}
-                            className="w-full text-xs font-semibold py-2 bg-forest/5 text-forest hover:bg-forest/10 rounded-lg transition-colors cursor-pointer text-center mt-1"
-                          >
-                            Ubah Status & Upload Bukti
-                          </button>
-                        </div>
-                      ))}
+          {activeTab === "katalog-produk" && (
+            <section className="space-y-4">
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-xs text-ink/60">Daftar produk energi yang terdaftar secara nasional.</p>
+                <button onClick={() => setProductModalOpen(true)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer">
+                  + Tambah Produk Baru
+                </button>
+              </div>
+              <div className="grid sm:grid-cols-3 gap-4">
+                {products.map((p) => (
+                  <div key={p.id} className="bg-paper border border-forest/10 p-5 rounded-2xl flex flex-col relative group shadow-xs">
+                    <button onClick={() => handleDeleteProduct(p.id)} className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer">
+                      Hapus
+                    </button>
+                    <h3 className="font-display font-semibold text-forest text-lg pr-10">{p.nama_produk}</h3>
+                    <p className="text-xs text-ink/60 mb-3 leading-relaxed">{p.deskripsi}</p>
+                    <div className="mt-auto border-t border-forest/10 pt-3">
+                      <p className="text-[10px] text-ink/50 uppercase tracking-widest">Harga Nasional (Default)</p>
+                      <p className="font-semibold text-green">Rp {p.harga_default?.toLocaleString("id-ID")} <span className="text-xs font-normal text-ink/50">/{p.satuan}</span></p>
                     </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
-                    {/* TAMPILAN DESKTOP: TABEL */}
-                    <div className="hidden md:block border border-forest/10 rounded-xl overflow-hidden bg-white">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
-                          <tr>
-                            <th className="p-3">ID Pesanan</th>
-                            <th className="p-3">Nama Produk</th>
-                            <th className="p-3">Tanggal</th>
-                            <th className="p-3">Total Biaya</th>
-                            <th className="p-3">Status Pengiriman</th>
-                            <th className="p-3 text-center">Aksi</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-forest/10">
-                          {userOrders.map((ord) => (
-                            <tr key={ord.id} className="hover:bg-forest/[0.02]">
-                              <td className="p-3 font-mono font-medium text-forest text-[11px] break-all select-all">
-                                {ord.id}
-                              </td>
-                              <td className="p-3 font-semibold text-forest">
-                                {ord.nama_produk || "Produk Energi"}
-                              </td>
-                              <td className="p-3 text-ink/60 whitespace-nowrap">
-                                {new Date(ord.created_at).toLocaleDateString("id-ID")}
-                              </td>
-                              <td className="p-3 font-semibold text-green whitespace-nowrap">
-                                Rp {ord.total_harga?.toLocaleString("id-ID")}
-                              </td>
-                              <td className="p-3">
-                                <div className="flex flex-col gap-1 items-start">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${ord.status === "dikirim" ? "bg-amber-100 text-amber-800" : ord.status === "selesai" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"}`}>{ord.status}</span>
-                                  {ord.bukti_pengiriman_url && <button type="button" onClick={(e) => { e.preventDefault(); setSelectedProofUrl(ord.bukti_pengiriman_url!); setProofModalOpen(true); }} className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-1 cursor-pointer font-medium">📎 Lihat Bukti</button>}
-                                </div>
-                              </td>
-                              <td className="p-3 text-center">
-                                <button onClick={() => { setSelectedOrderUpdate(ord); setNewOrderStatus(ord.status); setProofFile(null); setOrderStatusModalOpen(true); }} className="text-green hover:underline text-xs font-medium cursor-pointer">Ubah Status & Bukti</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
+          {activeTab === "harga-wilayah" && (
+            <section className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                <div className="flex-1 max-w-sm relative">
+                  <input
+                    type="text"
+                    placeholder="Cari wilayah (contoh: Palembang, Jambi)..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-paper border border-forest/20 rounded-xl px-3.5 py-2 text-xs text-forest placeholder:text-ink/40 outline-none focus:border-forest focus:ring-1 focus:ring-forest transition-all"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-ink/40 hover:text-ink text-xs font-bold cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <button onClick={() => setPriceModalOpen(true)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 shadow-xs cursor-pointer shrink-0">
+                  + Set Harga Wilayah
+                </button>
+              </div>
+
+              <div className="grid sm:grid-cols-3 gap-4">
+                {filteredRegionalPrices.length === 0 && (
+                  <div className="col-span-3 p-8 bg-paper border border-forest/10 rounded-2xl text-center text-ink/50 text-sm">
+                    {searchQuery ? `Tidak ditemukan harga untuk wilayah "${searchQuery}".` : "Belum ada penyesuaian harga spesifik daerah."}
+                  </div>
                 )}
+                {filteredRegionalPrices.map((rp) => (
+                  <div key={rp.id} className="bg-paper rounded-2xl border border-forest/10 p-5 relative group shadow-xs">
+                    <button onClick={() => handleEditPriceClick(rp)} className="absolute top-4 right-16 text-blue-500 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer">
+                      Edit
+                    </button>
+                    <button onClick={() => handleDeleteRegionalPrice(rp.id)} className="absolute top-4 right-4 text-ink/30 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium cursor-pointer">
+                      Hapus
+                    </button>
+                    <p className="text-[10px] uppercase text-ink/50 mb-1 pr-16">{rp.kota}, {rp.provinsi}</p>
+                    <h3 className="font-semibold text-forest text-lg mb-1">{rp.products?.nama_produk}</h3>
+                    <div className="text-sm text-ink/70 space-y-1 mt-2 border-t border-forest/10 pt-2">
+                      <p>Harga: <span className="font-bold text-green">Rp {rp.harga?.toLocaleString("id-ID")}</span></p>
+                      <p>Stok: <span className="font-bold text-forest">{rp.stok} {rp.products?.satuan || "karung"}</span></p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {activeTab === "pengiriman" && (
+            <section className="bg-paper rounded-2xl border border-forest/10 overflow-hidden shadow-xs">
+              <div className="block md:hidden p-4 space-y-4 bg-cream/30">
+                {shipments.map((ship) => (
+                  <div key={`mobile-ship-${ship.id}`} className="bg-white border border-forest/10 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-semibold text-forest text-sm">{ship.industri_profiles?.nama_perusahaan || "-"}</h4>
+                        <p className="text-xs text-ink/70 mt-1">{ship.nama_limbah} <span className="font-semibold">({ship.perkiraan_berat}kg)</span></p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] font-bold shrink-0 ${ship.status.toLowerCase() === "selesai" ? "bg-green/10 text-green" : ship.status.toLowerCase() === "diperjalanan" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-800"}`}>
+                        {ship.status}
+                      </span>
+                    </div>
+                    <div className="text-xs text-ink/60 bg-forest/5 p-2 rounded-lg">
+                      <span className="block font-medium text-ink/80 mb-0.5">Lokasi Penjemputan:</span>
+                      {ship.lokasi_penjemputan}
+                    </div>
+                    <div className="pt-2 border-t border-forest/5 mt-1">
+                      <button onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }} className="w-full text-xs font-semibold py-2 bg-green/10 text-green rounded-lg hover:bg-green/20 transition-colors text-center cursor-pointer">
+                        Ubah Status
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              <div className="flex justify-end pt-3 border-t border-forest/10">
-                <button type="button" onClick={() => setOrdersModalOpen(false)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 cursor-pointer">Tutup Modal</button>
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
+                    <tr>
+                      <th className="p-4">Industri</th>
+                      <th className="p-4">Limbah & Berat</th>
+                      <th className="p-4">Lokasi Penjemputan</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-forest/10">
+                    {shipments.map((ship) => (
+                      <tr key={`desktop-ship-${ship.id}`} className="hover:bg-forest/[0.02] transition-colors">
+                        <td className="p-4 font-medium text-forest">{ship.industri_profiles?.nama_perusahaan || "-"}</td>
+                        <td className="p-4">{ship.nama_limbah} ({ship.perkiraan_berat}kg)</td>
+                        <td className="p-4 text-xs max-w-xs truncate">{ship.lokasi_penjemputan}</td>
+                        <td className="p-4 font-bold text-xs">
+                          <span className={`px-2.5 py-1 rounded-full uppercase tracking-wider text-[10px] ${ship.status.toLowerCase() === "selesai" ? "bg-green/10 text-green" : ship.status.toLowerCase() === "diperjalanan" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-800"}`}>
+                            {ship.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <button onClick={() => { setSelectedShipment(ship); setNewStatus(ship.status); setStatusModalOpen(true); }} className="text-green hover:underline text-xs font-medium cursor-pointer">
+                            Ubah Status
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-          </div>
-        )}
+            </section>
+          )}
 
-        {orderStatusModalOpen && selectedOrderUpdate && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
-              <h3 className="font-display font-semibold text-forest mb-4">Ubah Status & Upload Bukti</h3>
-              <form onSubmit={handleSaveOrderStatus} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Status Pesanan</label>
-                  <select value={newOrderStatus} onChange={(e) => setNewOrderStatus(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer">
-                    <option value={newOrderStatus} className="hidden">{newOrderStatus}</option>
-                    <option value="menunggu_pembayaran">Menunggu Pembayaran</option>
-                    <option value="diproses">Diproses</option>
-                    <option value="dikirim">Dikirim (Dalam Pengiriman)</option>
-                    <option value="selesai">Selesai</option>
-                    <option value="dibatalkan">Dibatalkan</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Foto Bukti Pengiriman (Opsional)</label>
-                  <input type="file" accept="image/*" onChange={(e) => setProofFile(e.target.files?.[0] || null)} className="w-full text-xs text-ink/70 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-forest/10 file:text-forest hover:file:bg-forest/20 cursor-pointer border border-ink/20 rounded-xl p-1 bg-white" />
-                  {selectedOrderUpdate.bukti_pengiriman_url && !proofFile && <p className="text-[10px] text-green mt-1">✓ Bukti sudah pernah diupload sebelumnya.</p>}
-                </div>
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setOrderStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Perubahan"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {banModalOpen && selectedUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
-              <h3 className="font-display font-semibold text-red-800 mb-2">Blokir / Ban Akun</h3>
-              <p className="text-xs text-ink/70 mb-4">Anda akan memblokir <span className="font-bold">{selectedUser.nama}</span> ({selectedUser.nik_nib}). NIK/NIB ini akan dimasukkan ke daftar hitam.</p>
-              <form onSubmit={handleBanUser} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Alasan Pemblokiran</label>
-                  <textarea required rows={3} placeholder="Misal: Pengiriman data fiktif..." value={banReason} onChange={(e) => setBanReason(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none resize-none" />
-                </div>
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setBanModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Memproses..." : "Ya, Ban Akun"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {priceModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
-              <h3 className="font-display font-semibold text-forest mb-4">Set Harga & Stok Wilayah</h3>
-              <form onSubmit={handleSavePrice} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-ink mb-1">Pilih Produk</label>
-                  <select className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white cursor-pointer" required value={formPrice.product_id} onChange={(e) => setFormPrice({ ...formPrice, product_id: e.target.value })}>
-                    <option value="">-- Pilih Produk --</option>
-                    {products.map((p) => <option key={p.id} value={p.id}>{p.nama_produk}</option>)}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+          {/* MODAL DETAIL USER */}
+          {detailModalOpen && selectedUserDetail && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+              <div className="bg-paper rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-start mb-4 border-b border-forest/10 pb-3">
                   <div>
-                    <label className="block text-xs font-medium text-ink mb-1">Provinsi</label>
-                    <select className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase outline-none bg-white cursor-pointer" onChange={handleProvinsiChange} value={provinces.find((p) => p.name.toUpperCase() === formPrice.provinsi.toUpperCase())?.id || ""} required>
-                      <option value="">PROVINSI</option>
-                      {provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    <span className="text-[10px] uppercase font-mono tracking-widest text-green">Profil {selectedUserDetail.tipe}</span>
+                    <h3 className="font-display font-semibold text-xl text-forest">{selectedUserDetail.nama}</h3>
+                  </div>
+                  <button onClick={() => setDetailModalOpen(false)} className="text-ink/40 hover:text-ink text-sm font-bold cursor-pointer">✕</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mb-6">
+                  <div className="bg-white p-3 rounded-xl border border-forest/10 space-y-1.5">
+                    <p className="text-ink/50 uppercase font-mono text-[10px]">Identitas Resmi</p>
+                    <p><span className="font-semibold">NIK / NIB / NPWP:</span> {selectedUserDetail.nik_nib}</p>
+                    <p><span className="font-semibold">Telepon:</span> {selectedUserDetail.telepon}</p>
+                    <p><span className="font-semibold">Status Akun:</span> <span className="capitalize font-bold">{selectedUserDetail.status_akun}</span></p>
+                    {selectedUserDetail.alasan_ban && <p className="text-red-600"><span className="font-semibold">Alasan Ban:</span> {selectedUserDetail.alasan_ban}</p>}
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-forest/10 space-y-1.5">
+                    <p className="text-ink/50 uppercase font-mono text-[10px]">Alamat & Wilayah Operasional</p>
+                    <p><span className="font-semibold">Provinsi:</span> {selectedUserDetail.provinsi}</p>
+                    <p><span className="font-semibold">Kota / Kab:</span> {selectedUserDetail.kota_kabupaten}</p>
+                    <p><span className="font-semibold">Kec / Kel:</span> {selectedUserDetail.kecamatan}, {selectedUserDetail.kelurahan}</p>
+                    <p><span className="font-semibold">Detail Alamat:</span> {selectedUserDetail.alamat}</p>
+                    <p><span className="font-semibold">Koordinat GPS:</span> {selectedUserDetail.lat && selectedUserDetail.lng ? `${selectedUserDetail.lat}, ${selectedUserDetail.lng}` : "Belum di-set"}</p>
+                  </div>
+                </div>
+                <div className="mb-6">
+                  <p className="text-xs font-semibold text-forest mb-2">Dokumen Verifikasi (Foto KTP / NPWP):</p>
+                  {selectedUserDetail.foto_doc_url ? (
+                    <div className="bg-black/5 rounded-xl p-2 border border-forest/10 overflow-hidden text-center">
+                      <a href={selectedUserDetail.foto_doc_url} target="_blank" rel="noopener noreferrer">
+                        <img src={selectedUserDetail.foto_doc_url} alt="Foto Dokumen" className="max-h-64 object-contain mx-auto rounded-lg hover:opacity-90 transition-opacity" />
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-6 text-center text-ink/40 text-xs">Foto dokumen tidak diunggah atau belum tersedia.</div>
+                  )}
+                </div>
+                <div className="flex justify-end pt-3 border-t border-forest/10">
+                  <button type="button" onClick={() => setDetailModalOpen(false)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 cursor-pointer">Tutup Profil</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL PESANAN MITRA */}
+          {ordersModalOpen && selectedUserDetail && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-3 sm:p-4">
+              <div className="bg-paper rounded-2xl shadow-xl w-full max-w-4xl p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-start mb-4 border-b border-forest/10 pb-3">
+                  <div>
+                    <span className="text-[10px] uppercase font-mono tracking-widest text-blue-600 font-semibold">Riwayat & Status Pesanan</span>
+                    <h3 className="font-display font-semibold text-lg sm:text-xl text-forest">{selectedUserDetail.nama}</h3>
+                  </div>
+                  <button onClick={() => setOrdersModalOpen(false)} className="text-ink/40 hover:text-ink text-base font-bold cursor-pointer p-1">✕</button>
+                </div>
+
+                <form onSubmit={handleUpdateQuota} className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 sm:p-4 mb-5 flex flex-col sm:flex-row sm:items-end gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-semibold text-blue-900 mb-1">Batas Kuota Pemesanan Akun Ini:</label>
+                    <input type="number" min={0} required value={newQuota} onChange={(e) => setNewQuota(Number(e.target.value))} className="w-full border border-blue-300 p-2 rounded-xl text-sm bg-white outline-none font-mono focus:ring-2 focus:ring-blue-500/20" />
+                  </div>
+                  <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50">
+                    {isSubmitting ? "Menyimpan..." : "Simpan Kuota Baru"}
+                  </button>
+                </form>
+
+                <div className="mb-4">
+                  <h4 className="font-semibold text-forest text-sm mb-3">Daftar Transaksi Pemesanan</h4>
+                  
+                  {loadingOrders ? (
+                    <p className="text-xs text-ink/50 py-6 text-center">Memuat riwayat transaksi...</p>
+                  ) : userOrders.length === 0 ? (
+                    <div className="bg-white border border-forest/10 rounded-xl p-6 text-center text-xs text-ink/50">Mitra ini belum pernah melakukan pemesanan produk.</div>
+                  ) : (
+                    <>
+                      <div className="block md:hidden space-y-3">
+                        {userOrders.map((ord) => (
+                          <div key={ord.id} className="bg-white border border-forest/10 rounded-xl p-4 shadow-2xs space-y-2.5">
+                            <div className="flex justify-between items-start gap-2 border-b border-forest/5 pb-2">
+                              <div>
+                                <p className="text-[10px] text-ink/40 uppercase font-mono tracking-wider">ID Transaksi</p>
+                                <p className="font-mono text-xs font-medium text-forest break-all select-all">{ord.id}</p>
+                              </div>
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize shrink-0 ${ord.status === "dikirim" ? "bg-amber-100 text-amber-800 border border-amber-200" : ord.status === "selesai" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                                {ord.status}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <p className="text-[10px] text-ink/50 uppercase font-mono">Produk</p>
+                                <p className="font-semibold text-forest line-clamp-1">{ord.nama_produk || "Produk Energi"}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] text-ink/50 uppercase font-mono">Tanggal</p>
+                                <p className="text-ink/70 font-medium">{new Date(ord.created_at).toLocaleDateString("id-ID")}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-between items-end pt-2 border-t border-forest/5">
+                              <div>
+                                <p className="text-[10px] text-ink/50 uppercase font-mono">Total Biaya</p>
+                                <p className="font-bold text-green text-sm">Rp {ord.total_harga?.toLocaleString("id-ID")}</p>
+                              </div>
+
+                              {ord.bukti_pengiriman_url && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.preventDefault(); setSelectedProofUrl(ord.bukti_pengiriman_url!); setProofModalOpen(true); }}
+                                  className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 font-semibold cursor-pointer py-1 px-2 rounded-md bg-blue-50"
+                                >
+                                  📎 Lihat Bukti
+                                </button>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => { setSelectedOrderUpdate(ord); setNewOrderStatus(ord.status); setProofFile(null); setOrderStatusModalOpen(true); }}
+                              className="w-full text-xs font-semibold py-2 bg-forest/5 text-forest hover:bg-forest/10 rounded-lg transition-colors cursor-pointer text-center mt-1"
+                            >
+                              Ubah Status & Upload Bukti
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="hidden md:block border border-forest/10 rounded-xl overflow-hidden bg-white">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10">
+                            <tr>
+                              <th className="p-3">ID Pesanan</th>
+                              <th className="p-3">Nama Produk</th>
+                              <th className="p-3">Tanggal</th>
+                              <th className="p-3">Total Biaya</th>
+                              <th className="p-3">Status Pengiriman</th>
+                              <th className="p-3 text-center">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-forest/10">
+                            {userOrders.map((ord) => (
+                              <tr key={ord.id} className="hover:bg-forest/[0.02]">
+                                <td className="p-3 font-mono font-medium text-forest text-[11px] break-all select-all">
+                                  {ord.id}
+                                </td>
+                                <td className="p-3 font-semibold text-forest">
+                                  {ord.nama_produk || "Produk Energi"}
+                                </td>
+                                <td className="p-3 text-ink/60 whitespace-nowrap">
+                                  {new Date(ord.created_at).toLocaleDateString("id-ID")}
+                                </td>
+                                <td className="p-3 font-semibold text-green whitespace-nowrap">
+                                  Rp {ord.total_harga?.toLocaleString("id-ID")}
+                                </td>
+                                <td className="p-3">
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${ord.status === "dikirim" ? "bg-amber-100 text-amber-800" : ord.status === "selesai" ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-700"}`}>{ord.status}</span>
+                                    {ord.bukti_pengiriman_url && <button type="button" onClick={(e) => { e.preventDefault(); setSelectedProofUrl(ord.bukti_pengiriman_url!); setProofModalOpen(true); }} className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-1 cursor-pointer font-medium">📎 Lihat Bukti</button>}
+                                  </div>
+                                </td>
+                                <td className="p-3 text-center">
+                                  <button onClick={() => { setSelectedOrderUpdate(ord); setNewOrderStatus(ord.status); setProofFile(null); setOrderStatusModalOpen(true); }} className="text-green hover:underline text-xs font-medium cursor-pointer">Ubah Status & Bukti</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-3 border-t border-forest/10">
+                  <button type="button" onClick={() => setOrdersModalOpen(false)} className="bg-forest text-paper px-4 py-2 rounded-xl text-xs font-medium hover:bg-forest/90 cursor-pointer">Tutup Modal</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {orderStatusModalOpen && selectedOrderUpdate && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
+              <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
+                <h3 className="font-display font-semibold text-forest mb-4">Ubah Status & Upload Bukti</h3>
+                <form onSubmit={handleSaveOrderStatus} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">Status Pesanan</label>
+                    <select value={newOrderStatus} onChange={(e) => setNewOrderStatus(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer">
+                      <option value={newOrderStatus} className="hidden">{newOrderStatus}</option>
+                      <option value="menunggu_pembayaran">Menunggu Pembayaran</option>
+                      <option value="diproses">Diproses</option>
+                      <option value="dikirim">Dikirim (Dalam Pengiriman)</option>
+                      <option value="selesai">Selesai</option>
+                      <option value="dibatalkan">Dibatalkan</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-ink mb-1">Kota / Kab</label>
-                    <select className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase disabled:bg-gray-100 outline-none bg-white cursor-pointer" value={formPrice.kota} onChange={(e) => setFormPrice((prev) => ({ ...prev, kota: e.target.options[e.target.selectedIndex]?.text || "" }))} disabled={cities.length === 0} required>
-                      <option value="">KOTA/KAB</option>
-                      {cities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    <label className="block text-xs font-medium text-ink mb-1">Foto Bukti Pengiriman (Opsional)</label>
+                    <input type="file" accept="image/*" onChange={(e) => setProofFile(e.target.files?.[0] || null)} className="w-full text-xs text-ink/70 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-forest/10 file:text-forest hover:file:bg-forest/20 cursor-pointer border border-ink/20 rounded-xl p-1 bg-white" />
+                    {selectedOrderUpdate.bukti_pengiriman_url && !proofFile && <p className="text-[10px] text-green mt-1">✓ Bukti sudah pernah diupload sebelumnya.</p>}
+                  </div>
+                  <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                    <button type="button" onClick={() => setOrderStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                    <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Perubahan"}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {banModalOpen && selectedUser && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+              <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
+                <h3 className="font-display font-semibold text-red-800 mb-2">Blokir / Ban Akun</h3>
+                <p className="text-xs text-ink/70 mb-4">Anda akan memblokir <span className="font-bold">{selectedUser.nama}</span> ({selectedUser.nik_nib}). NIK/NIB ini akan dimasukkan ke daftar hitam.</p>
+                <form onSubmit={handleBanUser} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">Alasan Pemblokiran</label>
+                    <textarea required rows={3} placeholder="Misal: Pengiriman data fiktif..." value={banReason} onChange={(e) => setBanReason(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none resize-none" />
+                  </div>
+                  <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                    <button type="button" onClick={() => setBanModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                    <button type="submit" disabled={isSubmitting} className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Memproses..." : "Ya, Ban Akun"}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {priceModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+              <div className="bg-paper rounded-2xl shadow-xl w-full max-w-md p-6">
+                <h3 className="font-display font-semibold text-forest mb-4">Set Harga & Stok Wilayah</h3>
+                <form onSubmit={handleSavePrice} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">Pilih Produk</label>
+                    <select className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white cursor-pointer" required value={formPrice.product_id} onChange={(e) => setFormPrice({ ...formPrice, product_id: e.target.value })}>
+                      <option value="">-- Pilih Produk --</option>
+                      {products.map((p) => <option key={p.id} value={p.id}>{p.nama_produk}</option>)}
                     </select>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-ink mb-1">Harga (Rp)</label>
-                    <input type="number" placeholder="18000" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.harga} onChange={(e) => setFormPrice({ ...formPrice, harga: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-ink mb-1">Provinsi</label>
+                      <select className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase outline-none bg-white cursor-pointer" onChange={handleProvinsiChange} value={provinces.find((p) => p.name.toUpperCase() === formPrice.provinsi.toUpperCase())?.id || ""} required>
+                        <option value="">PROVINSI</option>
+                        {provinces.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-ink mb-1">Kota / Kab</label>
+                      <select className="w-full border border-ink/20 p-2.5 rounded-xl text-xs uppercase disabled:bg-gray-100 outline-none bg-white cursor-pointer" value={formPrice.kota} onChange={(e) => setFormPrice((prev) => ({ ...prev, kota: e.target.options[e.target.selectedIndex]?.text || "" }))} disabled={cities.length === 0} required>
+                        <option value="">KOTA/KAB</option>
+                        {cities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-ink mb-1">Stok Gudang</label>
-                    <input type="number" placeholder="50" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.stok} onChange={(e) => setFormPrice({ ...formPrice, stok: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-ink mb-1">Harga (Rp)</label>
+                      <input type="number" placeholder="18000" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.harga} onChange={(e) => setFormPrice({ ...formPrice, harga: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-ink mb-1">Stok Gudang</label>
+                      <input type="number" placeholder="50" required className="w-full border border-ink/20 p-2.5 rounded-xl outline-none text-sm bg-white" value={formPrice.stok} onChange={(e) => setFormPrice({ ...formPrice, stok: e.target.value })} />
+                    </div>
                   </div>
-                </div>
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setPriceModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Data"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {productModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-lg p-6">
-              <h3 className="font-display font-semibold text-forest mb-4">Tambah Produk Utama</h3>
-              <form onSubmit={handleSaveProduct} className="space-y-4">
-                <input type="text" placeholder="Nama Produk" required value={formProduct.nama_produk} onChange={(e) => setFormProduct({ ...formProduct, nama_produk: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                <input type="text" placeholder="Deskripsi Singkat" required value={formProduct.deskripsi} onChange={(e) => setFormProduct({ ...formProduct, deskripsi: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                <div className="grid grid-cols-2 gap-4">
-                  <input type="text" placeholder="Satuan (karung/liter)" required value={formProduct.satuan} onChange={(e) => setFormProduct({ ...formProduct, satuan: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                  <input type="number" placeholder="Stok Default" required value={formProduct.stok} onChange={(e) => setFormProduct({ ...formProduct, stok: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                </div>
-                <input type="number" placeholder="Harga Default Nasional (Rp)" required value={formProduct.harga_default} onChange={(e) => setFormProduct({ ...formProduct, harga_default: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setProductModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Produk"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {statusModalOpen && selectedShipment && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
-            <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
-              <h3 className="font-display font-semibold text-forest mb-4">Ubah Status Pengiriman Limbah</h3>
-              <form onSubmit={handleUpdateStatus} className="space-y-4">
-                <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer">
-                  <option value={newStatus} className="hidden">{newStatus}</option>
-                  <option value="MENUNGGU PEMBAYARAN">Menunggu Pembayaran</option>
-                  <option value="Menunggu Penjemputan">Menunggu Penjemputan</option>
-                  <option value="Diperjalanan">Diperjalanan</option>
-                  <option value="Selesai">Selesai</option>
-                  <option value="Dibatalkan">Dibatalkan</option>
-                </select>
-                <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
-                  <button type="button" onClick={() => setStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Status"}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {proofModalOpen && selectedProofUrl && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in" onClick={() => setProofModalOpen(false)}>
-            <div className="relative bg-paper rounded-2xl shadow-2xl max-w-2xl w-full p-2 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center p-3 border-b border-forest/10 mb-2">
-                <h3 className="font-display font-semibold text-forest text-sm">Foto Bukti Pengiriman</h3>
-                <button onClick={() => setProofModalOpen(false)} className="text-ink/50 hover:text-ink font-bold w-8 h-8 flex items-center justify-center rounded-full bg-forest/5 hover:bg-forest/10 transition-colors cursor-pointer">✕</button>
-              </div>
-              <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
-                <img src={selectedProofUrl} alt="Bukti Pengiriman Barang" className="max-w-full max-h-[70vh] object-contain rounded-lg" />
-              </div>
-              <div className="p-3 text-center">
-                <a href={selectedProofUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-blue-600 hover:underline">Buka gambar resolusi penuh di tab baru</a>
+                  <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                    <button type="button" onClick={() => setPriceModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                    <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Data"}</button>
+                  </div>
+                </form>
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {productModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+              <div className="bg-paper rounded-2xl shadow-xl w-full max-w-lg p-6">
+                <h3 className="font-display font-semibold text-forest mb-4">Tambah Produk Utama</h3>
+                <form onSubmit={handleSaveProduct} className="space-y-4">
+                  <input type="text" placeholder="Nama Produk" required value={formProduct.nama_produk} onChange={(e) => setFormProduct({ ...formProduct, nama_produk: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                  <input type="text" placeholder="Deskripsi Singkat" required value={formProduct.deskripsi} onChange={(e) => setFormProduct({ ...formProduct, deskripsi: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <input type="text" placeholder="Satuan (karung/liter)" required value={formProduct.satuan} onChange={(e) => setFormProduct({ ...formProduct, satuan: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                    <input type="number" placeholder="Stok Default" required value={formProduct.stok} onChange={(e) => setFormProduct({ ...formProduct, stok: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                  </div>
+                  <input type="number" placeholder="Harga Default Nasional (Rp)" required value={formProduct.harga_default} onChange={(e) => setFormProduct({ ...formProduct, harga_default: e.target.value })} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none" />
+                  <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                    <button type="button" onClick={() => setProductModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                    <button type="submit" disabled={isSubmitting} className="bg-forest text-cream px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Produk"}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {statusModalOpen && selectedShipment && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4">
+              <div className="bg-paper rounded-2xl shadow-xl w-full max-w-sm p-6">
+                <h3 className="font-display font-semibold text-forest mb-4">Ubah Status Pengiriman Limbah</h3>
+                <form onSubmit={handleUpdateStatus} className="space-y-4">
+                  <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="w-full border border-ink/20 p-2.5 rounded-xl text-sm bg-white outline-none cursor-pointer">
+                    <option value={newStatus} className="hidden">{newStatus}</option>
+                    <option value="MENUNGGU PEMBAYARAN">Menunggu Pembayaran</option>
+                    <option value="Menunggu Penjemputan">Menunggu Penjemputan</option>
+                    <option value="Diperjalanan">Diperjalanan</option>
+                    <option value="Selesai">Selesai</option>
+                    <option value="Dibatalkan">Dibatalkan</option>
+                  </select>
+                  <div className="flex justify-end gap-3 pt-3 border-t border-forest/10">
+                    <button type="button" onClick={() => setStatusModalOpen(false)} className="px-4 py-2 text-xs text-ink/60 cursor-pointer">Batal</button>
+                    <button type="submit" disabled={isSubmitting} className="bg-green text-white px-4 py-2 rounded-xl text-xs font-medium cursor-pointer">{isSubmitting ? "Menyimpan..." : "Simpan Status"}</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {proofModalOpen && selectedProofUrl && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in" onClick={() => setProofModalOpen(false)}>
+              <div className="relative bg-paper rounded-2xl shadow-2xl max-w-2xl w-full p-2 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center p-3 border-b border-forest/10 mb-2">
+                  <h3 className="font-display font-semibold text-forest text-sm">Foto Bukti Pengiriman</h3>
+                  <button onClick={() => setProofModalOpen(false)} className="text-ink/50 hover:text-ink font-bold w-8 h-8 flex items-center justify-center rounded-full bg-forest/5 hover:bg-forest/10 transition-colors cursor-pointer">✕</button>
+                </div>
+                <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
+                  <img src={selectedProofUrl} alt="Bukti Pengiriman Barang" className="max-w-full max-h-[70vh] object-contain rounded-lg" />
+                </div>
+                <div className="p-3 text-center">
+                  <a href={selectedProofUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-blue-600 hover:underline">Buka gambar resolusi penuh di tab baru</a>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
