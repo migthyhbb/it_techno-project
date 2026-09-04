@@ -496,11 +496,19 @@ export default function DashboardAdminPage() {
     setIsSubmitting(true);
     const supabase = createSupabaseBrowserClient();
 
+    // Normalisasi format kota agar ramah pencocokan (misal: "KOTA JAKARTA SELATAN" -> "JAKARTA SELATAN")
+    const cleanKota = formPrice.kota
+      .toUpperCase()
+      .replace(/^KOTA\s+/i, "")
+      .replace(/^KABUPATEN\s+/i, "")
+      .replace(/^KAB\.\s+/i, "")
+      .trim();
+
     const { error } = await supabase.from("regional_product_prices").upsert(
       {
         product_id: formPrice.product_id,
         provinsi: formPrice.provinsi.toUpperCase(),
-        kota: formPrice.kota.toUpperCase(),
+        kota: cleanKota,
         harga: Number(formPrice.harga),
         stok: Number(formPrice.stok),
       },
