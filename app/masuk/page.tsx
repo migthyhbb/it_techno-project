@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/auth/form-field";
 import { SubmitButton } from "@/components/auth/submit-button";
@@ -10,7 +9,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { translateAuthError } from "@/lib/auth-errors";
 
 export default function MasukPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
@@ -74,8 +72,7 @@ export default function MasukPage() {
 
       if (adminRow) {
         setStatus("submitted");
-        router.replace("/dashboard-admin");
-        router.refresh();
+        window.location.href = "/dashboard-admin";
         return;
       }
 
@@ -98,8 +95,7 @@ export default function MasukPage() {
           return;
         }
         setStatus("submitted");
-        router.replace("/dashboard");
-        router.refresh();
+        window.location.href = "/dashboard";
         return;
       }
 
@@ -122,15 +118,13 @@ export default function MasukPage() {
           return;
         }
         setStatus("submitted");
-        router.replace("/dashboard-industri");
-        router.refresh();
+        window.location.href = "/dashboard-industri";
         return;
       }
 
       // 5. Jika akun terdaftar di Auth Supabase tetapi belum punya profil
       setStatus("submitted");
-      router.replace("/daftar");
-      router.refresh();
+      window.location.href = "/daftar";
     } catch (err: unknown) {
       setStatus("idle");
       const errorMessage = err instanceof Error ? err.message : null;
