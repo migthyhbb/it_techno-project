@@ -1,6 +1,26 @@
 ﻿# Semua Kode Buatan LENTERA
 
-Dokumen ini adalah snapshot source dan konfigurasi kode aktual repository. File yang di-ignore Git, `.gitignore` itu sendiri, dependency lock, asset, dokumentasi, dan dokumen ini tidak disertakan.
+Dokumen ini adalah snapshot source dan konfigurasi penting repository untuk memetakan arsitektur. File yang di-ignore Git, dependency lock, asset, dokumentasi, metadata build, dan dokumen ini tidak disertakan.
+
+## ARSITEKTUR
+
+```mermaid
+flowchart TB
+  Browser[Browser / User] --> Middleware[middleware.ts\nAuth & route guard]
+  Browser --> Pages[Next.js App Router\napp/**/page.tsx]
+  Pages --> Components[Reusable UI\ncomponents/**]
+  Pages --> Styles[app/globals.css]
+  Browser --> Api[Next.js Route Handlers\napp/api/**/route.ts]
+  Api --> Auth[Supabase Auth\nlib/supabase/server.ts\nlib/supabase-browser.ts]
+  Api --> DB[(Supabase Postgres\nsupabase/schema.sql)]
+  Api --> Admin[Supabase Admin\nlib/supabase-admin.ts]
+  Api --> Redis[(Redis / Upstash\nlib/redis.ts)]
+  Api --> Midtrans[Midtrans\nlib/midtrans-signature.ts]
+  Api --> External[External services\nAI, email, maps]
+  Components --> Data[Domain helpers\nlib/**]
+  Tests[__tests__/**] --> Domain[Domain logic & API contracts]
+  Domain --> Api
+```
 
 ## FILE: __tests__/auth.test.ts
 
@@ -258,146 +278,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ message: 'Status berhasil diubah' }, { status: 200 });
   } catch {
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
-  }
-}
-```
-
-## FILE: app/api/ai/ai-guide/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { createClient } from '@/lib/supabase/server';
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
-export async function POST(request: Request) {
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { pertanyaan } = body;
-
-    if (!pertanyaan) {
-      return NextResponse.json({ error: 'Pertanyaan kosong' }, { status: 400 });
-    }
-
-    // Menggunakan Gemini generasi terbaru (2.5 Flash)
-    // GANTI BARIS INI:
-const model = genAI.getGenerativeModel({
-  model: 'gemini-1.5-flash', // <--- INI DIA MODEL TERBARUNYA!
-  systemInstruction: `Kamu adalah asisten ahli dan konsultan resmi dalam bidang pengelolaan limbah industri.
-  Tugasmu adalah membantu perusahaan dan agen dalam memahami regulasi limbah, jenis-jenis limbah (B3 dan Non-B3), serta prosedur daur ulang.
-  Gunakan bahasa Indonesia yang profesional, sopan, dan ringkas.
-  Jika pengguna bertanya di luar topik pengelolaan limbah, industri, atau lingkungan hidup, tolak dengan sopan dan arahkan kembali ke topik pengelolaan limbah.`
-});
-
-    const result = await model.generateContent(pertanyaan);
-    const jawabanAI = result.response.text();
-
-    return NextResponse.json({ jawaban: jawabanAI }, { status: 200 });
-
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Error Detail dari Google:', message);
-    return NextResponse.json({
-      error: 'Gagal menghubungi AI',
-      detail: message
-    }, { status: 500 });
-  }
-}
-```
-
-## FILE: app/api/ai/pricing/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { createAdminClient } from '@/lib/supabase/server';
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
-// CRON Job biasanya menggunakan metode GET
-export async function GET(request: Request) {
-  try {
-    // ==========================================
-    // 1. KEAMANAN ENDPOINT (ANTI-HACK)
-    // ==========================================
-    // Hanya server terpercaya yang punya CRON_SECRET yang bisa menjalankan AI ini
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json(
-        { error: "Akses Ditolak. Endpoint ini hanya untuk sistem otomatisasi (CRON)." },
-        { status: 401 }
-      );
-    }
-
-    const supabase = createAdminClient();
-
-    // ==========================================
-    // 2. ANALISIS PASAR OLEH GEMINI AI
-    // ==========================================
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    // Prompt ini bisa abang modifikasi nanti dengan menyuntikkan cuaca asli atau total stok gudang
-    const prompt = `
-      Kamu adalah AI Economist untuk platform Waste-to-Energy di Palembang.
-      Tugasmu adalah menentukan Harga Eceran Tertinggi (HET) produk olahan hari ini.
-      Kondisi hari ini: Permintaan stabil, pasokan limbah cukup baik.
-      Hasilkan rentang harga dalam Rupiah (kisaran Rp 2.500 - Rp 4.500 per Kg).
-
-      Jawab HANYA dalam format JSON murni tanpa markdown, ikuti struktur ini:
-      {
-        "harga_rekomendasi_ai": 3200,
-        "batas_bawah_floor": 2500,
-        "batas_atas_ceiling": 4000,
-        "alasan": "Pasokan limbah stabil dan operasional pabrik optimal hari ini."
-      }
-    `;
-
-    const result = await model.generateContent(prompt);
-    let responseText = result.response.text().trim();
-
-    if (responseText.startsWith('```json')) {
-      responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    }
-
-    const aiData = JSON.parse(responseText);
-
-    // ==========================================
-    // 3. SIMPAN KE DATABASE (Tabel patokan_harga)
-    // ==========================================
-    // Sesuai dengan skema tabel abang sebelumnya!
-    const { data, error } = await supabase
-      .from('patokan_harga')
-      .insert([{
-        harga_rekomendasi_ai: aiData.harga_rekomendasi_ai,
-        batas_bawah_floor: aiData.batas_bawah_floor,
-        batas_atas_ceiling: aiData.batas_atas_ceiling,
-        status: 'Approved' // Kita set Approved agar langsung dipakai oleh API Kasir
-      }])
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Gagal simpan harga AI:", error);
-      throw new Error("Database insert failed");
-    }
-
-    return NextResponse.json({
-      message: "Berhasil! Harga harian telah diperbarui oleh AI.",
-      data: data,
-      insight_pasar: aiData.alasan
-    }, { status: 200 });
-
-  } catch (error: unknown) {
-    console.error("AI Pricing CRON Error:", error);
-    return NextResponse.json({ error: "Gagal memproses Dynamic Pricing." }, { status: 500 });
   }
 }
 ```
@@ -12668,55 +12548,6 @@ export function isValidMidtransSignature(
 }
 ```
 
-## FILE: lib/mitra-products.ts
-
-```ts
-export interface MitraProduct {
-  id: string;
-  name: string;
-  category: string;
-  unit: string;
-  price: number;
-  stock: number;
-}
-
-// Data dummy â€” ganti dengan data stok/produk sesungguhnya dari backend.
-export const mitraProducts: MitraProduct[] = [
-  {
-    id: "briket-5kg",
-    name: "Briket Energi LENTERA 5kg",
-    category: "Briket padat",
-    unit: "karung",
-    price: 45000,
-    stock: 128,
-  },
-  {
-    id: "pelet-10kg",
-    name: "Pelet Biomassa 10kg",
-    category: "Pelet biomassa",
-    unit: "karung",
-    price: 78000,
-    stock: 84,
-  },
-  {
-    id: "cair-20l",
-    name: "Tabung Energi Cair 20L",
-    category: "Energi cair",
-    unit: "tabung",
-    price: 210000,
-    stock: 36,
-  },
-  {
-    id: "serbuk-25kg",
-    name: "Serbuk Biomassa Curah 25kg",
-    category: "Serbuk curah",
-    unit: "karung",
-    price: 95000,
-    stock: 19,
-  },
-];
-```
-
 ## FILE: lib/network-data.ts
 
 ```ts
@@ -12752,126 +12583,6 @@ export const networkPoints: NetworkPoint[] = [
   { name: "Kawasan Industri Surabaya", type: "industri", lat: -7.2575, lng: 112.7521 },
   { name: "Mitra Distribusi Semarang", type: "mitra", lat: -6.9932, lng: 110.4203 },
   { name: "Mitra Distribusi Batam", type: "mitra", lat: 1.0456, lng: 104.0305 },
-];
-```
-
-## FILE: lib/partner-companies.ts
-
-```ts
-import type { CompanyIconType } from "@/components/ui/company-mark";
-
-export interface PartnerCompany {
-  name: string;
-  location: string;
-  industry: string;
-  description: string;
-  initials: string;
-  logoType: CompanyIconType;
-  accent: "gold" | "forest" | "clay" | "green";
-}
-
-// Data contoh (dummy) â€” ganti dengan daftar mitra/industri sesungguhnya.
-export const partnerCompanies: PartnerCompany[] = [
-  {
-    name: "PT Cipta Industri Nusantara",
-    location: "Cikarang, Jawa Barat",
-    industry: "Manufaktur baja & logam",
-    description:
-      "Produsen baja dan komponen logam berat yang beroperasi di kawasan industri Cikarang. Sisa produksi logam dari lini pabrikasi mereka dikumpulkan dan diproses melalui fasilitas LENTERA setiap bulan secara terjadwal.",
-    initials: "CIN",
-    logoType: "steel",
-    accent: "gold",
-  },
-  {
-    name: "PT Warna Tekstil Indonesia",
-    location: "Bandung, Jawa Barat",
-    industry: "Tekstil & garmen",
-    description:
-      "Produsen tekstil dan garmen berorientasi ekspor dengan basis produksi di Bandung. Limbah kain dan serat dari proses produksi disalurkan ke LENTERA untuk diolah menjadi sumber energi alternatif.",
-    initials: "WTI",
-    logoType: "textile",
-    accent: "forest",
-  },
-  {
-    name: "PT Kimia Andalan Prima",
-    location: "Cilegon, Banten",
-    industry: "Kimia industri",
-    description:
-      "Produsen bahan kimia industri yang berlokasi di kawasan petrokimia Cilegon. Bekerja sama dengan LENTERA untuk pengelolaan limbah kimia produksi secara aman dan bertanggung jawab.",
-    initials: "KAP",
-    logoType: "chemical",
-    accent: "clay",
-  },
-  {
-    name: "PT Kertas Lestari Abadi",
-    location: "Perawang, Riau",
-    industry: "Pulp & kertas",
-    description:
-      "Produsen kertas dan bubur kertas skala nasional yang berbasis di Perawang. Limbah serat dan sisa produksi kertas mereka menjadi salah satu kontributor terbesar dalam jaringan pengolahan LENTERA.",
-    initials: "KLA",
-    logoType: "paper",
-    accent: "green",
-  },
-  {
-    name: "PT Sawit Makmur Bersama",
-    location: "Dumai, Riau",
-    industry: "Kelapa sawit",
-    description:
-      "Pengolahan kelapa sawit dan produk turunannya dengan fasilitas produksi di Dumai. Limbah organik dari proses pengolahan sawit dikumpulkan secara rutin untuk dikonversi menjadi energi terbarukan.",
-    initials: "SMB",
-    logoType: "palm",
-    accent: "gold",
-  },
-  {
-    name: "PT Elektrindo Karya Mandiri",
-    location: "Batam, Kepulauan Riau",
-    industry: "Elektronik",
-    description:
-      "Manufaktur komponen dan perangkat elektronik yang berbasis di Batam. Limbah produksi elektronik mereka dikelola bersama LENTERA dengan standar penanganan yang sesuai jenis limbahnya.",
-    initials: "EKM",
-    logoType: "electronics",
-    accent: "clay",
-  },
-  {
-    name: "PT Pangan Sejahtera Abadi",
-    location: "Sidoarjo, Jawa Timur",
-    industry: "Makanan & minuman",
-    description:
-      "Produsen makanan dan minuman olahan dengan fasilitas produksi di Sidoarjo. Limbah organik dari proses produksi disalurkan ke LENTERA sebagai bagian dari komitmen keberlanjutan perusahaan.",
-    initials: "PSA",
-    logoType: "food",
-    accent: "forest",
-  },
-  {
-    name: "PT Otomotif Cipta Perkasa",
-    location: "Karawang, Jawa Barat",
-    industry: "Otomotif",
-    description:
-      "Perakitan komponen dan suku cadang otomotif yang berlokasi di Karawang. Limbah logam dan material produksi dari lini perakitan mereka diproses melalui jaringan LENTERA setiap bulan.",
-    initials: "OCP",
-    logoType: "automotive",
-    accent: "green",
-  },
-  {
-    name: "PT Farmasi Nusantara Sehat",
-    location: "Tangerang, Banten",
-    industry: "Farmasi",
-    description:
-      "Produksi bahan baku dan kemasan farmasi yang berbasis di Tangerang. Bekerja sama dengan LENTERA untuk pengelolaan limbah produksi sesuai standar keselamatan industri farmasi.",
-    initials: "FNS",
-    logoType: "pharma",
-    accent: "gold",
-  },
-  {
-    name: "PT Distribusi Energi Merdeka",
-    location: "Palembang, Sumatra Selatan",
-    industry: "Distribusi energi",
-    description:
-      "Mitra distribusi dan agen energi regional yang beroperasi di Palembang. Menyalurkan energi hasil olahan LENTERA ke pelanggan industri dan rumah tangga di wilayah Sumatra Selatan.",
-    initials: "DEM",
-    logoType: "energy",
-    accent: "forest",
-  },
 ];
 ```
 
@@ -13161,6 +12872,78 @@ export const wasteTypes = [
   "Limbah Elektronik",
   "Lainnya",
 ] as const;
+```
+
+## FILE: app/loading.tsx
+
+```tsx
+export default function Loading() {
+  return (
+    <div className="min-h-screen bg-cream flex flex-col items-center justify-center p-6">
+      <div className="flex flex-col items-center gap-4 bg-paper border border-forest/10 p-8 rounded-3xl shadow-xs">
+        <div className="w-10 h-10 border-4 border-forest/20 border-t-forest rounded-full animate-spin" />
+        <div className="text-center">
+          <p className="font-display font-semibold text-forest text-base">
+            Memuat Halaman...
+          </p>
+          <p className="text-xs text-ink/60 font-mono mt-1">
+            Harap tunggu sebentar
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+## FILE: app/not-found.tsx
+
+```tsx
+"use client";
+
+import Link from "next/link";
+import { motion } from "motion/react";
+
+export default function NotFound() {
+  return (
+    <main className="min-h-screen bg-cream flex flex-col items-center justify-center py-20 px-4 sm:px-6 relative overflow-hidden z-0 selection:bg-forest selection:text-cream">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(46,117,89,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(46,117,89,0.04)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_40%,transparent_100%)] pointer-events-none -z-20" />
+      <motion.div
+        animate={{ rotate: 360, scale: [1, 1.1, 1] }}
+        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+        className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-forest/5 rounded-full blur-[100px] -z-10 pointer-events-none"
+      />
+      <motion.div
+        animate={{ rotate: -360, scale: [1, 1.2, 1] }}
+        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+        className="absolute bottom-[-10%] right-[-10%] w-[35rem] h-[35rem] bg-green/10 rounded-full blur-[100px] -z-10 pointer-events-none"
+      />
+      <div className="relative z-10 flex items-center justify-center gap-2 sm:gap-6 font-display font-black text-[7rem] sm:text-[11rem] md:text-[15rem] leading-none select-none mb-8">
+        <motion.span animate={{ y: [0, -15, 0] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }} className="text-forest drop-shadow-2xl">4</motion.span>
+        <motion.div animate={{ y: [0, 20, 0] }} transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} className="relative">
+          <span className="text-transparent bg-clip-text bg-gradient-to-br from-green to-forest drop-shadow-2xl">0</span>
+          <div className="absolute inset-0 m-auto w-[45%] h-[65%] rounded-full shadow-[inset_0_0_30px_rgba(46,117,89,0.25)]" />
+        </motion.div>
+        <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }} className="text-forest drop-shadow-2xl">4</motion.span>
+      </div>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: "easeOut" }} className="text-center max-w-2xl mx-auto z-10 mb-16">
+        <h1 className="font-display font-bold text-3xl sm:text-4xl md:text-5xl text-forest mb-4 tracking-tight">Sirkuit Terputus.</h1>
+        <p className="text-sm sm:text-base text-ink/70 leading-relaxed px-4 max-w-lg mx-auto font-medium">Energi yang Anda cari di jalur ini tidak dapat ditemukan. Tautan mungkin telah usang atau didaur ulang oleh sistem LENTERA.</p>
+      </motion.div>
+      <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }} className="grid grid-cols-1 md:grid-cols-3 gap-5 w-full max-w-5xl z-10 px-4">
+        <Link href="/" className="group relative block h-full overflow-hidden rounded-[2.5rem] bg-white/40 backdrop-blur-xl border border-white/60 p-1.5 shadow-sm transition-all duration-500 hover:-translate-y-2">
+          <div className="relative h-full bg-cream/50 rounded-[2rem] p-6 sm:p-8 flex flex-col justify-between border border-forest/5"><div className="w-14 h-14 bg-white shadow-sm text-forest rounded-2xl flex items-center justify-center mb-8"><span aria-hidden="true">⌂</span></div><div><h3 className="font-display font-semibold text-forest text-xl mb-2">Beranda Utama</h3><p className="text-sm text-ink/60 leading-relaxed">Kembali ke pusat informasi LENTERA.</p></div></div>
+        </Link>
+        <Link href="/daftar-mitra-industri" className="group relative block h-full overflow-hidden rounded-[2.5rem] bg-white/40 backdrop-blur-xl border border-white/60 p-1.5 shadow-sm transition-all duration-500 hover:-translate-y-2">
+          <div className="relative h-full bg-cream/50 rounded-[2rem] p-6 sm:p-8 flex flex-col justify-between border border-forest/5"><div className="w-14 h-14 bg-white shadow-sm text-forest rounded-2xl flex items-center justify-center mb-8"><span aria-hidden="true">▣</span></div><div><h3 className="font-display font-semibold text-forest text-xl mb-2">Mitra & Industri</h3><p className="text-sm text-ink/60 leading-relaxed">Eksplorasi jaringan sirkular kami.</p></div></div>
+        </Link>
+        <Link href="/edukasi" className="group relative block h-full overflow-hidden rounded-[2.5rem] bg-white/40 backdrop-blur-xl border border-white/60 p-1.5 shadow-sm transition-all duration-500 hover:-translate-y-2">
+          <div className="relative h-full bg-cream/50 rounded-[2rem] p-6 sm:p-8 flex flex-col justify-between border border-forest/5"><div className="w-14 h-14 bg-white shadow-sm text-forest rounded-2xl flex items-center justify-center mb-8"><span aria-hidden="true">▤</span></div><div><h3 className="font-display font-semibold text-forest text-xl mb-2">Pusat Edukasi</h3><p className="text-sm text-ink/60 leading-relaxed">Pelajari metode pengolahan limbah.</p></div></div>
+        </Link>
+      </motion.div>
+    </main>
+  );
+}
 ```
 
 ## FILE: middleware.ts
