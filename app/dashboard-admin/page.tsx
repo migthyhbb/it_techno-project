@@ -1096,11 +1096,9 @@ export default function DashboardAdminPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      <Image
+                      <img
                         src={selectedUserDetail.foto_doc_url}
                         alt="Foto Dokumen"
-                        width={800}
-                        height={600}
                         className="max-h-64 object-contain mx-auto rounded-lg hover:opacity-90 transition-opacity"
                       />
                     </a>
