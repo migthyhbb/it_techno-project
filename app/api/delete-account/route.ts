@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Inisialisasi Supabase Admin Client
+    // Inisialisasi Supabase Admin Client (Menggunakan Kunci Master)
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
@@ -42,28 +42,34 @@ export async function POST(req: Request) {
       },
     });
 
-    // 1. Hapus data profil mitra di database
-    await supabaseAdmin
-      .from("mitra_profiles")
-      .delete()
-      .eq("user_id", userId);
+    // --- PROSES SAPU BERSIH DATA (Mencegah Error Foreign Key) ---
+    // 1. Hapus riwayat transaksi terlebih dahulu agar tidak nyangkut
+    await supabaseAdmin.from("waste_shipments").delete().eq("user_id", userId);
+    await supabaseAdmin.from("orders").delete().eq("user_id", userId);
+    await supabaseAdmin.from("pesanan_mitra").delete().eq("user_id", userId);
+    await supabaseAdmin.from("pencairan_dana").delete().eq("id_agen", userId);
 
-    // 2. Hapus user dari Supabase Auth secara permanen (auth.users)
+    // 2. Hapus data profil berdasarkan kemungkinan tipe akun
+    await supabaseAdmin.from("mitra_profiles").delete().eq("user_id", userId);
+    await supabaseAdmin.from("industri_profiles").delete().eq("user_id", userId);
+
+    // 3. Hapus user dari Supabase Auth secara permanen (auth.users)
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(
       userId
     );
 
     if (deleteError) {
+      console.error("Gagal hapus di Auth:", deleteError.message);
       return NextResponse.json(
-        { error: deleteError.message },
+        { error: `Gagal menghapus auth: ${deleteError.message}` },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : "Terjadi kesalahan server";
+    const message = err instanceof Error ? err.message : "Terjadi kesalahan server";
+    console.error("Delete Account API Error:", message);
 
     return NextResponse.json(
       { error: message },

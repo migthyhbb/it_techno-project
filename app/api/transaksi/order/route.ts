@@ -69,6 +69,11 @@ export async function POST(request: Request) {
     const totalBayar = volume_terjual_kg * harga;
     const orderId = `AGEN-${Date.now()}`;
 
+    // FIX: BLOKIR JIKA DI BAWAH 10RB SEBELUM MASUK MIDTRANS
+    if (totalBayar < 10000) {
+      return NextResponse.json({ error: `Minimal transaksi pembayaran Midtrans adalah Rp 10.000. (Total saat ini: Rp ${totalBayar})` }, { status: 400 });
+    }
+
     const serverKey = process.env.MIDTRANS_SERVER_KEY;
     const clientKey = process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY;
 
@@ -95,8 +100,10 @@ export async function POST(request: Request) {
 
         const transaction = await snap.createTransaction(parameter);
         snapToken = transaction.token;
-      } catch (midtransErr) {
-        console.warn("Midtrans SDK Warning (Menggunakan Mode SIMULASI):", midtransErr);
+      } catch (midtransErr: any) {
+        // FIX: LEMPAR ERROR KE FRONTEND, JANGAN DISEMBUNYIKAN
+        console.error("Midtrans SDK Error:", midtransErr);
+        return NextResponse.json({ error: "Gagal terhubung ke gerbang pembayaran Midtrans. Pastikan harga minimal Rp 10.000 atau periksa API Key." }, { status: 500 });
       }
     }
 

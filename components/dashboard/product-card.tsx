@@ -27,6 +27,13 @@ export function ProductCard({ product }: { product: Product }) {
       return;
     }
 
+    // FIX: VALIDASI MIDTRANS DI FRONTEND
+    const totalHarga = product.price * jumlah;
+    if (totalHarga < 10000) {
+      alert(`Gagal! Total pesanan (Rp ${totalHarga.toLocaleString("id-ID")}) di bawah batas minimal transaksi Rp 10.000.`);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -54,6 +61,8 @@ export function ProductCard({ product }: { product: Product }) {
       }
 
       const data = await res.json();
+      
+      // FIX: KALAU API NGASIH STATUS ERROR (400 ATAU 500), LANGSUNG STOP!
       if (!res.ok) throw new Error(data.error || "Gagal membuat pesanan.");
 
       const windowSnap = (window as unknown as { snap?: any }).snap;
@@ -68,7 +77,7 @@ export function ProductCard({ product }: { product: Product }) {
                 body: JSON.stringify({
                   product_id: product.id,
                   quantity: jumlah,
-                  user_id: user.id, // PASTI AMAN KARENA DIAMBIL DI AWAL
+                  user_id: user.id,
                   total_harga: product.price * jumlah
                 })
               });
@@ -84,7 +93,6 @@ export function ProductCard({ product }: { product: Product }) {
               
             } catch (err: any) {
               console.error(err);
-              // 🚨 MENAMPILKAN ALASAN ASLI KENAPA DATABASE NOLAK
               alert("ERROR SYSTEM: " + err.message);
               window.location.reload();
             }
