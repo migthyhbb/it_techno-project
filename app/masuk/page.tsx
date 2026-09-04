@@ -15,6 +15,7 @@ export default function MasukPage() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
   const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     const clearSessionOnLoad = async () => {
       const supabase = createSupabaseBrowserClient();
@@ -45,6 +46,8 @@ export default function MasukPage() {
 
       const user = data.user;
       if (!user) throw new Error("Gagal mengambil data pengguna.");
+
+      // 1. Cek apakah user berada di daftar hitam (blacklists)
       const { data: blacklisted } = await supabase
         .from("blacklists")
         .select("alasan")
@@ -61,10 +64,12 @@ export default function MasukPage() {
         );
         return;
       }
+
+      // 2. Cek Peran: Admin (Hanya query user_id sesuai struktur tabel admin_profiles)
       const { data: adminRow } = await supabase
         .from("admin_profiles")
-        .select("id, user_id")
-        .or(`user_id.eq.${user.id},email.eq.${user.email}`)
+        .select("user_id")
+        .eq("user_id", user.id)
         .maybeSingle();
 
       if (adminRow) {
@@ -73,6 +78,8 @@ export default function MasukPage() {
         router.refresh();
         return;
       }
+
+      // 3. Cek Peran: Mitra
       const { data: mitraRow } = await supabase
         .from("mitra_profiles")
         .select("user_id, status_akun, alasan_ban")
@@ -95,6 +102,8 @@ export default function MasukPage() {
         router.refresh();
         return;
       }
+
+      // 4. Cek Peran: Industri
       const { data: industriRow } = await supabase
         .from("industri_profiles")
         .select("user_id, status_akun, alasan_ban")
@@ -117,6 +126,8 @@ export default function MasukPage() {
         router.refresh();
         return;
       }
+
+      // 5. Jika akun terdaftar di Auth Supabase tetapi belum punya profil
       setStatus("submitted");
       router.replace("/daftar");
       router.refresh();
