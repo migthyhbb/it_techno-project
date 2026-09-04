@@ -47,8 +47,8 @@ type FormState = {
   email: string;
   otp: string;
   password: string;
-  nama_mitra: string;
-  nik_nib: string;
+  nama_perusahaan: string;
+  npwp: string;
   provinsi: string;
   kota: string;
   kecamatan: string;
@@ -57,27 +57,26 @@ type FormState = {
   telepon: string;
   lat: number | null;
   lng: number | null;
-  foto_nik: File | null;
+  foto_npwp: File | null;
 };
 
 type FieldErrors = Partial<
   Record<
-    | "nama_mitra"
-    | "nik_nib"
+    | "nama_perusahaan"
+    | "npwp"
     | "provinsi"
     | "kota"
     | "kecamatan"
     | "kelurahan"
     | "detail_alamat"
     | "telepon"
-    | "foto_nik",
+    | "foto_npwp",
     string
   >
 >;
 
 function formatHumanFriendlyError(err: unknown): string {
   if (!err) return "Terjadi kesalahan yang tidak diketahui. Silakan coba lagi.";
-
   const message = typeof err === "string" ? err : (err as { message?: string })?.message || "";
 
   if (message.includes("Payload too large") || message.includes("413") || message.includes("exceeds")) {
@@ -89,9 +88,8 @@ function formatHumanFriendlyError(err: unknown): string {
   if (message.includes("bucket") || message.includes("storage")) {
     return "Gagal mengunggah dokumen. Silakan periksa koneksi internet Anda dan coba lagi.";
   }
-
   if (message.includes("duplicate key") || message.includes("already exists")) {
-    return "Data NIK/NIB, nomor telepon, atau profil mitra ini sudah pernah terdaftar.";
+    return "Data NPWP, nomor telepon, atau profil industri ini sudah pernah terdaftar.";
   }
   if (message.includes("different") || message.includes("same password")) {
     return "Kata sandi baru tidak boleh sama dengan kata sandi lama.";
@@ -104,11 +102,10 @@ function formatHumanFriendlyError(err: unknown): string {
   if (translated !== "Terjadi kesalahan, coba lagi.") {
     return translated;
   }
-
   return "Gagal memproses pendaftaran. Silakan periksa kembali data Anda dan coba lagi.";
 }
 
-export default function DaftarMitraPage() {
+export default function DaftarIndustriPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -116,8 +113,8 @@ export default function DaftarMitraPage() {
     email: "",
     otp: "",
     password: "",
-    nama_mitra: "",
-    nik_nib: "",
+    nama_perusahaan: "",
+    npwp: "",
     provinsi: "",
     kota: "",
     kecamatan: "",
@@ -126,7 +123,7 @@ export default function DaftarMitraPage() {
     telepon: "",
     lat: null,
     lng: null,
-    foto_nik: null,
+    foto_npwp: null,
   });
 
   const [status, setStatus] = useState<"idle" | "loading" | "submitted">("idle");
@@ -153,7 +150,6 @@ export default function DaftarMitraPage() {
           .select("user_id")
           .eq("user_id", user.id)
           .maybeSingle();
-
         if (adminProfile) {
           await supabase.auth.signOut();
           return;
@@ -166,7 +162,7 @@ export default function DaftarMitraPage() {
           .maybeSingle();
 
         const { data: profile } = await supabase
-          .from("mitra_profiles")
+          .from("industri_profiles")
           .select("id, status_akun, alasan_ban")
           .eq("user_id", user.id)
           .maybeSingle();
@@ -404,16 +400,15 @@ export default function DaftarMitraPage() {
       }
       return;
     }
-
-    // Step 3 Validation
     const errors: FieldErrors = {};
-    if (!form.nama_mitra.trim()) errors.nama_mitra = "Nama mitra wajib diisi.";
-    if (!isValidNikNib(form.nik_nib)) errors.nik_nib = validationMessages.nikNib;
+    if (!form.nama_perusahaan.trim()) errors.nama_perusahaan = "Nama perusahaan wajib diisi.";
+    
+    if (!isValidNikNib(form.npwp)) errors.npwp = "Format NPWP / NIB tidak valid.";
 
-    if (!form.foto_nik) {
-      errors.foto_nik = "Foto NIK/NPWP wajib diupload.";
-    } else if (form.foto_nik.size > 5 * 1024 * 1024) {
-      errors.foto_nik = "Ukuran gambar terlalu besar. Maksimal 5MB.";
+    if (!form.foto_npwp) {
+      errors.foto_npwp = "Foto NPWP / Dokumen Usaha wajib diupload.";
+    } else if (form.foto_npwp.size > 5 * 1024 * 1024) {
+      errors.foto_npwp = "Ukuran gambar terlalu besar. Maksimal 5MB.";
     }
 
     if (!form.provinsi) errors.provinsi = "Provinsi wajib dipilih.";
@@ -441,107 +436,85 @@ export default function DaftarMitraPage() {
     try {
       const supabase = createSupabaseBrowserClient();
 
-      // Refresh Sesi Supabase terlebih dahulu agar token tidak basi/expired
-      await supabase.auth.refreshSession();
-
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-
-      if (!currentUser) {
-        // Jika sesi mati, coba relogin transparan menggunakan password & email yang tersimpan di form
-        if (form.email && form.password) {
-          const { data: reloginData, error: reloginErr } = await supabase.auth.signInWithPassword({
-            email: form.email,
-            password: form.password,
-          });
-
-          if (reloginErr || !reloginData.user) {
-            throw new Error("no-session");
-          }
-        } else {
-          throw new Error("no-session");
-        }
-      }
-
-      // Ambil user ID yang tervalidasi
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user ?? (await supabase.auth.getUser()).data.user;
 
       if (!user) throw new Error("no-session");
-
       const { data: blacklisted } = await supabase
         .from("blacklists")
         .select("nik_nib, telepon, alasan")
-        .or(`nik_nib.eq.${form.nik_nib},telepon.eq.${form.telepon},user_id.eq.${user.id}`)
+        .or(`nik_nib.eq.${form.npwp},telepon.eq.${form.telepon},user_id.eq.${user.id}`)
         .maybeSingle();
 
       if (blacklisted) {
         const reason = blacklisted.alasan || "Terdaftar dalam daftar hitam penangguhan akun.";
-
+        
         await supabase.from("blacklists").upsert({
           user_id: user.id,
           email: user.email,
-          nik_nib: form.nik_nib,
+          nik_nib: form.npwp,
           telepon: form.telepon,
           alasan: `Pendaftaran ditolak otomatis: ${reason}`
         });
 
         setStatus("idle");
-        setError(`Pendaftaran ditolak: NIK/NIB (${form.nik_nib}) atau Nomor Telepon (${form.telepon}) Anda terdaftar dalam daftar hitam penangguhan akun. Alasan: ${reason}`);
+        setError(`Pendaftaran ditolak: NPWP (${form.npwp}) atau Nomor Telepon (${form.telepon}) Anda terdaftar dalam daftar hitam penangguhan akun. Alasan: ${reason}`);
         await supabase.auth.signOut();
         return;
       }
-
       const { data: bannedProfile } = await supabase
-        .from("mitra_profiles")
-        .select("nik_nib, telepon, alasan_ban")
+        .from("industri_profiles")
+        .select("npwp, nik_nib, telepon, alasan_ban")
         .eq("status_akun", "banned")
-        .or(`nik_nib.eq.${form.nik_nib},telepon.eq.${form.telepon}`)
+        .or(`npwp.eq.${form.npwp},nik_nib.eq.${form.npwp},telepon.eq.${form.telepon}`)
         .maybeSingle();
 
       if (bannedProfile) {
         const reason = bannedProfile.alasan_ban || "Pelanggaran ketentuan layanan.";
-
         await supabase.from("blacklists").upsert({
           user_id: user.id,
           email: user.email,
-          nik_nib: form.nik_nib,
+          nik_nib: form.npwp,
           telepon: form.telepon,
           alasan: `Pendaftaran ditolak otomatis: ${reason}`
         });
 
         setStatus("idle");
-        setError(`Pendaftaran ditolak: NIK/NIB atau Nomor Telepon ini terhubung dengan akun mitra yang telah di-ban! Alasan: ${reason}`);
+        setError(`Pendaftaran ditolak: NPWP atau Nomor Telepon ini terhubung dengan akun industri yang telah di-ban! Alasan: ${reason}`);
         await supabase.auth.signOut();
         return;
       }
 
       let fotoUrl = "";
-      if (form.foto_nik) {
-        if (!["image/jpeg", "image/png", "image/jpg"].includes(form.foto_nik.type)) {
+      if (form.foto_npwp) {
+        if (!["image/jpeg", "image/png", "image/jpg"].includes(form.foto_npwp.type)) {
           setStatus("idle");
           setError("Format gambar tidak didukung. Harap upload foto JPG/PNG.");
           return;
         }
 
-        const fileExt = form.foto_nik.name.split(".").pop();
+        const fileExt = form.foto_npwp.name.split(".").pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
-          .from("mitra_documents")
-          .upload(`nik/${fileName}`, form.foto_nik);
+          .from("industri_documents")
+          .upload(`npwp/${fileName}`, form.foto_npwp);
 
         if (uploadError) throw uploadError;
 
         const { data: publicUrlData } = supabase.storage
-          .from("mitra_documents")
-          .getPublicUrl(`nik/${fileName}`);
+          .from("industri_documents")
+          .getPublicUrl(`npwp/${fileName}`);
 
         fotoUrl = publicUrlData.publicUrl;
       }
 
-      const { error: profileError } = await supabase.from("mitra_profiles").upsert(
+      const { error: profileError } = await supabase.from("industri_profiles").upsert(
         {
           user_id: user.id,
-          nama_mitra: form.nama_mitra,
-          nik_nib: form.nik_nib,
+          nama_perusahaan: form.nama_perusahaan,
+          npwp: form.npwp,
           provinsi: form.provinsi,
           kota_kabupaten: form.kota,
           kecamatan: form.kecamatan,
@@ -550,7 +523,7 @@ export default function DaftarMitraPage() {
           telepon: form.telepon,
           lat: form.lat !== null ? Number(form.lat) : null,
           lng: form.lng !== null ? Number(form.lng) : null,
-          foto_nik_url: fotoUrl,
+          foto_npwp_url: fotoUrl,
           status_akun: "aktif",
         },
         { onConflict: "user_id" }
@@ -562,16 +535,9 @@ export default function DaftarMitraPage() {
       setStatus("submitted");
       router.refresh();
       router.push("/dashboard");
-    } catch (err: any) {
+    } catch (err) {
       setStatus("idle");
-      if (err?.message === "no-session") {
-        setError("Sesi pendaftaran Anda telah berakhir. Mengembalikan ke verifikasi email...");
-        setTimeout(() => {
-          setStep(0);
-        }, 1500);
-      } else {
-        setError(formatHumanFriendlyError(err));
-      }
+      setError(formatHumanFriendlyError(err));
     }
   }
 
@@ -579,9 +545,9 @@ export default function DaftarMitraPage() {
 
   return (
     <AuthShell
-      eyebrow="Pendaftaran mitra"
-      title="Daftar sebagai Mitra"
-      subtitle="Untuk agen dan distributor energi LENTERA."
+      eyebrow="Pendaftaran Industri"
+      title="Daftar sebagai Industri"
+      subtitle="Untuk pabrik dan perusahaan penghasil limbah energi."
       footer={
         <p className="text-sm text-ink/60 space-y-1.5">
           <span className="block">
@@ -591,8 +557,8 @@ export default function DaftarMitraPage() {
             </Link>
           </span>
           <span className="block">
-            Mau daftar sebagai industri?{" "}
-            <Link href="/daftar/industri" className="text-green font-medium hover:underline">
+            Mau daftar sebagai mitra?{" "}
+            <Link href="/daftar/mitra" className="text-green font-medium hover:underline">
               Klik di sini
             </Link>
           </span>
@@ -601,7 +567,7 @@ export default function DaftarMitraPage() {
     >
       {status === "submitted" ? (
         <div className="text-center py-4">
-          <p className="text-forest font-medium mb-1">Pendaftaran mitra berhasil!</p>
+          <p className="text-forest font-medium mb-1">Pendaftaran industri berhasil!</p>
           <p className="text-ink/55 text-sm">Mengalihkan ke dashboard...</p>
         </div>
       ) : (
@@ -620,11 +586,11 @@ export default function DaftarMitraPage() {
               >
                 {step === 0 && (
                   <FormField
-                    label="Email"
+                    label="Email Perusahaan"
                     type="email"
                     value={form.email}
                     onChange={(e) => update("email", e.target.value)}
-                    placeholder="nama@email.com"
+                    placeholder="kontak@perusahaan.com"
                     required
                     autoFocus
                   />
@@ -670,46 +636,46 @@ export default function DaftarMitraPage() {
                 {step === 3 && (
                   <>
                     <FormField
-                      label="Nama mitra"
+                      label="Nama Perusahaan"
                       type="text"
-                      value={form.nama_mitra}
-                      onChange={(e) => update("nama_mitra", e.target.value)}
-                      placeholder="Nama perorangan / usaha"
+                      value={form.nama_perusahaan}
+                      onChange={(e) => update("nama_perusahaan", e.target.value)}
+                      placeholder="PT / CV / Usaha Dagang"
                       required
                       autoFocus
                     />
-                    {fieldErrors.nama_mitra && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.nama_mitra}</p>
+                    {fieldErrors.nama_perusahaan && (
+                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.nama_perusahaan}</p>
                     )}
 
                     <FormField
-                      label="NIK / NIB"
+                      label="NPWP / NIB"
                       type="text"
-                      value={form.nik_nib}
-                      onChange={(e) => update("nik_nib", e.target.value)}
-                      placeholder="16 digit NIK atau 13 digit NIB"
+                      value={form.npwp}
+                      onChange={(e) => update("npwp", e.target.value)}
+                      placeholder="Nomor NPWP atau NIB Perusahaan"
                       required
                     />
-                    {fieldErrors.nik_nib && (
-                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.nik_nib}</p>
+                    {fieldErrors.npwp && (
+                      <p className="text-xs text-red-600 -mt-3 mb-3">{fieldErrors.npwp}</p>
                     )}
 
                     <div className="mb-4 text-left">
                       <label className="block text-sm font-medium mb-1.5 text-ink">
-                        Upload Foto NIK / NPWP
+                        Upload Foto NPWP / NIB
                       </label>
                       <input
                         type="file"
                         accept="image/png, image/jpeg, image/jpg"
                         onChange={(e) =>
-                          setForm((f) => ({ ...f, foto_nik: e.target.files?.[0] || null }))
+                          setForm((f) => ({ ...f, foto_npwp: e.target.files?.[0] || null }))
                         }
                         className="block w-full text-sm text-ink/80 border border-ink/20 rounded-md p-2 bg-white"
                         required
                       />
                       <p className="text-[11px] text-ink/50 mt-1">Maksimal ukuran berkas: 5MB (JPG, JPEG, PNG)</p>
-                      {fieldErrors.foto_nik && (
-                        <p className="text-xs text-red-600 mt-1.5">{fieldErrors.foto_nik}</p>
+                      {fieldErrors.foto_npwp && (
+                        <p className="text-xs text-red-600 mt-1.5">{fieldErrors.foto_npwp}</p>
                       )}
                     </div>
 
@@ -798,7 +764,7 @@ export default function DaftarMitraPage() {
 
                     <div className="mb-4 text-left">
                       <label className="block text-sm font-medium mb-1.5 text-ink">
-                        Pilih Titik Lokasi Usaha/Bangunan
+                        Pilih Titik Lokasi Usaha/Pabrik
                       </label>
                       <LocationPickerMap
                         searchQuery={searchQuery}
@@ -811,7 +777,7 @@ export default function DaftarMitraPage() {
                       type="text"
                       value={form.detail_alamat}
                       onChange={(e) => update("detail_alamat", e.target.value.toUpperCase())}
-                      placeholder="Jalan, RT/RW, no. rumah, patokan"
+                      placeholder="Jalan, RT/RW, kavling bangunan pabrik"
                       required
                     />
                     {fieldErrors.detail_alamat && (
@@ -825,7 +791,7 @@ export default function DaftarMitraPage() {
                       type="tel"
                       value={form.telepon}
                       onChange={(e) => update("telepon", e.target.value)}
-                      placeholder="081200000000"
+                      placeholder="081200000000 / (021) xxxx"
                       required
                     />
                     {fieldErrors.telepon && (
@@ -859,7 +825,7 @@ export default function DaftarMitraPage() {
                   ? "Verifikasi"
                   : step < stepLabels.length - 1
                   ? "Lanjut"
-                  : "Daftar sebagai Mitra"}
+                  : "Daftar sebagai Industri"}
               </SubmitButton>
             </div>
           </form>

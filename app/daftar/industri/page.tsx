@@ -150,6 +150,7 @@ export default function DaftarIndustriPage() {
           .select("user_id")
           .eq("user_id", user.id)
           .maybeSingle();
+
         if (adminProfile) {
           await supabase.auth.signOut();
           return;
@@ -171,12 +172,12 @@ export default function DaftarIndustriPage() {
           const alasan = blacklisted?.alasan || profile?.alasan_ban || "Pelanggaran ketentuan layanan.";
           alert(`Akun Anda telah diblokir/di-ban!\nAlasan: ${alasan}`);
           await supabase.auth.signOut();
-          router.replace("/masuk");
+          window.location.href = "/masuk";
           return;
         }
 
         if (profile) {
-          router.replace("/dashboard");
+          window.location.href = "/dashboard";
           return;
         }
 
@@ -400,6 +401,7 @@ export default function DaftarIndustriPage() {
       }
       return;
     }
+
     const errors: FieldErrors = {};
     if (!form.nama_perusahaan.trim()) errors.nama_perusahaan = "Nama perusahaan wajib diisi.";
     
@@ -436,12 +438,29 @@ export default function DaftarIndustriPage() {
     try {
       const supabase = createSupabaseBrowserClient();
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user ?? (await supabase.auth.getUser()).data.user;
+      await supabase.auth.refreshSession();
+
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+      if (!currentUser) {
+        if (form.email && form.password) {
+          const { data: reloginData, error: reloginErr } = await supabase.auth.signInWithPassword({
+            email: form.email,
+            password: form.password,
+          });
+
+          if (reloginErr || !reloginData.user) {
+            throw new Error("no-session");
+          }
+        } else {
+          throw new Error("no-session");
+        }
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) throw new Error("no-session");
+
       const { data: blacklisted } = await supabase
         .from("blacklists")
         .select("nik_nib, telepon, alasan")
@@ -464,6 +483,7 @@ export default function DaftarIndustriPage() {
         await supabase.auth.signOut();
         return;
       }
+
       const { data: bannedProfile } = await supabase
         .from("industri_profiles")
         .select("npwp, nik_nib, telepon, alasan_ban")
@@ -533,11 +553,19 @@ export default function DaftarIndustriPage() {
 
       await supabase.auth.refreshSession();
       setStatus("submitted");
-      router.refresh();
-      router.push("/dashboard");
-    } catch (err) {
+
+      // Menggunakan hard redirect agar cookie ter-sync utuh melewati Middleware Next.js
+      window.location.href = "/dashboard";
+    } catch (err: any) {
       setStatus("idle");
-      setError(formatHumanFriendlyError(err));
+      if (err?.message === "no-session") {
+        setError("Sesi pendaftaran Anda telah berakhir. Mengembalikan ke verifikasi email...");
+        setTimeout(() => {
+          setStep(0);
+        }, 1500);
+      } else {
+        setError(formatHumanFriendlyError(err));
+      }
     }
   }
 
