@@ -148,6 +148,19 @@ export default function DaftarMitraPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
+        // Cek apakah user yang sedang terhubung adalah ADMIN
+        const { data: adminProfile } = await supabase
+          .from("admin_profiles")
+          .select("user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        // Jika user adalah ADMIN, bersihkan sesi login agar tidak menimpa/terkontaminasi akun admin!
+        if (adminProfile) {
+          await supabase.auth.signOut();
+          return;
+        }
+
         const { data: blacklisted } = await supabase
           .from("blacklists")
           .select("alasan")
@@ -437,7 +450,7 @@ export default function DaftarMitraPage() {
 
       if (!user) throw new Error("no-session");
 
-      // === PENGECEKAN KETAT HARUS DARI IDENTITAS DETAIL (NIK/NIB, TELEPON, USER_ID) ===
+      // === PENGECEKAN KETAT IDENTITAS ===
 
       // 1. Cek di tabel blacklists
       const { data: blacklisted } = await supabase
@@ -449,7 +462,6 @@ export default function DaftarMitraPage() {
       if (blacklisted) {
         const reason = blacklisted.alasan || "Terdaftar dalam daftar hitam penangguhan akun.";
         
-        // Daftarkan user_id & email ini ke blacklists agar tidak bisa login lagi
         await supabase.from("blacklists").upsert({
           user_id: user.id,
           email: user.email,
@@ -464,7 +476,7 @@ export default function DaftarMitraPage() {
         return;
       }
 
-      // 2. Cek apakah ada profil mitra lain berstatus banned yang pakai NIK/NIB atau Telepon sama
+      // 2. Cek apakah ada profil mitra lain berstatus banned
       const { data: bannedProfile } = await supabase
         .from("mitra_profiles")
         .select("nik_nib, telepon, alasan_ban")
@@ -475,7 +487,6 @@ export default function DaftarMitraPage() {
       if (bannedProfile) {
         const reason = bannedProfile.alasan_ban || "Pelanggaran ketentuan layanan.";
 
-        // Daftarkan user_id & email ini ke blacklists agar tidak bisa login lagi
         await supabase.from("blacklists").upsert({
           user_id: user.id,
           email: user.email,

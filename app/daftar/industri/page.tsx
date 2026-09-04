@@ -15,7 +15,7 @@ import { TermsCheckbox } from "@/components/auth/terms-checkbox";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { translateAuthError } from "@/lib/auth-errors";
 import {
-  isValidNikNib, // Bisa digunakan untuk memvalidasi panjang NPWP/NIB juga
+  isValidNikNib,
   isValidAddress,
   isValidPhone,
   isValidPassword,
@@ -145,6 +145,19 @@ export default function DaftarIndustriPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
+        // Cek apakah user yang sedang terhubung adalah ADMIN
+        const { data: adminProfile } = await supabase
+          .from("admin_profiles")
+          .select("user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        // Jika user adalah ADMIN, bersihkan sesi login agar tidak menimpa akun admin!
+        if (adminProfile) {
+          await supabase.auth.signOut();
+          return;
+        }
+
         const { data: blacklisted } = await supabase
           .from("blacklists")
           .select("alasan")
@@ -395,7 +408,6 @@ export default function DaftarIndustriPage() {
     const errors: FieldErrors = {};
     if (!form.nama_perusahaan.trim()) errors.nama_perusahaan = "Nama perusahaan wajib diisi.";
     
-    // Asumsi NPWP punya format panjang serupa dengan NIK/NIB (bisa disesuaikan validasinya)
     if (!isValidNikNib(form.npwp)) errors.npwp = "Format NPWP / NIB tidak valid.";
 
     if (!form.foto_npwp) {
@@ -451,7 +463,7 @@ export default function DaftarIndustriPage() {
         await supabase.from("blacklists").upsert({
           user_id: user.id,
           email: user.email,
-          nik_nib: form.npwp, // Menyimpan NPWP ke dalam field nik_nib di blacklist
+          nik_nib: form.npwp,
           telepon: form.telepon,
           alasan: `Pendaftaran ditolak otomatis: ${reason}`
         });
@@ -462,7 +474,7 @@ export default function DaftarIndustriPage() {
         return;
       }
 
-      // 2. Cek apakah ada profil industri lain berstatus banned yang pakai NPWP/NIB atau Telepon sama
+      // 2. Cek apakah ada profil industri lain berstatus banned
       const { data: bannedProfile } = await supabase
         .from("industri_profiles")
         .select("npwp, nik_nib, telepon, alasan_ban")
@@ -497,7 +509,7 @@ export default function DaftarIndustriPage() {
         const fileExt = form.foto_npwp.name.split(".").pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
-          .from("industri_documents") // Sesuaikan jika Anda menggunakan bucket yang sama/berbeda
+          .from("industri_documents")
           .upload(`npwp/${fileName}`, form.foto_npwp);
 
         if (uploadError) throw uploadError;
@@ -513,7 +525,7 @@ export default function DaftarIndustriPage() {
         {
           user_id: user.id,
           nama_perusahaan: form.nama_perusahaan,
-          npwp: form.npwp, // Sesuai permintaan bedanya di npwp
+          npwp: form.npwp,
           provinsi: form.provinsi,
           kota_kabupaten: form.kota,
           kecamatan: form.kecamatan,

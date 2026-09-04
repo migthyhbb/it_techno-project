@@ -3,9 +3,9 @@ import { Reveal } from "./ui/reveal";
 import { MagneticButton } from "./ui/magnetic-button";
 
 const footerLinks = [
-  { href: "app/tentang-kami", label: "Tentang kami" },
-  { href: "app/edukasi", label: "Edukasi" },
-  { href: "app/kontak", label: "Kontak" },
+  { href: "/tentang-kami", label: "Tentang kami" },
+  { href: "/edukasi", label: "Edukasi" },
+  { href: "/kontak", label: "Kontak" },
 ];
 
 export function CtaFooter() {

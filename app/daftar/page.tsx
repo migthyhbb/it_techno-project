@@ -1,5 +1,9 @@
+"use client";
+
+import { useEffect } from "react";
 import Link from "next/link";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const options = [
   {
@@ -31,6 +35,15 @@ const options = [
 ];
 
 export default function DaftarPage() {
+  // Otomatis bersihkan sesi login sebelumnya saat halaman pendaftaran dibuka
+  useEffect(() => {
+    const clearPreviousSession = async () => {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    };
+    clearPreviousSession();
+  }, []);
+
   return (
     <AuthShell
       eyebrow="Bergabung dengan LENTERA"

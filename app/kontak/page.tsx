@@ -17,7 +17,6 @@ export default function KontakPage() {
     pesan: "",
   });
 
-
   const EMAILJS_SERVICE_ID = "service_6j63tdv";
   const EMAILJS_TEMPLATE_ID = "template_4ic5usv";
   const EMAILJS_PUBLIC_KEY = "PTy_MgwBbnS8HonnN";
@@ -130,13 +129,13 @@ export default function KontakPage() {
                   </div>
                 </div>
 
-                <div className="mt-10 pt-6 border-t border-cream/10 flex gap-3">
-                  <Link href="/daftar/industri" className="text-xs bg-cream/10 hover:bg-cream/20 border border-cream/20 px-4 py-2.5 rounded-full transition-colors text-cream font-medium">
-                    Mitra Industri
+                <div className="mt-10 pt-6 border-t border-cream/10 flex flex-wrap gap-3">
+                  <Link href="/edukasi" className="text-xs bg-cream/10 hover:bg-cream/20 border border-cream/20 px-4 py-2.5 rounded-full transition-colors text-cream font-medium flex items-center gap-1.5">
+                    💡 Pusat Edukasi
                   </Link>
-                  <Link href="/daftar/mitra" className="text-xs bg-cream/10 hover:bg-cream/20 border border-cream/20 px-4 py-2.5 rounded-full transition-colors text-cream font-medium">
-                    Agen Penyalur
-                  </Link>
+                  <a href="mailto:lentera1.idn@gmail.com" className="text-xs bg-cream/10 hover:bg-cream/20 border border-cream/20 px-4 py-2.5 rounded-full transition-colors text-cream font-medium flex items-center gap-1.5">
+                    📧 Kirim Email
+                  </a>
                 </div>
               </div>
             </motion.div>
