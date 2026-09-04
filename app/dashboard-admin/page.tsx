@@ -40,7 +40,8 @@ interface Order {
   created_at: string;
   total_harga: number;
   status: string;
-  bukti_pengiriman_url?: string | null; 
+  bukti_pengiriman_url?: string | null;
+  products?: { nama_produk: string };
 }
 
 interface UserAccount {
@@ -234,7 +235,7 @@ export default function DashboardAdminPage() {
     const supabase = createSupabaseBrowserClient();
     const { data } = await supabase
       .from("orders")
-      .select("*")
+      .select("*, products(nama_produk)")
       .eq("user_id", usr.user_id)
       .order("created_at", { ascending: false });
 
@@ -929,7 +930,7 @@ export default function DashboardAdminPage() {
                     <table className="w-full text-left text-xs block md:table overflow-x-auto">
                       <thead className="bg-forest/5 text-forest font-medium border-b border-forest/10 hidden md:table-header-group">
                         <tr>
-                          <th className="p-3">ID Pesanan</th>
+                          <th className="p-3">ID & Produk</th>
                           <th className="p-3">Tanggal</th>
                           <th className="p-3">Total Biaya</th>
                           <th className="p-3">Status Pengiriman</th>
@@ -939,9 +940,16 @@ export default function DashboardAdminPage() {
                       <tbody className="divide-y divide-forest/10 block md:table-row-group">
                         {userOrders.map((ord) => (
                           <tr key={ord.id} className="block md:table-row p-4 md:p-0">
-                            <td className="p-1 md:p-3 font-mono font-medium text-forest truncate block md:table-cell mb-2 md:mb-0">
-                              <span className="inline-block md:hidden text-ink/50 mr-2">ID:</span>
-                              {ord.id.slice(0, 8)}...
+                            <td className="p-1 md:p-3 block md:table-cell mb-2 md:mb-0">
+                              <span className="inline-block md:hidden text-ink/50 text-xs mr-2">Produk:</span>
+                              <div className="font-mono font-medium text-forest">
+                                {ord.id.slice(0, 8)}...
+                              </div>
+                              {ord.products?.nama_produk && (
+                                <div className="text-xs font-sans font-medium text-ink/80 mt-0.5">
+                                  {ord.products.nama_produk}
+                                </div>
+                              )}
                             </td>
                             <td className="p-1 md:p-3 text-ink/60 block md:table-cell mb-2 md:mb-0">
                               <span className="inline-block md:hidden text-ink/50 mr-2">Tgl:</span>
