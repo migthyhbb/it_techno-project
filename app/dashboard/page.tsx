@@ -230,20 +230,26 @@ export default function DashboardMitraPage() {
         .select("*");
 
       if (rawProducts) {
-        const cleanCityName = (str: string) => {
+        // Helper normalisasi nama kota untuk menangani Bahasa Inggris & imbuhan administratif
+        const normalizeCityName = (str: string) => {
           if (!str) return "";
           return str
             .toUpperCase()
-            .replace(/KOTA/g, "")
-            .replace(/KABUPATEN/g, "")
-            .replace(/KAB\./g, "")
-            .replace(/KAB/g, "")
-            .replace(/[^A-Z0-9]/g, "")
+            .replace(/\bKOTA\b/g, "")
+            .replace(/\bKABUPATEN\b/g, "")
+            .replace(/\bKAB\b\.?/g, "")
+            .replace(/\bSOUTH\b/g, "SELATAN")
+            .replace(/\bNORTH\b/g, "UTARA")
+            .replace(/\bWEST\b/g, "BARAT")
+            .replace(/\bEAST\b/g, "TIMUR")
+            .replace(/\bCENTRAL\b/g, "PUSAT")
+            .replace(/[^A-Z0-9\s]/g, "")
+            .replace(/\s+/g, " ")
             .trim();
         };
 
         const rawLocationText = profileData?.kota_kabupaten || profileData?.alamat || "";
-        const userKotaClean = cleanCityName(rawLocationText);
+        const userKotaClean = normalizeCityName(rawLocationText);
 
         const filteredProducts: DisplayProduct[] = [];
 
@@ -254,7 +260,7 @@ export default function DashboardMitraPage() {
           ];
 
           const regionalMatch = regionalPricesList.find((rp: RegionalPrice) => {
-            const rpKotaClean = cleanCityName(rp.kota || "");
+            const rpKotaClean = normalizeCityName(rp.kota || "");
             if (!rpKotaClean || !userKotaClean) return false;
             return (
               rpKotaClean === userKotaClean ||
@@ -350,6 +356,7 @@ export default function DashboardMitraPage() {
     if (!error) {
       setProfile((prev) => (prev ? { ...prev, ...editForm } : null));
       setIsEditOpen(false);
+      window.location.reload();
     } else {
       alert("Gagal memperbarui profil: " + error.message);
     }
@@ -485,7 +492,6 @@ export default function DashboardMitraPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
               {orders.map((order) => (
                 <div key={order.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all">
-                  {/* Header Card: Nama Produk & Status */}
                   <div className="flex justify-between items-start border-b border-forest/10 pb-3 mb-3">
                     <div>
                       <h3 className="font-display font-bold text-forest text-lg">
@@ -504,11 +510,10 @@ export default function DashboardMitraPage() {
                           : "bg-blue-100 text-blue-800 border border-blue-300"
                       }`}
                     >
-                      {order.status === "dikirim" ? "Pengiriman" : order.status === "selesai" ? "Selesai" : "Diproses"}
+                      {order.status === "dikirim" ? "Pengiriman" : order.status === "selesai" ? "Selesai" : "Dipproses"}
                     </span>
                   </div>
 
-                  {/* Info Tengah: Harga & Tanggal */}
                   <div className="flex justify-between items-end mb-4">
                     <div>
                       <p className="text-[10px] text-ink/50 uppercase tracking-wider mb-0.5">Total Pembayaran</p>
@@ -524,7 +529,6 @@ export default function DashboardMitraPage() {
                     </div>
                   </div>
 
-                  {/* Area Tombol Aksi */}
                   {(order.bukti_pengiriman_url || order.status === "dikirim") && (
                     <div className="flex gap-2 pt-3 border-t border-forest/5 mt-auto">
                       {order.bukti_pengiriman_url && (
