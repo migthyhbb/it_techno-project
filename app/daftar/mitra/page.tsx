@@ -153,6 +153,7 @@ export default function DaftarMitraPage() {
           .select("user_id")
           .eq("user_id", user.id)
           .maybeSingle();
+
         if (adminProfile) {
           await supabase.auth.signOut();
           return;
@@ -403,6 +404,8 @@ export default function DaftarMitraPage() {
       }
       return;
     }
+
+    // Step 3 Validation
     const errors: FieldErrors = {};
     if (!form.nama_mitra.trim()) errors.nama_mitra = "Nama mitra wajib diisi.";
     if (!isValidNikNib(form.nik_nib)) errors.nik_nib = validationMessages.nikNib;
@@ -438,12 +441,32 @@ export default function DaftarMitraPage() {
     try {
       const supabase = createSupabaseBrowserClient();
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user ?? (await supabase.auth.getUser()).data.user;
+      // Refresh Sesi Supabase terlebih dahulu agar token tidak basi/expired
+      await supabase.auth.refreshSession();
+
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+      if (!currentUser) {
+        // Jika sesi mati, coba relogin transparan menggunakan password & email yang tersimpan di form
+        if (form.email && form.password) {
+          const { data: reloginData, error: reloginErr } = await supabase.auth.signInWithPassword({
+            email: form.email,
+            password: form.password,
+          });
+
+          if (reloginErr || !reloginData.user) {
+            throw new Error("no-session");
+          }
+        } else {
+          throw new Error("no-session");
+        }
+      }
+
+      // Ambil user ID yang tervalidasi
+      const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) throw new Error("no-session");
+
       const { data: blacklisted } = await supabase
         .from("blacklists")
         .select("nik_nib, telepon, alasan")
@@ -452,7 +475,7 @@ export default function DaftarMitraPage() {
 
       if (blacklisted) {
         const reason = blacklisted.alasan || "Terdaftar dalam daftar hitam penangguhan akun.";
-        
+
         await supabase.from("blacklists").upsert({
           user_id: user.id,
           email: user.email,
@@ -466,6 +489,7 @@ export default function DaftarMitraPage() {
         await supabase.auth.signOut();
         return;
       }
+
       const { data: bannedProfile } = await supabase
         .from("mitra_profiles")
         .select("nik_nib, telepon, alasan_ban")
@@ -538,9 +562,16 @@ export default function DaftarMitraPage() {
       setStatus("submitted");
       router.refresh();
       router.push("/dashboard");
-    } catch (err) {
+    } catch (err: any) {
       setStatus("idle");
-      setError(formatHumanFriendlyError(err));
+      if (err?.message === "no-session") {
+        setError("Sesi pendaftaran Anda telah berakhir. Mengembalikan ke verifikasi email...");
+        setTimeout(() => {
+          setStep(0);
+        }, 1500);
+      } else {
+        setError(formatHumanFriendlyError(err));
+      }
     }
   }
 
