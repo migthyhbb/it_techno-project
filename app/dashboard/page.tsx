@@ -230,10 +230,10 @@ export default function DashboardMitraPage() {
         .select("*");
 
       if (rawProducts) {
-        // Helper normalisasi nama kota untuk menangani Bahasa Inggris & imbuhan administratif
-        const normalizeCityName = (str: string) => {
-          if (!str) return "";
-          return str
+        // Normalisasi teks kota menjadi himpunan kata (token array)
+        const normalizeCityTokens = (str: string) => {
+          if (!str) return [];
+          const cleaned = str
             .toUpperCase()
             .replace(/\bKOTA\b/g, "")
             .replace(/\bKABUPATEN\b/g, "")
@@ -244,12 +244,13 @@ export default function DashboardMitraPage() {
             .replace(/\bEAST\b/g, "TIMUR")
             .replace(/\bCENTRAL\b/g, "PUSAT")
             .replace(/[^A-Z0-9\s]/g, "")
-            .replace(/\s+/g, " ")
             .trim();
+
+          return cleaned.split(/\s+/).filter(Boolean);
         };
 
         const rawLocationText = profileData?.kota_kabupaten || profileData?.alamat || "";
-        const userKotaClean = normalizeCityName(rawLocationText);
+        const userTokens = normalizeCityTokens(rawLocationText);
 
         const filteredProducts: DisplayProduct[] = [];
 
@@ -260,14 +261,15 @@ export default function DashboardMitraPage() {
           ];
 
           const regionalMatch = regionalPricesList.find((rp: RegionalPrice) => {
-            const rpKotaClean = normalizeCityName(rp.kota || "");
-            if (!rpKotaClean || !userKotaClean) return false;
-            return (
-              rpKotaClean === userKotaClean ||
-              userKotaClean.includes(rpKotaClean) ||
-              rpKotaClean.includes(userKotaClean)
-            );
+            const rpTokens = normalizeCityTokens(rp.kota || "");
+            if (rpTokens.length === 0 || userTokens.length === 0) return false;
+
+            // Memeriksa keberadaan kata kunci wilayah yang relevan
+            const isMatch = rpTokens.every((token) => userTokens.includes(token)) ||
+                            userTokens.every((token) => rpTokens.includes(token));
+            return isMatch;
           });
+
           if (regionalMatch && Number(regionalMatch.harga ?? regionalMatch.harga_min ?? 0) > 0) {
             filteredProducts.push({
               id: p.id,
