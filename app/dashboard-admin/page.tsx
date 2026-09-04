@@ -978,7 +978,7 @@ export default function DashboardAdminPage() {
                         <tbody className="divide-y divide-forest/10">
                           {userOrders.map((ord) => (
                             <tr key={ord.id} className="hover:bg-forest/[0.02]">
-                              <td className="p-3 font-mono font-medium text-forest max-w-[150px] truncate select-all" title={ord.id}>
+                              <td className="p-3 font-mono font-medium text-forest text-[11px] break-all select-all">
                                 {ord.id}
                               </td>
                               <td className="p-3 font-semibold text-forest">
