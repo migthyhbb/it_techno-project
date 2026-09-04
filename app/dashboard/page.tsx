@@ -53,8 +53,8 @@ interface Order {
   status: string;
   total_harga: number;
   created_at: string;
-  bukti_pengiriman_url?: string | null; 
-  nama_produk?: string; 
+  bukti_pengiriman_url?: string | null;
+  nama_produk?: string;
 }
 
 function InfoRow({
@@ -105,11 +105,11 @@ export default function DashboardMitraPage() {
 
   const fetchOrdersOnly = async (currentUserId: string) => {
     const supabase = createSupabaseBrowserClient();
-    
+
     const [ordersRes, pmRes, productsRes] = await Promise.all([
       supabase.from("orders").select("*").eq("user_id", currentUserId).order("created_at", { ascending: false }),
       supabase.from("pesanan_mitra").select("*").eq("user_id", currentUserId).order("created_at", { ascending: false }),
-      supabase.from("products").select("id, nama_produk") 
+      supabase.from("products").select("id, nama_produk"),
     ]);
 
     const productMap = new Map<string, string>();
@@ -134,8 +134,8 @@ export default function DashboardMitraPage() {
           status: String(o.status || "diproses").toLowerCase(),
           total_harga: Number(o.total_harga || o.total || 0),
           created_at: o.created_at || new Date().toISOString(),
-          bukti_pengiriman_url: o.bukti_pengiriman_url || null, 
-          nama_produk: prodName, 
+          bukti_pengiriman_url: o.bukti_pengiriman_url || null,
+          nama_produk: prodName,
         });
       });
     }
@@ -152,8 +152,8 @@ export default function DashboardMitraPage() {
             status: String(pm.status || "diproses").toLowerCase(),
             total_harga: Number(pm.total_harga || pm.jumlah * 15000 || 0),
             created_at: pm.created_at || new Date().toISOString(),
-            bukti_pengiriman_url: pm.bukti_pengiriman_url || null, 
-            nama_produk: prodName, 
+            bukti_pengiriman_url: pm.bukti_pengiriman_url || null,
+            nama_produk: prodName,
           });
         }
       });
@@ -236,7 +236,14 @@ export default function DashboardMitraPage() {
       if (rawProducts) {
         const cleanCityName = (str: string) => {
           if (!str) return "";
-          return str.toUpperCase().replace(/KOTA/g, "").replace(/KABUPATEN/g, "").replace(/KAB\./g, "").replace(/KAB/g, "").replace(/[^A-Z0-9]/g, "").trim();
+          return str
+            .toUpperCase()
+            .replace(/KOTA/g, "")
+            .replace(/KABUPATEN/g, "")
+            .replace(/KAB\./g, "")
+            .replace(/KAB/g, "")
+            .replace(/[^A-Z0-9]/g, "")
+            .trim();
         };
 
         const rawLocationText = profileData?.kota_kabupaten || profileData?.alamat || "";
@@ -245,21 +252,30 @@ export default function DashboardMitraPage() {
         const filteredProducts: DisplayProduct[] = [];
 
         rawProducts.forEach((p: RawProduct) => {
-          const regionalPricesList = [...(p.regional_product_prices || []), ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) || [])];
+          const regionalPricesList = [
+            ...(p.regional_product_prices || []),
+            ...(allRegionalPrices?.filter((rp) => rp.product_id === p.id) || []),
+          ];
+
           const regionalMatch = regionalPricesList.find((rp: RegionalPrice) => {
             const rpKotaClean = cleanCityName(rp.kota || "");
             if (!rpKotaClean || !userKotaClean) return false;
-            return rpKotaClean === userKotaClean || userKotaClean.includes(rpKotaClean) || rpKotaClean.includes(userKotaClean);
+            return (
+              rpKotaClean === userKotaClean ||
+              userKotaClean.includes(rpKotaClean) ||
+              rpKotaClean.includes(userKotaClean)
+            );
           });
 
-          if (regionalMatch) {
+          // HANYA tampilkan produk yang memiliki penyesuaian harga wilayah dan harganya > 0
+          if (regionalMatch && Number(regionalMatch.harga ?? regionalMatch.harga_min ?? 0) > 0) {
             filteredProducts.push({
               id: p.id,
               nama: p.nama_produk,
               nama_produk: p.nama_produk,
               deskripsi: p.deskripsi,
               unit: p.satuan,
-              price: Number(regionalMatch.harga ?? regionalMatch.harga_min ?? p.harga_default),
+              price: Number(regionalMatch.harga ?? regionalMatch.harga_min),
               stock: Number(regionalMatch.stok ?? 0),
               stok: Number(regionalMatch.stok ?? 0),
               isRegional: true,
@@ -282,15 +298,15 @@ export default function DashboardMitraPage() {
 
     const supabase = createSupabaseBrowserClient();
     const channel = supabase
-      .channel('realtime-orders-channel')
+      .channel("realtime-orders-channel")
       .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
         () => fetchOrdersOnly(userId)
       )
       .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'pesanan_mitra' },
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pesanan_mitra" },
         () => fetchOrdersOnly(userId)
       )
       .subscribe();
@@ -338,7 +354,7 @@ export default function DashboardMitraPage() {
     setEditLoading(false);
 
     if (!error) {
-      setProfile((prev) => prev ? { ...prev, ...editForm } : null);
+      setProfile((prev) => (prev ? { ...prev, ...editForm } : null));
       setIsEditOpen(false);
     } else {
       alert("Gagal memperbarui profil: " + error.message);
@@ -398,7 +414,6 @@ export default function DashboardMitraPage() {
       />
 
       <div className="px-4 sm:px-6 md:px-12 py-6 md:py-12 max-w-5xl w-full mx-auto relative">
-        
         {/* Ringkasan */}
         <section id="ringkasan" className="scroll-mt-8 mb-10 md:mb-16">
           <p className="font-mono text-xs tracking-widest uppercase text-green mb-2 sm:mb-3">Ringkasan</p>
@@ -462,7 +477,7 @@ export default function DashboardMitraPage() {
             </h2>
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-forest/5 border border-forest/10 text-[10px] text-forest/70 font-semibold tracking-wide uppercase">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               Sistem tersinkronisasi
             </div>
@@ -476,7 +491,6 @@ export default function DashboardMitraPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
               {orders.map((order) => (
                 <div key={order.id} className="bg-paper rounded-2xl border border-forest/10 p-5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all">
-                  
                   {/* Header Card: Nama Produk & Status */}
                   <div className="flex justify-between items-start border-b border-forest/10 pb-3 mb-3">
                     <div>
@@ -484,7 +498,7 @@ export default function DashboardMitraPage() {
                         {order.nama_produk || "Produk Energi"}
                       </h3>
                       <p className="font-mono text-[10px] text-ink/40 uppercase tracking-widest mt-0.5">
-                        ID: {order.id.split('-')[0]}
+                        ID: {order.id.split("-")[0]}
                       </p>
                     </div>
                     <span
@@ -511,7 +525,7 @@ export default function DashboardMitraPage() {
                     <div className="text-right">
                       <p className="text-[10px] text-ink/50 uppercase tracking-wider mb-0.5">Tanggal</p>
                       <p className="text-xs font-medium text-forest">
-                        {new Date(order.created_at).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {new Date(order.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
                       </p>
                     </div>
                   </div>
@@ -521,6 +535,7 @@ export default function DashboardMitraPage() {
                     <div className="flex gap-2 pt-3 border-t border-forest/5 mt-auto">
                       {order.bukti_pengiriman_url && (
                         <button
+                          type="button"
                           onClick={() => {
                             setSelectedProofUrl(order.bukti_pengiriman_url!);
                             setProofModalOpen(true);
@@ -536,6 +551,7 @@ export default function DashboardMitraPage() {
 
                       {order.status === "dikirim" && (
                         <button
+                          type="button"
                           onClick={() => handleConfirmOrder(order.id)}
                           disabled={confirmingOrderId === order.id}
                           className="flex-1 text-xs font-semibold py-2.5 bg-green text-white rounded-xl hover:bg-forest transition-colors shadow-xs disabled:opacity-50 cursor-pointer text-center"
@@ -545,7 +561,6 @@ export default function DashboardMitraPage() {
                       )}
                     </div>
                   )}
-
                 </div>
               ))}
             </div>
@@ -559,7 +574,7 @@ export default function DashboardMitraPage() {
               <p className="font-mono text-xs tracking-widest uppercase text-clay mb-1 sm:mb-2">Profil mitra</p>
               <h2 className="font-display font-semibold text-xl sm:text-2xl text-forest">Informasi mitra</h2>
             </div>
-            <button onClick={() => setIsEditOpen(true)} className="text-xs font-semibold px-4 py-2 bg-forest text-cream rounded-xl hover:bg-forest/90 transition-colors cursor-pointer">
+            <button type="button" onClick={() => setIsEditOpen(true)} className="text-xs font-semibold px-4 py-2 bg-forest text-cream rounded-xl hover:bg-forest/90 transition-colors cursor-pointer">
               Ubah Profil
             </button>
           </div>
@@ -580,7 +595,7 @@ export default function DashboardMitraPage() {
             <h3 className="font-display font-semibold text-red-900 text-base sm:text-lg">Hapus Akun Kemitraan</h3>
             <p className="text-xs sm:text-sm text-red-700/80 mt-0.5">Tindakan ini permanen. Seluruh data profil dan alokasi wilayah kamu akan dihapus.</p>
           </div>
-          <button onClick={() => setIsDeleteOpen(true)} className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors shrink-0 cursor-pointer">
+          <button type="button" onClick={() => setIsDeleteOpen(true)} className="text-xs font-semibold px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors shrink-0 cursor-pointer">
             Hapus Akun
           </button>
         </section>
@@ -648,18 +663,19 @@ export default function DashboardMitraPage() {
 
         {/* MODAL TAMPILKAN BUKTI PENGIRIMAN */}
         {proofModalOpen && selectedProofUrl && (
-          <div 
+          <div
             className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 transition-opacity animate-in fade-in"
             onClick={() => setProofModalOpen(false)}
           >
-            <div 
-              className="relative bg-paper rounded-2xl shadow-2xl max-w-2xl w-full p-2 animate-in zoom-in-95 duration-200" 
-              onClick={(e) => e.stopPropagation()} 
+            <div
+              className="relative bg-paper rounded-2xl shadow-2xl max-w-2xl w-full p-2 animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center p-3 border-b border-forest/10 mb-2">
                 <h3 className="font-display font-semibold text-forest text-sm">Foto Bukti Pengiriman</h3>
-                <button 
-                  onClick={() => setProofModalOpen(false)} 
+                <button
+                  type="button"
+                  onClick={() => setProofModalOpen(false)}
                   className="text-ink/50 hover:text-ink font-bold w-8 h-8 flex items-center justify-center rounded-full bg-forest/5 hover:bg-forest/10 transition-colors cursor-pointer"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -668,17 +684,17 @@ export default function DashboardMitraPage() {
                 </button>
               </div>
               <div className="relative w-full flex justify-center items-center bg-black/5 rounded-xl overflow-hidden min-h-[200px]">
-                <img 
-                  src={selectedProofUrl} 
-                  alt="Bukti Pengiriman Barang" 
+                <img
+                  src={selectedProofUrl}
+                  alt="Bukti Pengiriman Barang"
                   className="max-w-full max-h-[70vh] object-contain rounded-lg"
                 />
               </div>
               <div className="p-3 text-center">
-                <a 
-                  href={selectedProofUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
+                <a
+                  href={selectedProofUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-[11px] font-medium text-blue-600 hover:underline"
                 >
                   Buka gambar resolusi penuh di tab baru

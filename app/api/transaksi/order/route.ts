@@ -46,7 +46,9 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) return NextResponse.json({ error: "Sesi habis, silakan login ulang." }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ error: "Sesi habis, silakan login ulang." }, { status: 401 });
+    }
 
     const body = await request.json() as Record<string, unknown>;
     const produk_id = String(body.produk_id || body.product_id || "");
@@ -58,20 +60,49 @@ export async function POST(request: Request) {
 
     const supabaseAdmin = createAdminClient();
 
-    // 1. Ambil data produk untuk menghitung total harga
-    const { data: product } = await supabaseAdmin
-      .from('products')
-      .select('*')
-      .eq('id', produk_id)
+    // 1. Ambil data profil mitra untuk mengetahui wilayah
+    const { data: profile } = await supabaseAdmin
+      .from('mitra_profiles')
+      .select('kota_kabupaten, provinsi, nama_mitra')
+      .eq('user_id', user.id)
       .maybeSingle();
 
-    const harga = product?.harga_default || product?.price || 15000;
-    const totalBayar = volume_terjual_kg * harga;
+    if (!profile?.kota_kabupaten) {
+      return NextResponse.json({ 
+        error: "Lokasi wilayah mitra tidak ditemukan. Silakan lengkapi profil Anda." 
+      }, { status: 400 });
+    }
+
+    // 2. Wajib ambil harga spesifik wilayah mitra
+    const { data: regPrice } = await supabaseAdmin
+      .from('regional_product_prices')
+      .select('harga')
+      .eq('product_id', produk_id)
+      .ilike('kota', `%${profile.kota_kabupaten}%`)
+      .maybeSingle();
+
+    if (!regPrice || !regPrice.harga) {
+      return NextResponse.json({ 
+        error: "Produk ini belum tersedia atau belum memiliki penetapan harga di wilayah Anda." 
+      }, { status: 400 });
+    }
+
+    const hargaWilayah = Number(regPrice.harga);
+    const totalBayar = volume_terjual_kg * hargaWilayah;
     const orderId = `AGEN-${Date.now()}`;
 
-    // FIX: BLOKIR JIKA DI BAWAH 10RB SEBELUM MASUK MIDTRANS
+    // 3. Batas minimal pembayaran Midtrans (Rp 10.000)
     if (totalBayar < 10000) {
-      return NextResponse.json({ error: `Minimal transaksi pembayaran Midtrans adalah Rp 10.000. (Total saat ini: Rp ${totalBayar})` }, { status: 400 });
+      return NextResponse.json({
+        error: `Total pemesanan minimal Rp 10.000 untuk memproses pembayaran Midtrans. (Total Anda saat ini: Rp ${totalBayar.toLocaleString("id-ID")})`
+      }, { status: 400 });
+    }
+
+    // 4. Batas maksimal pembayaran Midtrans (Rp 99.999.999.999)
+    if (totalBayar > 99999999999) {
+      return NextResponse.json({
+        error: `Total pemesanan melebihi batas maksimal pembayaran Midtrans (Maksimal Rp 99.999.999.999). Silakan kurangi jumlah pesanan.`
+      }, { status: 400 });
     }
 
     const serverKey = process.env.MIDTRANS_SERVER_KEY;
@@ -93,7 +124,7 @@ export async function POST(request: Request) {
             gross_amount: Math.round(totalBayar)
           },
           customer_details: {
-            first_name: "Mitra",
+            first_name: profile.nama_mitra || "Mitra",
             email: user.email || "mitra@lentera.com"
           }
         };
@@ -101,15 +132,16 @@ export async function POST(request: Request) {
         const transaction = await snap.createTransaction(parameter);
         snapToken = transaction.token;
       } catch (midtransErr: any) {
-        // FIX: LEMPAR ERROR KE FRONTEND, JANGAN DISEMBUNYIKAN
         console.error("Midtrans SDK Error:", midtransErr);
-        return NextResponse.json({ error: "Gagal terhubung ke gerbang pembayaran Midtrans. Pastikan harga minimal Rp 10.000 atau periksa API Key." }, { status: 500 });
+        return NextResponse.json({
+          error: "Gagal terhubung ke gerbang pembayaran Midtrans. Silakan periksa kembali server key atau coba lagi."
+        }, { status: 500 });
       }
     }
 
     const statusPesanan = snapToken ? 'menunggu_pembayaran' : 'diproses';
 
-    // 2. Simpan ke tabel orders (untuk dibaca oleh Dashboard Mitra)
+    // 5. Simpan ke tabel orders
     await supabaseAdmin.from('orders').insert([{
       id: orderId,
       user_id: user.id,
@@ -117,7 +149,7 @@ export async function POST(request: Request) {
       status: statusPesanan
     }]);
 
-    // 3. Simpan ke tabel pesanan_mitra (untuk manajemen riwayat backend)
+    // 6. Simpan ke tabel pesanan_mitra
     await supabaseAdmin.from('pesanan_mitra').insert([{
       id: orderId,
       user_id: user.id,
@@ -129,6 +161,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       token: snapToken,
+      order_id: orderId,
       message: snapToken ? "Menunggu pembayaran" : "Pesanan berhasil dibuat!",
     }, { status: 200 });
 
