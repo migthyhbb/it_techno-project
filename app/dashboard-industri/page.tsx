@@ -48,8 +48,8 @@ function InfoRow({
 
 const KREDIT_PER_KG = 100;
 
-// REKENING DUMMY LENGKAP B3
-const REKENING_PEMBAYARAN_B3 = "BCA 123-456-7890 Atas Nama PT LENTERA BERKAH INDONESIA";
+// REKENING DUMMY RINGKAS
+const REKENING_PEMBAYARAN_B3 = "BCA 123-456-7890 (PT LBI)";
 const NO_REK_ONLY = "1234567890";
 
 const KATEGORI_B3 = [
@@ -702,8 +702,8 @@ export default function DashboardIndustriPage() {
                       <div>
                         <h4 className="font-semibold text-forest text-sm leading-tight">{b3.nama_limbah}</h4>
                         <p className="text-xs text-ink/60 mt-1">Berat: {b3.perkiraan_berat} kg</p>
-                        <p className="text-[11px] font-medium text-amber-900/80 mt-1">
-                          Tujuan: <span className="font-bold text-amber-950">{REKENING_PEMBAYARAN_B3}</span>
+                        <p className="text-xs font-semibold text-amber-950 mt-1">
+                          Tujuan: <span className="font-bold">{REKENING_PEMBAYARAN_B3}</span>
                         </p>
                       </div>
                       <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full shrink-0 ${
@@ -731,7 +731,7 @@ export default function DashboardIndustriPage() {
                           Konfirmasi Bayar
                         </button>
                       ) : (
-                        <span className="text-xs text-ink/40 italic">Lunas / Dipproses</span>
+                        <span className="text-xs text-ink/40 italic">Lunas / Diproses</span>
                       )}
                     </div>
                   </div>
@@ -763,7 +763,7 @@ export default function DashboardIndustriPage() {
                         <td className="p-4 font-semibold text-amber-900">
                           Rp {(b3.biaya_pengolahan || 0).toLocaleString("id-ID")}
                         </td>
-                        <td className="p-4 text-xs font-semibold text-amber-950">
+                        <td className="p-4 text-xs font-semibold text-amber-950 whitespace-nowrap">
                           {REKENING_PEMBAYARAN_B3}
                         </td>
                         <td className="p-4">
