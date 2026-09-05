@@ -261,6 +261,21 @@ export default function DashboardIndustriPage() {
 
   async function handleKirimLimbah(e: React.FormEvent) {
     e.preventDefault();
+
+    // --- SATPAM LAPIS DUA: VALIDASI MUTLAK SAAT TOMBOL DITEKAN ---
+    if (!formLimbah.foto) {
+      setErrorMsg("Pilih foto limbah terlebih dahulu!");
+      return;
+    }
+    const validTypes = ["image/jpeg", "image/png", "image/jpg"];
+    if (!validTypes.includes(formLimbah.foto.type)) {
+      setErrorMsg("AKSES DITOLAK! File harus berupa gambar (JPG, JPEG, PNG). File PDF tidak diizinkan.");
+      // Kosongkan file yang menyangkut
+      setFormLimbah({ ...formLimbah, foto: null });
+      return;
+    }
+    // -------------------------------------------------------------
+
     setIsSubmitting(true);
     setErrorMsg(null);
 
@@ -326,6 +341,20 @@ export default function DashboardIndustriPage() {
 
   async function handleKirimLimbahB3(e: React.FormEvent) {
     e.preventDefault();
+
+    // --- SATPAM LAPIS DUA: VALIDASI B3 MUTLAK ---
+    if (!formB3.foto) {
+      setErrorMsg("Pilih foto dokumentasi B3 terlebih dahulu!");
+      return;
+    }
+    const validTypes = ["image/jpeg", "image/png", "image/jpg"];
+    if (!validTypes.includes(formB3.foto.type)) {
+      setErrorMsg("AKSES DITOLAK! File harus berupa gambar (JPG, JPEG, PNG). File PDF tidak diizinkan.");
+      setFormB3({ ...formB3, foto: null });
+      return;
+    }
+    // ---------------------------------------------
+
     setIsSubmitting(true);
     setErrorMsg(null);
 
@@ -400,14 +429,26 @@ export default function DashboardIndustriPage() {
 
   const handleKonfirmasiPembayaran = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPayShipment || !buktiBayarFile) return;
+
+    if (!selectedPayShipment || !buktiBayarFile) {
+      alert("Pilih file bukti pembayaran terlebih dahulu!");
+      return;
+    }
+
+    // --- SATPAM LAPIS DUA: VALIDASI BUKTI TRANSFER ---
+    const validTypes = ["image/jpeg", "image/png", "image/jpg"];
+    if (!validTypes.includes(buktiBayarFile.type)) {
+      alert("AKSES DITOLAK! Bukti transfer harus berupa gambar (JPG, JPEG, PNG). File PDF tidak diizinkan.");
+      setBuktiBayarFile(null);
+      return;
+    }
+    // -------------------------------------------------
 
     setIsPaying(true);
 
     try {
       const supabase = createSupabaseBrowserClient();
       
-      // Update status di Supabase
       const { error: updateError } = await supabase
         .from("waste_shipments")
         .update({ status: "Menunggu Verifikasi" })
@@ -419,7 +460,6 @@ export default function DashboardIndustriPage() {
       setSelectedPayShipment(null);
       setBuktiBayarFile(null);
 
-      // Refresh data
       if (userId) {
         const { data: newData } = await supabase
           .from("waste_shipments")
@@ -873,7 +913,6 @@ export default function DashboardIndustriPage() {
             <form onSubmit={handleKonfirmasiPembayaran} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium mb-1.5 text-ink">Upload Bukti Transfer</label>
-                {/* VALIDASI FILE GAMBAR DIBERLAKUKAN JUGA DI SINI */}
                 <input
                   type="file"
                   accept="image/png, image/jpeg, image/jpg"
@@ -1234,7 +1273,6 @@ export default function DashboardIndustriPage() {
 
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Limbah</label>
-                {/* VALIDASI FILE GAMBAR MUTLAK */}
                 <input
                   type="file"
                   accept="image/png, image/jpeg, image/jpg"
@@ -1402,7 +1440,6 @@ export default function DashboardIndustriPage() {
 
               <div>
                 <label className="block text-xs font-semibold mb-1.5 text-ink">Upload Foto Dokumentasi Limbah B3</label>
-                {/* VALIDASI FILE GAMBAR MUTLAK */}
                 <input
                   type="file"
                   accept="image/png, image/jpeg, image/jpg"
