@@ -20,49 +20,78 @@ export async function POST(request: Request) {
     if (!poinNumber || poinNumber < 100) {
       return NextResponse.json({ error: "Minimal penukaran 100 Token." }, { status: 400 });
     }
-    const { data: profile } = await supabase
-      .from('industri_profiles')
-      .select('saldo_kredit')
-      .eq('user_id', user.id)
-      .single();
 
-    const saldoSekarang = profile?.saldo_kredit || 0;
+    // 1. Hitung total kredit riil dari limbah terkirim (Status 'selesai')
+    const { data: shipmentData } = await supabase
+      .from("waste_shipments")
+      .select("perkiraan_berat, status")
+      .eq("user_id", user.id);
 
-    if (saldoSekarang < poinNumber) {
-      return NextResponse.json({ error: "Token tidak mencukupi!" }, { status: 400 });
+    const totalKg = (shipmentData || [])
+      .filter((s) => String(s.status).toLowerCase() === "selesai")
+      .reduce((sum, s) => sum + Number(s.perkiraan_berat || 0), 0);
+
+    const grossToken = totalKg * 100;
+
+    // 2. Hitung total token yang sudah dicairkan sebelumnya
+    const { data: withdrawData } = await supabase
+      .from("pencairan_dana")
+      .select("jumlah_tarik_tunai")
+      .eq("id_agen", user.id);
+
+    const totalDicairkan = (withdrawData || []).reduce(
+      (sum, w) => sum + Number(w.jumlah_tarik_tunai || 0),
+      0
+    );
+
+    const saldoTersedia = grossToken - totalDicairkan;
+
+    if (saldoTersedia < poinNumber) {
+      return NextResponse.json({ error: `Token tidak mencukupi! Saldo Anda: ${saldoTersedia}` }, { status: 400 });
     }
+
     const supabaseAdmin = createAdminClient();
-    const saldoBaru = saldoSekarang - poinNumber;
 
-    const { data: updatedProfile, error: updateError } = await supabaseAdmin
-      .from('industri_profiles')
-      .update({ saldo_kredit: saldoBaru })
-      .eq('user_id', user.id)
-      .gte('saldo_kredit', poinNumber)
-      .select('saldo_kredit')
-      .maybeSingle();
-
-    if (updateError) throw updateError;
-
-    if (!updatedProfile) {
-      return NextResponse.json({ error: "Transaksi digagalkan. Saldo berubah." }, { status: 409 });
-    }
-    await supabaseAdmin.from('pencairan_dana').insert([{
+    // 3. Catat transaksi pencairan baru
+    const { error: insertError } = await supabaseAdmin.from('pencairan_dana').insert([{
       id_agen: user.id,
       jumlah_tarik_tunai: poinNumber,
       bank_tujuan: metode_pencairan,
       status: 'Selesai'
     }]);
-    await redis.zincrby('eco_credits_leaderboard', -Math.abs(poinNumber), user.id);
+
+    if (insertError) throw insertError;
+
+    // 4. Update saldo_kredit di profil jika kolomnya dipakai
+    const { data: profile } = await supabase
+      .from('industri_profiles')
+      .select('saldo_kredit')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (profile) {
+      const currentKreditDB = Number(profile.saldo_kredit || 0);
+      await supabaseAdmin
+        .from('industri_profiles')
+        .update({ saldo_kredit: Math.max(0, currentKreditDB - poinNumber) })
+        .eq('user_id', user.id);
+    }
+
+    // 5. Update Leaderboard Redis (Abaikan jika Redis offline)
+    try {
+      await redis.zincrby('eco_credits_leaderboard', -Math.abs(poinNumber), user.id);
+    } catch (redisErr) {
+      console.warn("Redis Update Warning:", redisErr);
+    }
 
     return NextResponse.json({
       message: `Berhasil menukar ${poinNumber} token!`,
-      sisa_poin: updatedProfile.saldo_kredit
+      sisa_poin: saldoTersedia - poinNumber
     }, { status: 200 });
 
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Terjadi kesalahan internal";
     console.error("Redeem API Error:", msg);
-    return NextResponse.json({ error: "Gagal memproses penukaran poin." }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

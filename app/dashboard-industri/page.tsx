@@ -48,6 +48,10 @@ function InfoRow({
 
 const KREDIT_PER_KG = 100;
 
+// REKENING DUMMY RINGKAS
+const REKENING_PEMBAYARAN_B3 = "BCA 123-456-7890 (PT LBI)";
+const NO_REK_ONLY = "1234567890";
+
 const KATEGORI_B3 = [
   { id: "cair_kimia", nama: "Limbah Cair & Kimia Industri", tarif: 15000 },
   { id: "oli_pelumas", nama: "Oli Bekas & Pelumas Sintetis", tarif: 12000 },
@@ -444,16 +448,29 @@ export default function DashboardIndustriPage() {
     setIsWithdrawing(true);
 
     try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        alert("Sesi Anda telah berakhir. Silakan login kembali.");
+        router.replace("/masuk");
+        return;
+      }
+
       const response = await fetch("/api/gamifikasi/redeem", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
         body: JSON.stringify({
           jumlah_poin: jumlahCair,
           metode_pencairan: `${formWithdraw.metode} - ${formWithdraw.nomor_rekening}`,
         }),
       });
+
       const responseData = await response.json();
-      if (!response.ok) throw new Error(responseData.error || "Gagal memproses pencairan.");
+      if (!response.ok) throw new Error(responseData.error || "Gagal memproses penukaran poin.");
 
       setTotalKredit((prev) => prev - jumlahCair);
       setWithdrawSuccess(true);
@@ -618,7 +635,7 @@ export default function DashboardIndustriPage() {
                           </span>
                         )}
                       </div>
-                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 ${
+                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 whitespace-nowrap ${
                         shipment.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
                         : isPendingPayment ? 'bg-amber-100 text-amber-800 border border-amber-300'
                         : shipment.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
@@ -685,8 +702,11 @@ export default function DashboardIndustriPage() {
                       <div>
                         <h4 className="font-semibold text-forest text-sm leading-tight">{b3.nama_limbah}</h4>
                         <p className="text-xs text-ink/60 mt-1">Berat: {b3.perkiraan_berat} kg</p>
+                        <p className="text-xs font-semibold text-amber-950 mt-1">
+                          Tujuan: <span className="font-bold">{REKENING_PEMBAYARAN_B3}</span>
+                        </p>
                       </div>
-                      <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full shrink-0 ${
+                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full shrink-0 whitespace-nowrap ${
                         isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
                         : b3.status.toLowerCase() === "menunggu verifikasi" ? "bg-blue-100 text-blue-800"
                         : "bg-green/10 text-green"
@@ -706,12 +726,12 @@ export default function DashboardIndustriPage() {
                       {isPending ? (
                         <button
                           onClick={() => setSelectedPayShipment(b3)}
-                          className="text-xs font-bold px-3 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
+                          className="text-xs font-bold px-3 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer shadow-xs whitespace-nowrap"
                         >
                           Konfirmasi Bayar
                         </button>
                       ) : (
-                        <span className="text-xs text-ink/40 italic">Lunas / Diproses</span>
+                        <span className="text-xs text-ink/40 italic whitespace-nowrap">Lunas / Diproses</span>
                       )}
                     </div>
                   </div>
@@ -724,11 +744,12 @@ export default function DashboardIndustriPage() {
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-amber-50/80 border-b border-amber-200 text-xs font-bold text-amber-900 uppercase tracking-wider">
-                    <th className="p-4">Deskripsi Limbah</th>
-                    <th className="p-4">Berat Total</th>
-                    <th className="p-4">Total Biaya</th>
-                    <th className="p-4">Status Pembayaran</th>
-                    <th className="p-4 text-right">Aksi Konfirmasi</th>
+                    <th className="p-4 whitespace-nowrap">Deskripsi Limbah</th>
+                    <th className="p-4 whitespace-nowrap">Berat Total</th>
+                    <th className="p-4 whitespace-nowrap">Total Biaya</th>
+                    <th className="p-4 whitespace-nowrap">Rekening Tujuan</th>
+                    <th className="p-4 whitespace-nowrap">Status Pembayaran</th>
+                    <th className="p-4 text-right whitespace-nowrap">Aksi Konfirmasi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-forest/10">
@@ -738,12 +759,15 @@ export default function DashboardIndustriPage() {
                     return (
                       <tr key={b3.id} className="hover:bg-cream/40 transition-colors">
                         <td className="p-4 font-medium text-forest">{b3.nama_limbah}</td>
-                        <td className="p-4 text-ink/70">{b3.perkiraan_berat} kg</td>
-                        <td className="p-4 font-semibold text-amber-900">
+                        <td className="p-4 text-ink/70 whitespace-nowrap">{b3.perkiraan_berat} kg</td>
+                        <td className="p-4 font-semibold text-amber-900 whitespace-nowrap">
                           Rp {(b3.biaya_pengolahan || 0).toLocaleString("id-ID")}
                         </td>
-                        <td className="p-4">
-                          <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full ${
+                        <td className="p-4 text-xs font-semibold text-amber-950 whitespace-nowrap">
+                          {REKENING_PEMBAYARAN_B3}
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          <span className={`inline-block px-3 py-1 text-[10px] font-bold uppercase rounded-full whitespace-nowrap ${
                             isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
                             : b3.status.toLowerCase() === "menunggu verifikasi" ? "bg-blue-100 text-blue-800"
                             : "bg-green/10 text-green"
@@ -751,11 +775,11 @@ export default function DashboardIndustriPage() {
                             {b3.status}
                           </span>
                         </td>
-                        <td className="p-4 text-right">
+                        <td className="p-4 text-right whitespace-nowrap">
                           {isPending ? (
                             <button
                               onClick={() => setSelectedPayShipment(b3)}
-                              className="text-xs font-bold px-3.5 py-1.5 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer"
+                              className="text-xs font-bold px-3.5 py-1.5 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
                             >
                               Konfirmasi Bayar
                             </button>
@@ -841,7 +865,7 @@ export default function DashboardIndustriPage() {
             <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-xs space-y-1.5 mb-4">
               <p><strong>Item:</strong> {selectedPayShipment.nama_limbah}</p>
               <p><strong>Total Tagihan:</strong> Rp {(selectedPayShipment.biaya_pengolahan || 0).toLocaleString("id-ID")}</p>
-              <p><strong>Rekening Bank:</strong> BCA 123-456-7890 a.n. LENTERA BERKAH</p>
+              <p><strong>Rekening Tujuan:</strong> {REKENING_PEMBAYARAN_B3}</p>
             </div>
 
             <form onSubmit={handleKonfirmasiPembayaran} className="space-y-4">
@@ -1236,10 +1260,10 @@ export default function DashboardIndustriPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-xs p-4">
           <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
 
-            <div className="px-6 py-4 border-b border-amber-200 bg-amber-50 flex justify-between items-center shrink-0">
+            <div className="px-6 py-4 border-b border-amber-200/80 bg-amber-50/60 flex justify-between items-center shrink-0">
               <div>
                 <h3 className="font-display font-semibold text-amber-900 text-lg">Formulir Pendaftaran Limbah B3</h3>
-                <p className="text-xs text-amber-700">Daftarkan limbah B3 terlebih dahulu untuk mendapatkan rincian tagihan.</p>
+                <p className="text-xs text-amber-700/80">Daftarkan limbah B3 untuk mendapatkan rincian tagihan.</p>
               </div>
               <button
                 onClick={() => setIsB3ModalOpen(false)}
@@ -1259,8 +1283,29 @@ export default function DashboardIndustriPage() {
                 </div>
               )}
 
+              {/* CARD INFORMASI REKENING PROPOSIONAL DENGAN TOMBOL SALIN */}
+              <div className="p-3.5 bg-amber-50/80 border border-amber-200/80 rounded-xl flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800/80">Rekening Pembayaran B3</p>
+                  <p className="text-xs font-semibold text-amber-950">{REKENING_PEMBAYARAN_B3}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(NO_REK_ONLY);
+                    alert("Nomor rekening 1234567890 berhasil disalin!");
+                  }}
+                  className="text-[10px] font-bold text-amber-800 hover:text-amber-950 bg-amber-200/60 hover:bg-amber-200 px-2.5 py-1.5 rounded-lg transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Salin
+                </button>
+              </div>
+
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-ink">Pilih Kategori Limbah B3</label>
+                <label className="block text-xs font-semibold mb-1.5 text-ink">Pilih Kategori Limbah B3</label>
                 <select
                   value={formB3.kategori_id}
                   onChange={(e) => setFormB3({ ...formB3, kategori_id: e.target.value })}
@@ -1275,7 +1320,7 @@ export default function DashboardIndustriPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-ink">Nama / Deskripsi Spesifik Limbah</label>
+                <label className="block text-xs font-semibold mb-1.5 text-ink">Nama / Deskripsi Spesifik Limbah</label>
                 <input
                   type="text"
                   className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
@@ -1287,7 +1332,7 @@ export default function DashboardIndustriPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-ink">Perkiraan Berat Total (kg)</label>
+                <label className="block text-xs font-semibold mb-1.5 text-ink">Perkiraan Berat Total (kg)</label>
                 <input
                   type="number"
                   className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
@@ -1298,13 +1343,13 @@ export default function DashboardIndustriPage() {
                   min="1"
                 />
 
-                <div className="mt-2 p-3 rounded-xl border bg-amber-50/80 border-amber-200 flex items-center justify-between">
+                <div className="mt-2.5 p-3 rounded-xl border bg-amber-50/50 border-amber-200/80 flex items-center justify-between">
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-800 mb-0.5">Estimasi Biaya Pengolahan</p>
-                    <p className="text-xs text-amber-900/70">Dapat dibayar setelah pendaftaran</p>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-amber-800/80 mb-0.5">Estimasi Biaya Pengolahan</p>
+                    <p className="text-[11px] text-amber-900/60">Dapat dibayar setelah pendaftaran</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-display font-bold text-lg text-amber-900">
+                    <p className="font-display font-bold text-base text-amber-900">
                       Rp {estimasiBiayaB3.toLocaleString("id-ID")}
                     </p>
                   </div>
@@ -1312,10 +1357,10 @@ export default function DashboardIndustriPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-ink">Detail Lokasi Penjemputan</label>
+                <label className="block text-xs font-semibold mb-1.5 text-ink">Detail Lokasi Penjemputan</label>
                 <textarea
                   className="block w-full text-sm text-ink border border-ink/20 rounded-xl p-3 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white resize-none"
-                  rows={3}
+                  rows={2}
                   placeholder="Jalan, No. Gedung, Patokan (Otomatis Kapital)"
                   value={formB3.lokasi}
                   onChange={(e) => setFormB3({ ...formB3, lokasi: e.target.value.toUpperCase() })}
@@ -1324,29 +1369,29 @@ export default function DashboardIndustriPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Dokumentasi Limbah B3</label>
+                <label className="block text-xs font-semibold mb-1.5 text-ink">Upload Foto Dokumentasi Limbah B3</label>
                 <input
                   type="file"
                   accept="image/png, image/jpeg, image/jpg"
-                  className="block w-full text-sm text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200"
+                  className="block w-full text-xs text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200"
                   onChange={(e) => setFormB3({ ...formB3, foto: e.target.files?.[0] || null })}
                   required
                 />
-                <p className="text-[11px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
+                <p className="text-[10px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
               </div>
 
-              <div className="pt-4 mt-2 border-t border-forest/10 flex justify-end gap-3 shrink-0">
+              <div className="pt-3 mt-2 border-t border-forest/10 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsB3ModalOpen(false)}
-                  className="px-4 py-2.5 text-sm font-medium text-ink/60 hover:text-ink transition-colors cursor-pointer"
+                  className="px-4 py-2 text-xs font-semibold text-ink/60 hover:text-ink transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="bg-amber-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  className="bg-amber-600 text-white px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-xs"
                 >
                   {isSubmitting ? (
                     <>
