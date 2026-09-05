@@ -48,6 +48,9 @@ function InfoRow({
 
 const KREDIT_PER_KG = 100;
 
+// HARDCODED REKENING TUJUAN B3
+const REKENING_PEMBAYARAN_B3 = "BCA 123-456-7890 a.n. LENTERA BERKAH";
+
 const KATEGORI_B3 = [
   { id: "cair_kimia", nama: "Limbah Cair & Kimia Industri", tarif: 15000 },
   { id: "oli_pelumas", nama: "Oli Bekas & Pelumas Sintetis", tarif: 12000 },
@@ -698,6 +701,9 @@ export default function DashboardIndustriPage() {
                       <div>
                         <h4 className="font-semibold text-forest text-sm leading-tight">{b3.nama_limbah}</h4>
                         <p className="text-xs text-ink/60 mt-1">Berat: {b3.perkiraan_berat} kg</p>
+                        <p className="text-[11px] font-medium text-amber-900/80 mt-1">
+                          Rekening Tujuan: <span className="font-bold text-amber-950">{REKENING_PEMBAYARAN_B3}</span>
+                        </p>
                       </div>
                       <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full shrink-0 ${
                         isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
@@ -740,6 +746,7 @@ export default function DashboardIndustriPage() {
                     <th className="p-4">Deskripsi Limbah</th>
                     <th className="p-4">Berat Total</th>
                     <th className="p-4">Total Biaya</th>
+                    <th className="p-4">Rekening Tujuan</th>
                     <th className="p-4">Status Pembayaran</th>
                     <th className="p-4 text-right">Aksi Konfirmasi</th>
                   </tr>
@@ -754,6 +761,9 @@ export default function DashboardIndustriPage() {
                         <td className="p-4 text-ink/70">{b3.perkiraan_berat} kg</td>
                         <td className="p-4 font-semibold text-amber-900">
                           Rp {(b3.biaya_pengolahan || 0).toLocaleString("id-ID")}
+                        </td>
+                        <td className="p-4 text-xs font-semibold text-amber-950">
+                          {REKENING_PEMBAYARAN_B3}
                         </td>
                         <td className="p-4">
                           <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full ${
@@ -854,7 +864,7 @@ export default function DashboardIndustriPage() {
             <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-xs space-y-1.5 mb-4">
               <p><strong>Item:</strong> {selectedPayShipment.nama_limbah}</p>
               <p><strong>Total Tagihan:</strong> Rp {(selectedPayShipment.biaya_pengolahan || 0).toLocaleString("id-ID")}</p>
-              <p><strong>Rekening Bank:</strong> BCA 123-456-7890 a.n. LENTERA BERKAH</p>
+              <p><strong>Rekening Bank:</strong> {REKENING_PEMBAYARAN_B3}</p>
             </div>
 
             <form onSubmit={handleKonfirmasiPembayaran} className="space-y-4">
@@ -1271,6 +1281,22 @@ export default function DashboardIndustriPage() {
                   {errorMsg}
                 </div>
               )}
+
+              {/* KOTAK INFORMASI REKENING TUJUAN HARDCODED */}
+              <div className="p-3.5 bg-amber-100/70 border border-amber-300 rounded-xl text-xs text-amber-900 space-y-1">
+                <p className="font-semibold text-amber-950 flex items-center gap-1.5">
+                  <svg className="w-4 h-4 shrink-0 text-amber-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Informasi Rekening Pembayaran
+                </p>
+                <p className="text-amber-800">
+                  Pembayaran dilakukan via Transfer Bank ke:
+                </p>
+                <p className="font-mono font-bold text-sm text-amber-950 bg-amber-50 px-2.5 py-1 rounded border border-amber-200 inline-block mt-0.5">
+                  {REKENING_PEMBAYARAN_B3}
+                </p>
+              </div>
 
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Pilih Kategori Limbah B3</label>
