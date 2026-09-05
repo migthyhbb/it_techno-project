@@ -444,16 +444,29 @@ export default function DashboardIndustriPage() {
     setIsWithdrawing(true);
 
     try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        alert("Sesi Anda telah berakhir. Silakan login kembali.");
+        router.replace("/masuk");
+        return;
+      }
+
       const response = await fetch("/api/gamifikasi/redeem", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
         body: JSON.stringify({
           jumlah_poin: jumlahCair,
           metode_pencairan: `${formWithdraw.metode} - ${formWithdraw.nomor_rekening}`,
         }),
       });
+
       const responseData = await response.json();
-      if (!response.ok) throw new Error(responseData.error || "Gagal memproses pencairan.");
+      if (!response.ok) throw new Error(responseData.error || "Gagal memproses penukaran poin.");
 
       setTotalKredit((prev) => prev - jumlahCair);
       setWithdrawSuccess(true);
