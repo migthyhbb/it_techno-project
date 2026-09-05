@@ -407,6 +407,7 @@ export default function DashboardIndustriPage() {
     try {
       const supabase = createSupabaseBrowserClient();
       
+      // Update status di Supabase
       const { error: updateError } = await supabase
         .from("waste_shipments")
         .update({ status: "Menunggu Verifikasi" })
@@ -418,6 +419,7 @@ export default function DashboardIndustriPage() {
       setSelectedPayShipment(null);
       setBuktiBayarFile(null);
 
+      // Refresh data
       if (userId) {
         const { data: newData } = await supabase
           .from("waste_shipments")
@@ -871,11 +873,26 @@ export default function DashboardIndustriPage() {
             <form onSubmit={handleKonfirmasiPembayaran} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium mb-1.5 text-ink">Upload Bukti Transfer</label>
+                {/* VALIDASI FILE GAMBAR DIBERLAKUKAN JUGA DI SINI */}
                 <input
                   type="file"
                   accept="image/png, image/jpeg, image/jpg"
                   required
-                  onChange={(e) => setBuktiBayarFile(e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const validTypes = ["image/jpeg", "image/png", "image/jpg"];
+                      if (!validTypes.includes(file.type)) {
+                        alert("Format Ditolak! Hanya diperbolehkan mengunggah file gambar (JPG, JPEG, PNG).");
+                        e.target.value = ""; 
+                        setBuktiBayarFile(null);
+                        return;
+                      }
+                      setBuktiBayarFile(file);
+                    } else {
+                      setBuktiBayarFile(null);
+                    }
+                  }}
                   className="block w-full text-xs text-ink/80 border border-ink/20 rounded-xl p-2 bg-white file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:bg-amber-100 file:text-amber-800"
                 />
               </div>
@@ -1217,11 +1234,26 @@ export default function DashboardIndustriPage() {
 
               <div>
                 <label className="block text-sm font-medium mb-1.5 text-ink">Upload Foto Limbah</label>
+                {/* VALIDASI FILE GAMBAR MUTLAK */}
                 <input
                   type="file"
                   accept="image/png, image/jpeg, image/jpg"
                   className="block w-full text-sm text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-green bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green/10 file:text-green hover:file:bg-green/20"
-                  onChange={(e) => setFormLimbah({ ...formLimbah, foto: e.target.files?.[0] || null })}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const validTypes = ["image/jpeg", "image/png", "image/jpg"];
+                      if (!validTypes.includes(file.type)) {
+                        alert("Format Ditolak! Hanya diperbolehkan mengunggah file gambar (JPG, JPEG, PNG).");
+                        e.target.value = ""; 
+                        setFormLimbah({ ...formLimbah, foto: null });
+                        return;
+                      }
+                      setFormLimbah({ ...formLimbah, foto: file });
+                    } else {
+                      setFormLimbah({ ...formLimbah, foto: null });
+                    }
+                  }}
                   required
                 />
                 <p className="text-[11px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
@@ -1370,11 +1402,26 @@ export default function DashboardIndustriPage() {
 
               <div>
                 <label className="block text-xs font-semibold mb-1.5 text-ink">Upload Foto Dokumentasi Limbah B3</label>
+                {/* VALIDASI FILE GAMBAR MUTLAK */}
                 <input
                   type="file"
                   accept="image/png, image/jpeg, image/jpg"
                   className="block w-full text-xs text-ink/80 border border-ink/20 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200"
-                  onChange={(e) => setFormB3({ ...formB3, foto: e.target.files?.[0] || null })}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const validTypes = ["image/jpeg", "image/png", "image/jpg"];
+                      if (!validTypes.includes(file.type)) {
+                        alert("Format Ditolak! Hanya diperbolehkan mengunggah file gambar (JPG, JPEG, PNG).");
+                        e.target.value = ""; 
+                        setFormB3({ ...formB3, foto: null });
+                        return;
+                      }
+                      setFormB3({ ...formB3, foto: file });
+                    } else {
+                      setFormB3({ ...formB3, foto: null });
+                    }
+                  }}
                   required
                 />
                 <p className="text-[10px] text-ink/50 mt-1">Format dukungan: JPG, JPEG, PNG.</p>
