@@ -51,13 +51,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Loloskan semua API routes tanpa harus menyentuh Supabase Auth di middleware
+  // Loloskan semua API routes tanpa harus menyentuh Supabase Auth
   if (url.startsWith("/api/")) {
     return NextResponse.next();
   }
 
   // ==========================================
-  // 3. LOGIKA SUPABASE AUTH & ROLE CHECKING
+  // 3. LOGIKA SUPABASE AUTH & GHOST SESSION WIPER
   // ==========================================
   let supabaseResponse = NextResponse.next({ request });
 
@@ -89,9 +89,32 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Tarik data user
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  // 🔥 PERBAIKAN MUTLAK: PENGHANCUR GHOST SESSION 🔥
+  // Jika token invalid (error) atau tidak ada user, paksa hapus cookie di browser
+  if (error || !user) {
+    request.cookies.getAll().forEach((cookie) => {
+      if (cookie.name.startsWith("sb-")) {
+        supabaseResponse.cookies.delete(cookie.name);
+      }
+    });
+  }
+
+  // Jika user maksa masuk ke rute Pendaftaran, paksa Logout dan bersihkan sisa-sisa cookie
+  if (url.startsWith("/daftar")) {
+    if (user) {
+      await supabase.auth.signOut();
+    }
+    // Sapu bersih lagi khusus halaman pendaftaran biar fresh
+    request.cookies.getAll().forEach((cookie) => {
+      if (cookie.name.startsWith("sb-")) {
+        supabaseResponse.cookies.delete(cookie.name);
+      }
+    });
+    return supabaseResponse;
+  }
 
   const redirectSambilBawaCookie = (tujuan: string) => {
     const redirectRes = NextResponse.redirect(new URL(tujuan, request.url));
@@ -109,16 +132,7 @@ export async function middleware(request: NextRequest) {
   // Jika mencoba ke area proteksi tanpa login -> lempar ke login
   if (isDashboardRoute && !user) return redirectSambilBawaCookie("/masuk");
 
-  // A. PERBAIKAN: Jika mengakses rute Pendaftaran (/daftar, /daftar/mitra, /daftar/industri)
-  // Biarkan user/admin selalu bisa mengakses form pendaftaran dan bersihkan sesi lamanya
-  if (url.startsWith("/daftar")) {
-    if (user) {
-      await supabase.auth.signOut();
-    }
-    return supabaseResponse;
-  }
-
-  // Deteksi Role Hanya Jika Diperlukan
+  // Deteksi Role
   let role = "mitra";
   if (user && (isDashboardRoute || url === "/masuk" || url === "/login")) {
     try {
@@ -146,7 +160,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // B. Redirect ke dashboard HANYA jika mencoba akses halaman masuk (/masuk atau /login) saat sudah punya sesi login aktif
+  // B. Redirect ke dashboard HANYA jika masuk halaman masuk & punya sesi valid
   if ((url === "/masuk" || url === "/login") && user) {
     if (role === "admin") return redirectSambilBawaCookie("/dashboard-admin");
     if (role === "industri") return redirectSambilBawaCookie("/dashboard-industri");

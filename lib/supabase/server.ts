@@ -2,7 +2,6 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js';
 
-
 export async function createClient() {
   const cookieStore = await cookies();
 
@@ -19,13 +18,16 @@ export async function createClient() {
             cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, options);
             });
-          } catch {
+          } catch (error) {
+            // Error ini wajar di Server Components jika dipanggil saat proses Render (bukan Action)
+            // Middleware di atas sudah menangani setAll dengan benar.
           }
         },
       },
     }
   );
 }
+
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
