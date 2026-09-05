@@ -635,7 +635,7 @@ export default function DashboardIndustriPage() {
                           </span>
                         )}
                       </div>
-                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 ${
+                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full shrink-0 whitespace-nowrap ${
                         shipment.status.toLowerCase() === 'selesai' ? 'bg-green/10 text-green'
                         : isPendingPayment ? 'bg-amber-100 text-amber-800 border border-amber-300'
                         : shipment.status.toLowerCase() === 'diperjalanan' ? 'bg-blue-100 text-blue-700'
@@ -706,7 +706,7 @@ export default function DashboardIndustriPage() {
                           Tujuan: <span className="font-bold">{REKENING_PEMBAYARAN_B3}</span>
                         </p>
                       </div>
-                      <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full shrink-0 ${
+                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full shrink-0 whitespace-nowrap ${
                         isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
                         : b3.status.toLowerCase() === "menunggu verifikasi" ? "bg-blue-100 text-blue-800"
                         : "bg-green/10 text-green"
@@ -726,12 +726,12 @@ export default function DashboardIndustriPage() {
                       {isPending ? (
                         <button
                           onClick={() => setSelectedPayShipment(b3)}
-                          className="text-xs font-bold px-3 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
+                          className="text-xs font-bold px-3 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer shadow-xs whitespace-nowrap"
                         >
                           Konfirmasi Bayar
                         </button>
                       ) : (
-                        <span className="text-xs text-ink/40 italic">Lunas / Diproses</span>
+                        <span className="text-xs text-ink/40 italic whitespace-nowrap">Lunas / Diproses</span>
                       )}
                     </div>
                   </div>
@@ -744,12 +744,12 @@ export default function DashboardIndustriPage() {
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="bg-amber-50/80 border-b border-amber-200 text-xs font-bold text-amber-900 uppercase tracking-wider">
-                    <th className="p-4">Deskripsi Limbah</th>
-                    <th className="p-4">Berat Total</th>
-                    <th className="p-4">Total Biaya</th>
-                    <th className="p-4">Rekening Tujuan</th>
-                    <th className="p-4">Status Pembayaran</th>
-                    <th className="p-4 text-right">Aksi Konfirmasi</th>
+                    <th className="p-4 whitespace-nowrap">Deskripsi Limbah</th>
+                    <th className="p-4 whitespace-nowrap">Berat Total</th>
+                    <th className="p-4 whitespace-nowrap">Total Biaya</th>
+                    <th className="p-4 whitespace-nowrap">Rekening Tujuan</th>
+                    <th className="p-4 whitespace-nowrap">Status Pembayaran</th>
+                    <th className="p-4 text-right whitespace-nowrap">Aksi Konfirmasi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-forest/10">
@@ -759,15 +759,15 @@ export default function DashboardIndustriPage() {
                     return (
                       <tr key={b3.id} className="hover:bg-cream/40 transition-colors">
                         <td className="p-4 font-medium text-forest">{b3.nama_limbah}</td>
-                        <td className="p-4 text-ink/70">{b3.perkiraan_berat} kg</td>
-                        <td className="p-4 font-semibold text-amber-900">
+                        <td className="p-4 text-ink/70 whitespace-nowrap">{b3.perkiraan_berat} kg</td>
+                        <td className="p-4 font-semibold text-amber-900 whitespace-nowrap">
                           Rp {(b3.biaya_pengolahan || 0).toLocaleString("id-ID")}
                         </td>
                         <td className="p-4 text-xs font-semibold text-amber-950 whitespace-nowrap">
                           {REKENING_PEMBAYARAN_B3}
                         </td>
-                        <td className="p-4">
-                          <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full ${
+                        <td className="p-4 whitespace-nowrap">
+                          <span className={`inline-block px-3 py-1 text-[10px] font-bold uppercase rounded-full whitespace-nowrap ${
                             isPending ? "bg-amber-100 text-amber-800 border border-amber-300"
                             : b3.status.toLowerCase() === "menunggu verifikasi" ? "bg-blue-100 text-blue-800"
                             : "bg-green/10 text-green"
@@ -775,11 +775,11 @@ export default function DashboardIndustriPage() {
                             {b3.status}
                           </span>
                         </td>
-                        <td className="p-4 text-right">
+                        <td className="p-4 text-right whitespace-nowrap">
                           {isPending ? (
                             <button
                               onClick={() => setSelectedPayShipment(b3)}
-                              className="text-xs font-bold px-3.5 py-1.5 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer"
+                              className="text-xs font-bold px-3.5 py-1.5 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
                             >
                               Konfirmasi Bayar
                             </button>
