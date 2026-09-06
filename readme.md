@@ -88,8 +88,8 @@ Pemetaan dinamis (*real-time*) lokasi fasilitas industri, mitra, dan pusat pengo
 
 **3. Autentikasi: Pendaftaran & Masuk**  
 Gerbang otentikasi aman dengan pemisahan peran yang jelas antara Mitra dan Industri.  
-![Halaman Daftar](public/images/03-daftar.png)  
-![Halaman Masuk](public/images/04-masuk.png)
+![Halaman Daftar](public/images/daftar.png)  
+![Halaman Masuk](public/images/masuk.png)
 
 **4. Dashboard Mitra & Pemesanan Stok**  
 Panel kontrol Mitra untuk memantau status, ketersediaan stok wilayah, dan melakukan pemesanan. *(Catatan: Jika katalog kosong, berarti Admin belum melakukan alokasi stok ke wilayah tersebut).*  
