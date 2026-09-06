@@ -19,32 +19,43 @@ export async function POST(request: Request) {
 
     const supabase = createAdminClient();
 
+    // -- LOGIKA JIKA GAGAL / BATAL --
     if (["expire", "cancel", "deny"].includes(transaction_status)) {
       if (!order_id.startsWith("B3-")) { 
-        // Bebas lint error: Variabel pesananError dihapus karena tidak dibutuhkan
-        const { data: pesanan } = await supabase.from("pesanan_mitra").select("status, produk_id, jumlah, user_id").eq("id", order_id).single();
-        if (pesanan && pesanan.status !== "DIBATALKAN") {
-          await supabase.from("pesanan_mitra").update({ status: "DIBATALKAN" }).eq("id", order_id).neq("status", "DIBATALKAN");
+        const { data: order } = await supabase.from("orders").select("status, items, user_id").eq("id", order_id).single();
+        
+        if (order && String(order.status).toLowerCase() !== "dibatalkan") {
+          await supabase.from("orders").update({ status: "dibatalkan" }).eq("id", order_id);
           
-          const { data: product } = await supabase.from("products").select("stok, stok_dummy").eq("id", pesanan.produk_id).single();
-          if (product) {
-            const restoredStock = Number(product.stok || 0) + Number(pesanan.jumlah || 0);
-            await supabase.from("products").update({ stok: restoredStock, stok_dummy: restoredStock }).eq("id", pesanan.produk_id);
-            
-            const { data: profile } = await supabase.from("mitra_profiles").select("kota_kabupaten").eq("user_id", pesanan.user_id).maybeSingle();
-            if (profile?.kota_kabupaten) {
-              const { data: regProduct } = await supabase.from("regional_product_prices").select("id, stok").eq("product_id", pesanan.produk_id).ilike("kota", `%${profile.kota_kabupaten}%`).maybeSingle();
-              if (regProduct) {
-                await supabase.from("regional_product_prices").update({ stok: Number(regProduct.stok || 0) + Number(pesanan.jumlah || 0) }).eq("id", regProduct.id);
+          let produk_id = null;
+          let jumlah = 0;
+          if (order.items) {
+            const itemsData = Array.isArray(order.items) ? order.items[0] : order.items;
+            produk_id = itemsData?.product_id;
+            jumlah = Number(itemsData?.jumlah || 0);
+          }
+
+          if (produk_id && jumlah > 0) {
+            const { data: product } = await supabase.from("products").select("stok, stok_dummy").eq("id", produk_id).single();
+            if (product) {
+              const restoredStock = Number(product.stok || 0) + jumlah;
+              await supabase.from("products").update({ stok: restoredStock, stok_dummy: restoredStock }).eq("id", produk_id);
+              
+              const { data: profile } = await supabase.from("mitra_profiles").select("kota_kabupaten").eq("user_id", order.user_id).maybeSingle();
+              if (profile?.kota_kabupaten) {
+                const { data: regProduct } = await supabase.from("regional_product_prices").select("id, stok").eq("product_id", produk_id).ilike("kota", `%${profile.kota_kabupaten}%`).maybeSingle();
+                if (regProduct) {
+                  await supabase.from("regional_product_prices").update({ stok: Number(regProduct.stok || 0) + jumlah }).eq("id", regProduct.id);
+                }
               }
             }
           }
         }
-        await supabase.from("orders").update({ status: "dibatalkan" }).eq("id", order_id);
       }
       return NextResponse.json({ message: "Pesanan dibatalkan dan stok dikembalikan" }, { status: 200 });
     }
 
+    // -- LOGIKA JIKA SUKSES DIBAYAR --
     if (transaction_status !== "settlement" && transaction_status !== "capture") {
       return NextResponse.json({ message: "Status pembayaran diabaikan" }, { status: 200 });
     }
@@ -56,16 +67,11 @@ export async function POST(request: Request) {
         await supabase.from("waste_shipments").update({ status: "dijadwalkan" }).eq("id", cleanId).eq("status", "menunggu_konfirmasi");
       }
     } else { 
-      const { data: pesanan } = await supabase.from("pesanan_mitra").select("status").eq("id", order_id).single();
-      if (pesanan && ["PENDING", "MENUNGGU_PEMBAYARAN"].includes(String(pesanan.status).toUpperCase())) {
-        await supabase.from("pesanan_mitra").update({ status: "DIPROSES" }).eq("id", order_id).in("status", ["PENDING", "MENUNGGU_PEMBAYARAN"]);
-      }
       await supabase.from("orders").update({ status: "diproses" }).eq("id", order_id).in("status", ["menunggu_pembayaran", "PENDING", "pending"]);
     }
 
     return NextResponse.json({ message: "Webhook sukses diverifikasi dan diproses" }, { status: 200 });
   } catch (error: unknown) {
-    // Bebas lint error: error: any diubah jadi error: unknown
     const msg = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }

@@ -5,13 +5,9 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
 let ratelimit: Ratelimit | null = null;
-
 try {
   if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    });
+    const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
     ratelimit = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(5, "60 s"), analytics: true });
   }
 } catch {
@@ -25,9 +21,7 @@ export async function POST(request: Request) {
       try {
         const { success } = await ratelimit.limit(ip);
         if (!success) return NextResponse.json({ error: 'Terlalu banyak permintaan. Tunggu sebentar.' }, { status: 429 });
-      } catch {
-        // Bebas lint error: catch parameterless
-      }
+      } catch {}
     }
 
     const supabase = await createClient();
@@ -37,7 +31,6 @@ export async function POST(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     const produk_id = String(body.produk_id || body.product_id || "");
     const jumlah = Number(body.jumlah || body.volume_terjual_kg || 0);
-
     if (!jumlah || jumlah <= 0 || !produk_id) return NextResponse.json({ error: "Data pesanan tidak valid." }, { status: 400 });
 
     const supabaseAdmin = createAdminClient();
@@ -55,7 +48,6 @@ export async function POST(request: Request) {
     if (totalBayar < 10000) return NextResponse.json({ error: `Total pemesanan minimal Rp 10.000` }, { status: 400 });
 
     const orderId = crypto.randomUUID();
-
     const serverKey = process.env.MIDTRANS_SERVER_KEY;
     const clientKey = process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY;
     let snapToken: string | null = null;
@@ -70,25 +62,28 @@ export async function POST(request: Request) {
         const transaction = await snap.createTransaction(parameter);
         snapToken = transaction.token;
       } catch (midtransErr: unknown) {
-        console.error(midtransErr); // Bebas lint error: midtransErr sekarang terpakai
+        console.error(midtransErr);
         return NextResponse.json({ error: "Gagal terhubung ke gerbang pembayaran." }, { status: 500 });
       }
     }
 
     const statusPesanan = snapToken ? 'PENDING' : 'DIPROSES';
 
-    const { error: orderError } = await supabaseAdmin.from('orders').insert([{ id: orderId, user_id: user.id, total_harga: totalBayar, status: statusPesanan }]);
+    // 🔥 FIX: Suntikkan 'items' agar UI tahu ini produk apa. Hapus insert pesanan_mitra!
+    const { error: orderError } = await supabaseAdmin.from('orders').insert([{ 
+      id: orderId, 
+      user_id: user.id, 
+      total_harga: totalBayar, 
+      status: statusPesanan,
+      items: { product_id: produk_id, jumlah: jumlah } 
+    }]);
+    
     if (orderError) throw orderError;
-
-    const { error: pesananError } = await supabaseAdmin.from('pesanan_mitra').insert([{ id: orderId, user_id: user.id, produk_id: produk_id, jumlah: jumlah, total_harga: totalBayar, status: statusPesanan }]);
-    if (pesananError) throw pesananError;
 
     return NextResponse.json({ token: snapToken, order_id: orderId, message: "Pesanan berhasil dibuat!" }, { status: 200 });
 
   } catch (error: unknown) {
-    // Bebas lint error: error: any diubah jadi error: unknown 
     const msg = error instanceof Error ? error.message : "Kesalahan Internal Server";
-    console.error("API Order Error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
