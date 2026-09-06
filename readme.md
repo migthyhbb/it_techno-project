@@ -78,34 +78,34 @@ Platform LENTERA dirancang dengan alur kerja rantai pasok yang terintegrasi, adi
 
 Berikut adalah beberapa tampilan antarmuka dari platform LENTERA:
 
-### 1. Halaman Utama (Landing Page)
-Tampilan beranda utama yang menyambut pengguna dengan informasi umum, statistik, dan akses cepat.
-![Halaman Awal](public/images/halaman awal.png)
+**1. Halaman Utama (Landing Page)**  
+Menyambut pengguna dengan visualisasi data, statistik, dan navigasi yang intuitif.  
+![Halaman Awal](public/images/halaman-awal.png)
 
-### 2. Peta Interaktif Sebaran Wilayah
-Peta dinamis yang menampilkan titik lokasi fasilitas industri, mitra, dan pusat pengolahan secara real-time.
+**2. Peta Interaktif Sebaran Wilayah**  
+Pemetaan dinamis (*real-time*) lokasi fasilitas industri, mitra, dan pusat pengolahan.  
 ![Maps Wilayah](public/images/maps.png)
 
-### 3. Halaman Pendaftaran (Register)
-Pilihan registrasi akun yang terpisah secara jelas antara Mitra dan Industri.
-![Halaman Daftar](public/images/daftar.png)
+**3. Autentikasi: Pendaftaran & Masuk**  
+Gerbang otentikasi aman dengan pemisahan peran yang jelas antara Mitra dan Industri.  
+![Halaman Daftar](public/images/03-daftar.png)  
+![Halaman Masuk](public/images/04-masuk.png)
 
-### 4. Halaman Masuk (Login)
-Gerbang otentikasi aman untuk mengakses dashboard masing-masing peran pengguna.
-![Halaman Masuk](public/images/masuk.png)
+**4. Dashboard Mitra & Pemesanan Stok**  
+Panel kontrol Mitra untuk memantau status, ketersediaan stok wilayah, dan melakukan pemesanan. *(Catatan: Jika katalog kosong, berarti Admin belum melakukan alokasi stok ke wilayah tersebut).*  
+![Dashboard Mitra](public/images/05-dashboard-mitra.png)
 
-### 5. Dashboard Pengguna & Pesan Stok
-Panel kontrol utama bagi Mitra untuk memantau status akun dan melakukan pemesanan bahan energi/limbah.
-![Dashboard Mitra](public/images/dashboard.png)
-jika katalog produk anda kosong, maka berarti admin belum memasukkan dan menginput data ke dalam website ke daerah yang anda pilih. untuk menginput data, silahkan pergi ke panel admin dan input data sesuai wilayah yang ingin di restock
+**5. Simulasi Pembayaran (Midtrans Gateway)**  
+Checkout pesanan yang terintegrasi penuh dengan Midtrans Sandbox untuk simulasi pembayaran *Real-time*.  
+![Pembayaran](public/images/06-payment-midtrans.png)
 
-### 6. Simulasi Pembayaran (Midtrans Gateway)
-Integrasi sistem pembayaran digital untuk transaksi pemesanan stok.
-![Pembayaran](public/images/pembayaran.png)
+**6. Dashboard Industri & Setoran Limbah**  
+Panel khusus bagi industri untuk menjadwalkan penjemputan limbah dan memantau pencairan saldo.  
+![Dashboard Industri](public/images/07-dashboard-industri.png)
 
-### 7. Profil Mitra
-Halaman informasi detail akun mitra beserta opsi pengelolaan profil dan manajemen akun.
-![Profil Mitra](public/images/profil-mitra.png)
+**7. Dashboard Administrator**  
+Pusat kendali LENTERA untuk memverifikasi dokumen KYC/KYB, mengelola stok wilayah, dan memoderasi pengguna.  
+![Dashboard Admin](public/images/08-dashboard-admin.png)
 
 ---
 
@@ -285,20 +285,20 @@ Untuk mempercepat proses evaluasi tanpa harus melewati alur pendaftaran dan veri
 
 **1. Akun Administrator (Kontrol Penuh)**
 * **URL Login:** [https://it-techno-project.vercel.app/masuk](https://it-techno-project.vercel.app/masuk)
-* **Email:** `admin@lentera.com`
-* **Kata Sandi:** `AdminLentera123!`
+* **Email:** `adminlentera@gmail.com`
+* **Kata Sandi:** `Admin123`
 * **Akses:** Verifikasi user, kelola status pesanan, update stok wilayah.
 
 **2. Akun Industri (Penghasil Limbah)**
 * **URL Login:** [https://it-techno-project.vercel.app/masuk](https://it-techno-project.vercel.app/masuk)
-* **Email:** `industri@test.com`
-* **Kata Sandi:** `IndustriTest123!`
+* **Email:** `industrilentera1@gmail.com`
+* **Kata Sandi:** `Industri123!`
 * **Akses:** Kirim jadwal limbah, kelola limbah B3, dan simulasi pencairan Token LENTERA.
 
 **3. Akun Mitra (Pembeli & Pengolah)**
 * **URL Login:** [https://it-techno-project.vercel.app/masuk](https://it-techno-project.vercel.app/masuk)
-* **Email:** `mitra@test.com`
-* **Kata Sandi:** `MitraTest123!`
+* **Email:** `lenteramitra1@gmail.com`
+* **Kata Sandi:** `Mitra123!`
 * **Akses:** Beli suplai bahan energi, lacak logistik, dan simulasi pembayaran Midtrans.
 
 > **🎥 Video Demo (Backup):** Apabila terjadi *downtime* pada server pihak ketiga (Supabase/Midtrans) selama masa pengujian, silakan lihat [Video Demo End-to-End LENTERA di sini](#). *(Isi dengan link YouTube Unlisted / GDrive Abang)*
@@ -340,6 +340,10 @@ Jika tim Juri ingin meninjau dan menjalankan arsitektur LENTERA secara lokal, si
  * Manajemen Operasional: Pantau aktivitas transaksi keseluruhan, kelola leaderboard gamifikasi, serta tinjau laporan kendala (ticketing) yang diajukan oleh pengguna umum.
 
  ---
+ ⚠️ **CATATAN PENTING UNTUK PENGUJIAN JURI:**
+Karena sistem LENTERA menggunakan proteksi sesi yang ketat (Strict Session Cookies) untuk keamanan data tiap peran, mohon untuk **TIDAK** melakukan login dengan 2 peran (role) yang berbeda di browser yang sama secara bersamaan.
+
+Jika Juri ingin menguji interaksi *real-time* (misalnya melihat update stok dari sisi Admin dan Mitra secara bersamaan), harap gunakan **aplikasi browser yang berbeda** (contoh: Admin di Chrome, Mitra di Microsoft Edge) atau gunakan fitur Profil Guest yang berbeda.
 
 ## 🔌 API Documentation
 
