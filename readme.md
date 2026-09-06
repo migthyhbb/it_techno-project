@@ -277,6 +277,43 @@ it_techno-project/
 ```
 ---
 
+## 🔑 Kredensial Pengujian (Khusus Juri ITechno)
+
+Untuk mempercepat proses evaluasi tanpa harus melewati alur pendaftaran dan verifikasi OTP/KYC, Bapak/Ibu Juri dapat langsung menggunakan akun pengujian berikut. 
+
+*(Harap gunakan mode **Incognito/Private Browser** jika ingin menguji interaksi antar-akun secara bersamaan).*
+
+**1. Akun Administrator (Kontrol Penuh)**
+* **URL Login:** [https://it-techno-project.vercel.app/masuk](https://it-techno-project.vercel.app/masuk)
+* **Email:** `admin@lentera.com`
+* **Kata Sandi:** `AdminLentera123!`
+* **Akses:** Verifikasi user, kelola status pesanan, update stok wilayah.
+
+**2. Akun Industri (Penghasil Limbah)**
+* **URL Login:** [https://it-techno-project.vercel.app/masuk](https://it-techno-project.vercel.app/masuk)
+* **Email:** `industri@test.com`
+* **Kata Sandi:** `IndustriTest123!`
+* **Akses:** Kirim jadwal limbah, kelola limbah B3, dan simulasi pencairan Token LENTERA.
+
+**3. Akun Mitra (Pembeli & Pengolah)**
+* **URL Login:** [https://it-techno-project.vercel.app/masuk](https://it-techno-project.vercel.app/masuk)
+* **Email:** `mitra@test.com`
+* **Kata Sandi:** `MitraTest123!`
+* **Akses:** Beli suplai bahan energi, lacak logistik, dan simulasi pembayaran Midtrans.
+
+> **🎥 Video Demo (Backup):** Apabila terjadi *downtime* pada server pihak ketiga (Supabase/Midtrans) selama masa pengujian, silakan lihat [Video Demo End-to-End LENTERA di sini](#). *(Isi dengan link YouTube Unlisted / GDrive Abang)*
+
+---
+
+## 💻 Instalasi & Pengujian Lokal (Local Development)
+
+Jika tim Juri ingin meninjau dan menjalankan arsitektur LENTERA secara lokal, silakan ikuti langkah berikut:
+
+1. **Clone Repository:**
+   ```bash
+   git clone [https://github.com/migthyhbb/it_techno-project.git](https://github.com/migthyhbb/it_techno-project.git)
+   cd it_techno-project
+
 ### 📖 User Guide
 🏭 Untuk Pengguna Umum (Industri & Mitra)
 * Registrasi Akun: Akses halaman utama LENTERA dan klik tombol Daftar pada menu navigasi. Pilih tipe akun operasional Anda (Daftar sebagai Mitra atau Daftar sebagai Industri). Masukkan alamat email aktif untuk menerima kode OTP. Setelah email terverifikasi, buat kata sandi yang kuat dan lengkapi seluruh formulir data perusahaan sesuai instruksi. Setujui Syarat Ketentuan serta Kebijakan Privasi di bagian bawah, lalu klik tombol pendaftaran.

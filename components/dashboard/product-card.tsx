@@ -61,11 +61,15 @@ export function ProductCard({ product }: { product: Product }) {
         (window as any).snap.pay(data.token, {
           onSuccess: function () {
             alert("Pembayaran berhasil!");
-            window.location.reload();
+            setTimeout(() => {
+              window.location.reload();
+            }, 2500);
           },
           onPending: function () {
             alert("Menunggu pembayaran Anda.");
-            window.location.reload();
+            setTimeout(() => {
+              window.location.reload();
+            }, 2500);
           },
           onError: function () {
             alert("Pembayaran gagal!");
