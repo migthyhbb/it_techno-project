@@ -106,22 +106,13 @@ export async function POST(request: Request) {
       if (pesananError) throw pesananError;
       const paymentPendingStatuses = ["PENDING", "MENUNGGU_PEMBAYARAN"];
       if (pesanan && paymentPendingStatuses.includes(String(pesanan.status).toUpperCase())) {
-        const { data: updatedOrder, error } = await supabase
+        const { error } = await supabase
           .from("pesanan_mitra")
           .update({ status: "DIPROSES" })
           .eq("id", order_id)
-          .eq("status", "PENDING")
-          .select("id")
-          .maybeSingle();
+          .in("status", paymentPendingStatuses);
 
         if (error) throw error;
-        if (updatedOrder) {
-          const { error: stockError } = await supabase.rpc("kurangi_stok_produk", {
-            p_id: pesanan.produk_id,
-            jumlah_potong: pesanan.jumlah
-          });
-          if (stockError) throw stockError;
-        }
       }
 
       const { error: orderStatusError } = await supabase

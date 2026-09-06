@@ -123,7 +123,7 @@ export async function POST(request: Request) {
 
         const transaction = await snap.createTransaction(parameter);
         snapToken = transaction.token;
-      } catch (midtransErr: any) {
+      } catch (midtransErr: unknown) {
         console.error("Midtrans SDK Error:", midtransErr);
         return NextResponse.json({
           error: "Gagal terhubung ke gerbang pembayaran Midtrans. Silakan periksa kembali server key atau coba lagi."
@@ -132,13 +132,15 @@ export async function POST(request: Request) {
     }
 
     const statusPesanan = snapToken ? 'menunggu_pembayaran' : 'diproses';
-    await supabaseAdmin.from('orders').insert([{
+    const { error: orderError } = await supabaseAdmin.from('orders').insert([{
       id: orderId,
       user_id: user.id,
       total_harga: totalBayar,
       status: statusPesanan
     }]);
-    await supabaseAdmin.from('pesanan_mitra').insert([{
+    if (orderError) throw orderError;
+
+    const { error: pesananError } = await supabaseAdmin.from('pesanan_mitra').insert([{
       id: orderId,
       user_id: user.id,
       produk_id: produk_id,
@@ -146,6 +148,13 @@ export async function POST(request: Request) {
       total_harga: totalBayar,
       status: statusPesanan.toUpperCase()
     }]);
+    if (pesananError) throw pesananError;
+
+    const { error: stockError } = await supabaseAdmin.rpc("kurangi_stok_produk", {
+      p_id: produk_id,
+      jumlah_potong: volume_terjual_kg,
+    });
+    if (stockError) throw stockError;
 
     return NextResponse.json({
       token: snapToken,
