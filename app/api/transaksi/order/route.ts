@@ -31,6 +31,7 @@ export async function POST(request: Request) {
     const body = await request.json() as Record<string, unknown>;
     const produk_id = String(body.produk_id || body.product_id || "");
     const jumlah = Number(body.jumlah || body.volume_terjual_kg || 0);
+    
     if (!jumlah || jumlah <= 0 || !produk_id) return NextResponse.json({ error: "Data pesanan tidak valid." }, { status: 400 });
 
     const supabaseAdmin = createAdminClient();
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
 
     const statusPesanan = snapToken ? 'PENDING' : 'DIPROSES';
 
-    // 🔥 FIX: Suntikkan 'items' agar UI tahu ini produk apa. Hapus insert pesanan_mitra!
+    // 1. BUAT PESANAN
     const { error: orderError } = await supabaseAdmin.from('orders').insert([{ 
       id: orderId, 
       user_id: user.id, 
@@ -79,6 +80,21 @@ export async function POST(request: Request) {
     }]);
     
     if (orderError) throw orderError;
+
+    // 2. POTONG STOK REGIONAL SECARA LANGSUNG (Sistem Booking)
+    const { error: regStockErr } = await supabaseAdmin
+      .from('regional_product_prices')
+      .update({ stok: regionalStock - jumlah })
+      .eq('id', regPrice.id);
+    
+    if (regStockErr) throw regStockErr;
+
+    // 3. POTONG STOK MASTER PRODUK
+    const { data: masterProduct } = await supabaseAdmin.from('products').select('stok').eq('id', produk_id).single();
+    if (masterProduct) {
+      const newMasterStock = Math.max(0, Number(masterProduct.stok || 0) - jumlah);
+      await supabaseAdmin.from('products').update({ stok: newMasterStock, stok_dummy: newMasterStock }).eq('id', produk_id);
+    }
 
     return NextResponse.json({ token: snapToken, order_id: orderId, message: "Pesanan berhasil dibuat!" }, { status: 200 });
 
