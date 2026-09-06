@@ -93,7 +93,7 @@ Gerbang otentikasi aman dengan pemisahan peran yang jelas antara Mitra dan Indus
 
 **4. Dashboard Mitra & Pemesanan Stok**  
 Panel kontrol Mitra untuk memantau status, ketersediaan stok wilayah, dan melakukan pemesanan. *(Catatan: Jika katalog kosong, berarti Admin belum melakukan alokasi stok ke wilayah tersebut).*  
-![Dashboard Mitra](public/images/05-dashboard-mitra.png)
+![Dashboard Mitra](public/images/dashboard-mitra.png)
 
 **5. Simulasi Pembayaran (Midtrans Gateway)**  
 Checkout pesanan yang terintegrasi penuh dengan Midtrans Sandbox untuk simulasi pembayaran *Real-time*.  
@@ -101,11 +101,11 @@ Checkout pesanan yang terintegrasi penuh dengan Midtrans Sandbox untuk simulasi 
 
 **6. Dashboard Industri & Setoran Limbah**  
 Panel khusus bagi industri untuk menjadwalkan penjemputan limbah dan memantau pencairan saldo.  
-![Dashboard Industri](public/images/07-dashboard-industri.png)
+![Dashboard Industri](public/images/dashboard-industri.png)
 
 **7. Dashboard Administrator**  
 Pusat kendali LENTERA untuk memverifikasi dokumen KYC/KYB, mengelola stok wilayah, dan memoderasi pengguna.  
-![Dashboard Admin](public/images/08-dashboard-admin.png)
+![Dashboard Admin](public/images/dashboard-admin.png)
 
 ---
 
