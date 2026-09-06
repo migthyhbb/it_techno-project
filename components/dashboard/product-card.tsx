@@ -12,6 +12,18 @@ interface Product {
   stock: number;
 }
 
+interface MidtransSnap {
+  pay: (
+    token: string,
+    callbacks: {
+      onSuccess: () => void;
+      onPending: () => void;
+      onError: () => void;
+      onClose: () => void;
+    }
+  ) => void;
+}
+
 export function ProductCard({ product }: { product: Product }) {
   const [jumlah, setJumlah] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -57,19 +69,18 @@ export function ProductCard({ product }: { product: Product }) {
         setLoading(false);
         return;
       }
-      if (data.token && typeof window !== "undefined" && (window as any).snap) {
-        (window as any).snap.pay(data.token, {
+      const snap =
+        typeof window !== "undefined"
+          ? (window as Window & { snap?: MidtransSnap }).snap
+          : undefined;
+
+      if (data.token && snap) {
+        snap.pay(data.token, {
           onSuccess: function () {
             alert("Pembayaran berhasil!");
-            setTimeout(() => {
-              window.location.reload();
-            }, 2500);
           },
           onPending: function () {
             alert("Menunggu pembayaran Anda.");
-            setTimeout(() => {
-              window.location.reload();
-            }, 2500);
           },
           onError: function () {
             alert("Pembayaran gagal!");
@@ -82,7 +93,7 @@ export function ProductCard({ product }: { product: Product }) {
         alert(data.message || "Pesanan berhasil dibuat!");
         window.location.reload();
       }
-    } catch (err) {
+    } catch {
       alert("Terjadi kesalahan koneksi saat memproses pesanan.");
     } finally {
       setLoading(false);

@@ -104,7 +104,8 @@ export async function POST(request: Request) {
         .single();
 
       if (pesananError) throw pesananError;
-      if (pesanan?.status === "PENDING") {
+      const paymentPendingStatuses = ["PENDING", "MENUNGGU_PEMBAYARAN"];
+      if (pesanan && paymentPendingStatuses.includes(String(pesanan.status).toUpperCase())) {
         const { data: updatedOrder, error } = await supabase
           .from("pesanan_mitra")
           .update({ status: "DIPROSES" })
@@ -122,6 +123,14 @@ export async function POST(request: Request) {
           if (stockError) throw stockError;
         }
       }
+
+      const { error: orderStatusError } = await supabase
+        .from("orders")
+        .update({ status: "diproses" })
+        .eq("id", order_id)
+        .in("status", ["menunggu_pembayaran", "PENDING"]);
+
+      if (orderStatusError) throw orderStatusError;
     }
 
     return NextResponse.json({ message: "Webhook sukses diverifikasi dan diproses" }, { status: 200 });
