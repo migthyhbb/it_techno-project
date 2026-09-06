@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       if (order_id.startsWith("AGEN-")) {
         const { data: pesanan, error: pesananError } = await supabase
           .from("pesanan_mitra")
-          .select("status, produk_id, jumlah")
+          .select("status, produk_id, jumlah, user_id")
           .eq("id", order_id)
           .single();
 
@@ -61,6 +61,31 @@ export async function POST(request: Request) {
               .eq("id", pesanan.produk_id);
 
             if (stockError) throw stockError;
+
+            const { data: profile } = await supabase
+              .from("mitra_profiles")
+              .select("kota_kabupaten")
+              .eq("user_id", pesanan.user_id)
+              .maybeSingle();
+
+            if (profile?.kota_kabupaten) {
+              const { data: regionalProduct, error: regionalReadError } = await supabase
+                .from("regional_product_prices")
+                .select("id, stok")
+                .eq("product_id", pesanan.produk_id)
+                .ilike("kota", `%${profile.kota_kabupaten}%`)
+                .maybeSingle();
+
+              if (regionalReadError) throw regionalReadError;
+              if (regionalProduct) {
+                const { error: regionalStockError } = await supabase
+                  .from("regional_product_prices")
+                  .update({ stok: Number(regionalProduct.stok || 0) + Number(pesanan.jumlah || 0) })
+                  .eq("id", regionalProduct.id);
+
+                if (regionalStockError) throw regionalStockError;
+              }
+            }
           }
         }
 

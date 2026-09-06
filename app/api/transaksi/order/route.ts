@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     }
     const { data: regPrice } = await supabaseAdmin
       .from('regional_product_prices')
-      .select('harga')
+      .select('id, harga, stok')
       .eq('product_id', produk_id)
       .ilike('kota', `%${profile.kota_kabupaten}%`)
       .maybeSingle();
@@ -80,6 +80,13 @@ export async function POST(request: Request) {
     if (!regPrice || !regPrice.harga) {
       return NextResponse.json({ 
         error: "Produk ini belum tersedia atau belum memiliki penetapan harga di wilayah Anda." 
+      }, { status: 400 });
+    }
+
+    const regionalStock = Number(regPrice.stok ?? 0);
+    if (regionalStock < volume_terjual_kg) {
+      return NextResponse.json({
+        error: `Stok tidak mencukupi. Sisa stok: ${regionalStock} unit.`
       }, { status: 400 });
     }
 
@@ -150,11 +157,35 @@ export async function POST(request: Request) {
     }]);
     if (pesananError) throw pesananError;
 
-    const { error: stockError } = await supabaseAdmin.rpc("kurangi_stok_produk", {
-      p_id: produk_id,
-      jumlah_potong: volume_terjual_kg,
-    });
-    if (stockError) throw stockError;
+    const { data: updatedRegionalStock, error: regionalStockError } = await supabaseAdmin
+      .from("regional_product_prices")
+      .update({ stok: regionalStock - volume_terjual_kg })
+      .eq("id", regPrice.id)
+      .gte("stok", volume_terjual_kg)
+      .select("id")
+      .maybeSingle();
+
+    if (regionalStockError) throw regionalStockError;
+    if (!updatedRegionalStock) {
+      throw new Error("Stok berubah sebelum pesanan diproses. Silakan coba lagi.");
+    }
+
+    const { data: masterProduct, error: masterProductError } = await supabaseAdmin
+      .from("products")
+      .select("stok, stok_dummy")
+      .eq("id", produk_id)
+      .maybeSingle();
+
+    if (masterProductError) throw masterProductError;
+    if (masterProduct) {
+      const masterStock = Math.max(0, Number(masterProduct.stok ?? 0) - volume_terjual_kg);
+      const { error: masterStockError } = await supabaseAdmin
+        .from("products")
+        .update({ stok: masterStock, stok_dummy: masterStock })
+        .eq("id", produk_id);
+
+      if (masterStockError) throw masterStockError;
+    }
 
     return NextResponse.json({
       token: snapToken,
