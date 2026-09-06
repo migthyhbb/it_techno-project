@@ -25,18 +25,13 @@ try {
 
 export async function POST(request: Request) {
   try {
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-      || request.headers.get('x-real-ip')
-      || '127.0.0.1';
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || '127.0.0.1';
 
     if (ratelimit) {
       try {
         const { success } = await ratelimit.limit(ip);
         if (!success) {
-          return NextResponse.json(
-            { error: 'Terlalu banyak permintaan. Silakan tunggu beberapa detik.' },
-            { status: 429 }
-          );
+          return NextResponse.json({ error: 'Terlalu banyak permintaan. Silakan tunggu beberapa detik.' }, { status: 429 });
         }
       } catch (err) {
         console.warn("Ratelimit Redis skipped:", err);
@@ -50,11 +45,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Sesi habis, silakan login ulang." }, { status: 401 });
     }
 
+    // PENGAMBILAN PAYLOAD YANG BENAR
     const body = await request.json() as Record<string, unknown>;
     const produk_id = String(body.produk_id || body.product_id || "");
-    const volume_terjual_kg = Number(body.volume_terjual_kg || body.jumlah || 0);
+    const jumlah = Number(body.jumlah || body.volume_terjual_kg || 0); 
 
-    if (!volume_terjual_kg || volume_terjual_kg <= 0 || !produk_id) {
+    if (!jumlah || jumlah <= 0 || !produk_id) {
       return NextResponse.json({ error: "Data pesanan tidak valid." }, { status: 400 });
     }
 
@@ -66,10 +62,9 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (!profile?.kota_kabupaten) {
-      return NextResponse.json({ 
-        error: "Lokasi wilayah mitra tidak ditemukan. Silakan lengkapi profil Anda." 
-      }, { status: 400 });
+      return NextResponse.json({ error: "Lokasi wilayah mitra tidak ditemukan. Silakan lengkapi profil Anda." }, { status: 400 });
     }
+
     const { data: regPrice } = await supabaseAdmin
       .from('regional_product_prices')
       .select('id, harga, stok')
@@ -78,30 +73,20 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (!regPrice || !regPrice.harga) {
-      return NextResponse.json({ 
-        error: "Produk ini belum tersedia atau belum memiliki penetapan harga di wilayah Anda." 
-      }, { status: 400 });
+      return NextResponse.json({ error: "Produk belum tersedia di wilayah Anda." }, { status: 400 });
     }
 
     const regionalStock = Number(regPrice.stok ?? 0);
-    if (regionalStock < volume_terjual_kg) {
-      return NextResponse.json({
-        error: `Stok tidak mencukupi. Sisa stok: ${regionalStock} unit.`
-      }, { status: 400 });
+    if (regionalStock < jumlah) {
+      return NextResponse.json({ error: `Stok tidak mencukupi. Sisa stok: ${regionalStock} unit.` }, { status: 400 });
     }
 
     const hargaWilayah = Number(regPrice.harga);
-    const totalBayar = volume_terjual_kg * hargaWilayah;
+    const totalBayar = jumlah * hargaWilayah;
     const orderId = `AGEN-${Date.now()}`;
+
     if (totalBayar < 10000) {
-      return NextResponse.json({
-        error: `Total pemesanan minimal Rp 10.000 untuk memproses pembayaran Midtrans. (Total Anda saat ini: Rp ${totalBayar.toLocaleString("id-ID")})`
-      }, { status: 400 });
-    }
-    if (totalBayar > 99999999999) {
-      return NextResponse.json({
-        error: `Total pemesanan melebihi batas maksimal pembayaran Midtrans (Maksimal Rp 99.999.999.999). Silakan kurangi jumlah pesanan.`
-      }, { status: 400 });
+      return NextResponse.json({ error: `Total pemesanan minimal Rp 10.000` }, { status: 400 });
     }
 
     const serverKey = process.env.MIDTRANS_SERVER_KEY;
@@ -132,60 +117,28 @@ export async function POST(request: Request) {
         snapToken = transaction.token;
       } catch (midtransErr: unknown) {
         console.error("Midtrans SDK Error:", midtransErr);
-        return NextResponse.json({
-          error: "Gagal terhubung ke gerbang pembayaran Midtrans. Silakan periksa kembali server key atau coba lagi."
-        }, { status: 500 });
+        return NextResponse.json({ error: "Gagal terhubung ke gerbang pembayaran." }, { status: 500 });
       }
     }
 
-    const statusPesanan = snapToken ? 'menunggu_pembayaran' : 'diproses';
-    const { error: orderError } = await supabaseAdmin.from('orders').insert([{
-      id: orderId,
-      user_id: user.id,
-      total_harga: totalBayar,
-      status: statusPesanan
-    }]);
-    if (orderError) throw orderError;
+    // PERBAIKAN FATAL COPILOT: 
+    // 1. Ubah status menjadi "PENDING" agar Webhook bisa mendeteksinya
+    // 2. Hanya masukkan ke tabel pesanan_mitra (tabel orders tidak butuh AGEN-)
+    const statusPesanan = snapToken ? 'PENDING' : 'DIPROSES';
 
     const { error: pesananError } = await supabaseAdmin.from('pesanan_mitra').insert([{
       id: orderId,
       user_id: user.id,
       produk_id: produk_id,
-      jumlah: volume_terjual_kg,
+      jumlah: jumlah,
       total_harga: totalBayar,
-      status: statusPesanan.toUpperCase()
+      status: statusPesanan
     }]);
+
     if (pesananError) throw pesananError;
 
-    const { data: updatedRegionalStock, error: regionalStockError } = await supabaseAdmin
-      .from("regional_product_prices")
-      .update({ stok: regionalStock - volume_terjual_kg })
-      .eq("id", regPrice.id)
-      .gte("stok", volume_terjual_kg)
-      .select("id")
-      .maybeSingle();
-
-    if (regionalStockError) throw regionalStockError;
-    if (!updatedRegionalStock) {
-      throw new Error("Stok berubah sebelum pesanan diproses. Silakan coba lagi.");
-    }
-
-    const { data: masterProduct, error: masterProductError } = await supabaseAdmin
-      .from("products")
-      .select("stok, stok_dummy")
-      .eq("id", produk_id)
-      .maybeSingle();
-
-    if (masterProductError) throw masterProductError;
-    if (masterProduct) {
-      const masterStock = Math.max(0, Number(masterProduct.stok ?? 0) - volume_terjual_kg);
-      const { error: masterStockError } = await supabaseAdmin
-        .from("products")
-        .update({ stok: masterStock, stok_dummy: masterStock })
-        .eq("id", produk_id);
-
-      if (masterStockError) throw masterStockError;
-    }
+    // CATATAN: Kodingan potong stok buatan Copilot dihapus total dari sini.
+    // Pemotongan stok adalah tugas mutlak Webhook setelah pembayaran sukses.
 
     return NextResponse.json({
       token: snapToken,
