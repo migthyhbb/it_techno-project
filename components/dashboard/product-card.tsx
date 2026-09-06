@@ -73,14 +73,14 @@ export function ProductCard({ product }: { product: Product }) {
         typeof window !== "undefined"
           ? (window as Window & { snap?: MidtransSnap }).snap
           : undefined;
-
-      if (data.token && snap) {
+if (data.token && snap) {
         snap.pay(data.token, {
           onSuccess: function () {
-            alert("Pembayaran berhasil!");
+            // Cukup kasih tau user, biarkan Supabase Realtime yang bekerja mengubah statusnya di latar belakang!
+            alert("Pembayaran berhasil! Status pesanan akan otomatis diperbarui.");
           },
           onPending: function () {
-            alert("Menunggu pembayaran Anda.");
+            alert("Menunggu pembayaran Anda. Silakan selesaikan pembayaran.");
           },
           onError: function () {
             alert("Pembayaran gagal!");
@@ -91,7 +91,6 @@ export function ProductCard({ product }: { product: Product }) {
         });
       } else {
         alert(data.message || "Pesanan berhasil dibuat!");
-        window.location.reload();
       }
     } catch {
       alert("Terjadi kesalahan koneksi saat memproses pesanan.");
